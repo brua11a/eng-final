@@ -1,0 +1,11 @@
+[
+  { "teacher_idx": "T006", "group_id": 6001 },
+  { "teacher_idx": "T006", "group_id": 6101 },
+  { "teacher_idx": "T007", "group_id": 6102 },
+  { "teacher_idx": "T007", "group_id": 6103 },
+  { "teacher_idx": "T006", "group_id": 6104 },
+  { "teacher_idx": "T006", "group_id": 6105 },
+  { "teacher_idx": "T008", "group_id": 6105 },
+  { "teacher_idx": "T007", "group_id": 6106 },
+  { "teacher_idx": "T007", "group_id": 6107 }
+]

@@ -1,0 +1,28 @@
+[
+  {
+    "idx": "T001", "name": "Tomasz", "surname": "Szandała",
+    "phone": "696449030", "degree": "dr inż.",
+    "working_since": "2019-09-01",
+    "email": "tomasz.szandala@pwr.edu.pl", "passwd_hash": "12345"
+  },
+  {
+    "idx": "T002", "name": "Tadeusz", "surname": "Więckowski",
+    "degree": "prof. dr hab. inż.",
+    "working_since": "1800-10-01"
+  },
+  {
+    "idx": "T003", "name": "Paweł", "surname": "Zyblewski",
+    "degree": "dr inż",
+    "working_since": "2025-04-01"
+  },
+  {
+    "idx": "T006", "name": "Mariusz", "surname": "Fraś",
+    "degree": "dr inż.",
+    "working_since": "1990-10-01"
+  },
+  {
+    "idx": "T007", "name": "Oleksandr", "surname": "Yeroshkin",
+    "degree": "dr inż.",
+    "working_since": "2018-10-01"
+  }
+]
