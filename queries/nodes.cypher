@@ -7,7 +7,8 @@ FOREACH (_ IN CASE WHEN trow.email IS NOT NULL THEN [1] ELSE [] END |
 
 CALL apoc.load.json("file:///nodes/students.json") YIELD value AS strow
 MERGE (st:Student {idx: strow.idx})
-SET st.phone = strow.phone, st.photo = strow.photo, st.joined = datetime(strow.joined)
+SET st.name = strow.name, st.surname = strow.surname,
+    st.phone = strow.phone, st.photo = strow.photo, st.joined = datetime(strow.joined)
 FOREACH (_ IN CASE WHEN strow.email IS NOT NULL THEN [1] ELSE [] END |
     SET st:User, st.email = strow.email, st.passwd_hash = strow.passwd_hash);
 
@@ -24,8 +25,16 @@ MERGE (su:Subject {code: surow.code})
 SET su.name = surow.name, su.ects = surow.ects;
 
 CALL apoc.load.json("file:///nodes/terms.json") YIELD value AS ctrow
-MERGE (fi:CurriculumTerm {id: ctrow.id})
-SET fi.sem = ctrow.sem;
+MERGE (ct:CurriculumTerm {id: ctrow.id})
+SET ct.sem = ctrow.sem;
+
+CALL apoc.load.json("file:///nodes/academic_cycles.json") YIELD value AS acrow
+MERGE (ac:AcademicCycle {id: acrow.id})
+SET ac.year = acrow.year, ac.season = acrow.season;
+
+CALL apoc.load.json("file:///nodes/rooms.json") YIELD value AS rrow
+MERGE (r:Room {id: rrow.id})
+SET r.building = rrow.building, r.room_num = rrow.room_num;
 
 CALL apoc.load.json("file:///nodes/groups.json") YIELD value AS grow
 MERGE (g:Group {id: grow.id})
@@ -33,7 +42,6 @@ SET g.weekday = grow.weekday,
     g.number = grow.number,
     g.type = grow.type,
     g.pnp = grow.pnp,
-    g.building = grow.building,
-    g.room_num = grow.room_num,
+    g.capacity = grow.capacity,
     g.start_hr = time(grow.start_hr),
     g.end_time = time(grow.end_time);

@@ -35,5 +35,26 @@
   { "code": "W04CBE-SI0059W", "name": "Miernictwo 1", "ects": 2 },
   { "code": "W04CBE-SI0041W", "name": "Podstawy cyberbezpieczeństwa", "ects": 3 },
   { "code": "W04CBE-SI0030L", "name": "Podstawy programowania", "ects": 5 },
-  { "code": "W04CBE-SI0023W", "name": "Podstawy telekomunikacji", "ects": 2 }
+  { "code": "W04CBE-SI0023W", "name": "Podstawy telekomunikacji", "ects": 2 },
+
+  { "code": "W04INA-SI0001G", "name": "Analiza matematyczna 1", "ects": 6 },
+  { "code": "W04INA-SI0002G", "name": "Algebra", "ects": 5 },
+  { "code": "W04INA-SI0003G", "name": "Wstęp do programowania", "ects": 5 },
+  { "code": "W04INA-SI0004G", "name": "Logika dla informatyków", "ects": 4 },
+  { "code": "W04INA-SI0010G", "name": "Algorytmy i struktury danych", "ects": 6 },
+  { "code": "W04INA-SI0011G", "name": "Teoria grafów", "ects": 4 },
+  { "code": "W04INA-SI0012G", "name": "Programowanie obiektowe", "ects": 5 },
+  { "code": "W04INA-SI0020G", "name": "Metody numeryczne", "ects": 4 },
+  { "code": "W04INA-SI0021G", "name": "Języki formalne i kompilatory", "ects": 5 },
+  { "code": "W04INA-SI0022G", "name": "Sztuczna inteligencja", "ects": 4 },
+
+  { "code": "W05APR-SI0001G", "name": "Matematyka 1", "ects": 6 },
+  { "code": "W05APR-SI0002G", "name": "Fizyka 1", "ects": 5 },
+  { "code": "W05APR-SI0003G", "name": "Podstawy elektrotechniki", "ects": 5 },
+  { "code": "W05APR-SI0010G", "name": "Teoria sterowania", "ects": 5 },
+  { "code": "W05APR-SI0011G", "name": "Maszyny elektryczne", "ects": 4 },
+  { "code": "W05APR-SI0012G", "name": "Automatyka napędu", "ects": 4 },
+  { "code": "W05APR-SI0020G", "name": "Sterowniki PLC", "ects": 4 },
+  { "code": "W05APR-SI0021G", "name": "Robotyka przemysłowa", "ects": 5 },
+  { "code": "W05APR-SI0022G", "name": "Sieci przemysłowe", "ects": 3 }
 ]

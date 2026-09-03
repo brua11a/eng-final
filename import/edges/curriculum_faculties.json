@@ -1,3 +1,5 @@
 [
-  { "curriculum": "Cyberbezpieczeństwo", "faculty": "W4N" }
+  { "curriculum_id": 1, "faculty_id": 1 },
+  { "curriculum_id": 2, "faculty_id": 1 },
+  { "curriculum_id": 3, "faculty_id": 2 }
 ]

@@ -42,5 +42,30 @@
   { "group_id": 6104, "subject_code": "W04CBE-SI0407G" },
   { "group_id": 6105, "subject_code": "W04CBE-SI0407G" },
   { "group_id": 6106, "subject_code": "W04CBE-SI0407G" },
-  { "group_id": 6107, "subject_code": "W04CBE-SI0407G" }
+  { "group_id": 6107, "subject_code": "W04CBE-SI0407G" },
+
+  { "group_id": 6201, "subject_code": "W04INA-SI0001G" },
+  { "group_id": 6202, "subject_code": "W04INA-SI0002G" },
+  { "group_id": 6203, "subject_code": "W04INA-SI0003G" },
+  { "group_id": 6204, "subject_code": "W04INA-SI0004G" },
+  { "group_id": 6205, "subject_code": "W04INA-SI0010G" },
+  { "group_id": 6206, "subject_code": "W04INA-SI0011G" },
+  { "group_id": 6207, "subject_code": "W04INA-SI0012G" },
+  { "group_id": 6208, "subject_code": "W04INA-SI0020G" },
+  { "group_id": 6209, "subject_code": "W04INA-SI0021G" },
+  { "group_id": 6210, "subject_code": "W04INA-SI0022G" },
+  { "group_id": 6211, "subject_code": "W04INA-SI0003G" },
+  { "group_id": 6212, "subject_code": "W04INA-SI0003G" },
+
+  { "group_id": 6301, "subject_code": "W05APR-SI0001G" },
+  { "group_id": 6302, "subject_code": "W05APR-SI0002G" },
+  { "group_id": 6303, "subject_code": "W05APR-SI0003G" },
+  { "group_id": 6304, "subject_code": "W05APR-SI0010G" },
+  { "group_id": 6305, "subject_code": "W05APR-SI0011G" },
+  { "group_id": 6306, "subject_code": "W05APR-SI0012G" },
+  { "group_id": 6307, "subject_code": "W05APR-SI0020G" },
+  { "group_id": 6308, "subject_code": "W05APR-SI0021G" },
+  { "group_id": 6309, "subject_code": "W05APR-SI0022G" },
+  { "group_id": 6310, "subject_code": "W05APR-SI0020G" },
+  { "group_id": 6311, "subject_code": "W05APR-SI0020G" }
 ]

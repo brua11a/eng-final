@@ -12,6 +12,8 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 
 	(st:Student => {
 		idx :: STRING,
+		name :: STRING NOT NULL,
+		surname :: STRING NOT NULL,
 		phone :: STRING,
 		photo :: STRING,
 		joined :: ZONED DATETIME NOT NULL
@@ -34,14 +36,25 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(g:Group => {
 		id :: INTEGER,
 		weekday :: INTEGER NOT NULL,
-		  type :: STRING NOT NULL,
+		type :: STRING NOT NULL,
 		number :: INTEGER NOT NULL,
 		pnp :: STRING NOT NULL,
-		building :: STRING NOT NULL,
-		room_num :: STRING NOT NULL,
+		capacity :: INTEGER NOT NULL,
 		start_hr :: ZONED TIME NOT NULL,
 		end_time :: ZONED TIME NOT NULL
 	}) REQUIRE g.id IS KEY,
+
+	(r:Room => {
+		id :: INTEGER,
+		building :: STRING NOT NULL,
+		room_num :: STRING NOT NULL
+	}) REQUIRE r.id IS KEY,
+
+	(ac:AcademicCycle => {
+		id :: INTEGER,
+		year :: STRING NOT NULL,
+		season :: STRING NOT NULL
+	}) REQUIRE ac.id IS KEY,
 
 	(su:Subject => {
 		code :: STRING,
@@ -49,10 +62,10 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		ects :: INTEGER
 	}) REQUIRE su.code IS KEY,
 
-	(fi:CurriculumTerm => {
+	(ct:CurriculumTerm => {
 		id :: INTEGER,
 		sem :: INTEGER NOT NULL
-	}) REQUIRE fi.id IS KEY,
+	}) REQUIRE ct.id IS KEY,
 
 	(c:Curriculum => {
 		id :: INTEGER,
@@ -67,13 +80,15 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 
 	(st)-[:WRITES => {}]->(o),
 	(st)-[:ENROLLED => {}]->(c),
-	(st)-[:ATTENDED => { when :: DATE }]->(g),
-	(st)-[:CURRENTLY_AT => {}]->(fi),
+	(st)-[:REGISTERED_IN => {}]->(g),
+	(st)-[:CURRENTLY_AT => {}]->(ct),
 	(o)-[:ON => {}]->(g),
-	(c)-[:HAS_TERM => {}]->(fi),
+	(c)-[:HAS_TERM => {}]->(ct),
 	(c)-[:IS_IN => {}]->(fa),
-	(fi)-[:CONTAINS => {}]->(su),
+	(ct)-[:CONTAINS => {}]->(su),
 	(g)-[:OF_SUBJECT => {}]->(su),
+	(g)-[:IN_CYCLE => {}]->(ac),
+	(g)-[:IN_ROOM => {}]->(r),
 	(t)-[:WORKS_AT => {}]->(fa),
 	(t)-[:TEACHES => {}]->(g)
 
