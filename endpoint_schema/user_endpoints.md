@@ -94,7 +94,8 @@
 
 ```json
 {
-	"name": String
+	"name": String?,
+	"id": Integer?
 }
 ```
 
@@ -145,7 +146,7 @@
 
 ```json
 {
-	"name": String
+	"name": String,
 }
 ```
 
@@ -164,46 +165,139 @@
 
 ```json
 {
-	"course_ud": Integer
+	"course_id": Integer
 }
 ```
 
 ```json
-{}
+{
+	"name": String,
+	"ects": Integer,
+	"coordinated": TeacherName,
+	"taught_by": List[TeacherName]
+	
+	TeacherName = {
+		"id": String,
+		"name": String
+	}
+}
 ```
 ### (user) List Subject groups
 
 ```json
-{}
+{
+	"course_id": Integer
+}
 ```
 
 ```json
-{}
+{
+	"name": String,
+	"groups": List[Group]
+	
+	GroupTracked = {
+		"id": Integer,
+		"weekday": Integer,
+		"type": String,
+		"number": Integer,
+		"pnp": String,
+		"filled": Integer,
+		"capacity": Integer,
+		"start_hr": ZonedTime,
+		"end_time": ZonedTime,
+		"subject_code": String,
+		"cycle_id": Integer,
+		"room_id": Integer,
+	}
+}
 ```
 ### (user) Group detail
 
 ```json
-{}
+{
+	"course_id": Integer,
+	"group_num": Integer
+}
 ```
 
 ```json
-{}
+{
+	"course_name": String,
+	"type": String,
+	"academic_cycle": String,
+	"group_num": Integer,
+	"building": String,
+	"nearest_classes": List[Classes],
+	"filled": Integer,
+	"capacity": Integer,
+	"teacher": TeacherName
+	
+	Classes = {
+		"class_date": Date,
+		"class_start": Time,
+		"class_end": Time,
+		"building": String
+	}
+	
+	TeacherName = {
+		"id": String,
+		"name": String
+	}
+}
 ```
 ### (user) Teacher detail
 
 ```json
-{}
+{
+	"id": Integer
+}
 ```
 
 ```json
-{}
+{
+	"degree": String,
+	"name": String,
+	"phone": String?,
+	"e-mail": String?,
+	"groups": List[GroupAndCourse]
+	
+	GroupAndCourse = {
+		"course_id": String,
+		"type": String,
+		"group_num": Integer
+	}
+}
 ```
-### (user) Me
+### (user) Dashboard
 
 ```json
-{}
+{
+	"user_id": Integer
+}
 ```
 
 ```json
-{}
+{
+	"groups": List[GroupInList],
+	"index": Integer,
+	"this_week": Callendar,
+	"next_week": Callendar
+	
+	GroupInList = {
+		"cycle": String,
+		"name": String,
+		"course_code": String,
+		"groups": List[GroupLite],
+		
+	}
+	
+	GroupLite = {
+		"type": String,
+		"number": Integer
+	}
+	
+	Callendar = {
+		%%zostawie to na koniec%%
+	}
+}
 ```

@@ -253,3 +253,18 @@
 	"err": String?
 }
 ```
+
+### (admin) Start registrations
+
+```json
+{
+
+}
+```
+
+```json
+{
+
+}
+```
+
