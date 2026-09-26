@@ -23,9 +23,7 @@
 ### (student) Show registrations
 
 ```json
-{
-	"student_id": Integer
-}
+{} %%derive from session%%
 ```
 
 ```json
@@ -79,7 +77,8 @@
 
 ```json
 {
-	"ok": Boolean
+	"ok": Boolean,
+	"err": String?
 }
 ```
 ### (student) List my Academic Cycles

@@ -74,6 +74,7 @@
 
 ```json
 {
+	"user_id": String,
 	"grade": Float,
 	"content": String?,
 	"submit": ZonedDateTime,

@@ -165,7 +165,7 @@
 
 ```json
 {
-	"course_id": Integer
+	"course_id": String
 }
 ```
 
@@ -249,7 +249,7 @@
 
 ```json
 {
-	"id": Integer
+	"id": String
 }
 ```
 
@@ -271,9 +271,7 @@
 ### (user) Dashboard
 
 ```json
-{
-	"user_id": Integer
-}
+{} %%derive from session%%
 ```
 
 ```json

@@ -22,7 +22,7 @@
 
 ```json
 {
-	"group_idx": Integer
+	"group_id": Integer
 }
 ```
 
