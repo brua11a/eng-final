@@ -78,7 +78,7 @@
 	Group = {
 		"id": Integer,
 		"weekday": Integer,
-		"type": String,
+		"g_type": String,
 		"number": Integer,
 		"pnp": String,
 		"capacity": Integer,
@@ -113,7 +113,7 @@
 	Group = {
 		"id": Integer,
 		"weekday": Integer,
-		"type": String,
+		"g_type": String,
 		"number": Integer,
 		"pnp": String,
 		"capacity": Integer,
@@ -198,7 +198,7 @@
 	GroupTracked = {
 		"id": Integer,
 		"weekday": Integer,
-		"type": String,
+		"g_type": String,
 		"number": Integer,
 		"pnp": String,
 		"filled": Integer,
@@ -223,7 +223,7 @@
 ```json
 {
 	"course_name": String,
-	"type": String,
+	"g_type": String,
 	"academic_cycle": String,
 	"group_num": Integer,
 	"building": String,
@@ -263,7 +263,7 @@
 	
 	GroupAndCourse = {
 		"course_id": String,
-		"type": String,
+		"g_type": String,
 		"group_num": Integer
 	}
 }
@@ -290,7 +290,7 @@
 	}
 	
 	GroupLite = {
-		"type": String,
+		"g_type": String,
 		"number": Integer
 	}
 	

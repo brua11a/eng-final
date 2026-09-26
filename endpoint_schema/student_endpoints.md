@@ -60,7 +60,7 @@
 	}
 	
 	Class = {
-		"type": String,
+		"g_type": String,
 		"count": Integer
 	}
 }

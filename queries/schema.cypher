@@ -36,7 +36,7 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(g:Group => {
 		id :: INTEGER,
 		weekday :: INTEGER NOT NULL,
-		type :: STRING NOT NULL,
+		g_type :: STRING NOT NULL,
 		number :: INTEGER NOT NULL,
 		pnp :: STRING NOT NULL,
 		capacity :: INTEGER NOT NULL,

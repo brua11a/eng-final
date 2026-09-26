@@ -40,7 +40,7 @@ CALL apoc.load.json("file:///nodes/groups.json") YIELD value AS grow
 MERGE (g:Group {id: grow.id})
 SET g.weekday = grow.weekday,
     g.number = grow.number,
-    g.type = grow.type,
+    g.g_type = grow.g_type,
     g.pnp = grow.pnp,
     g.capacity = grow.capacity,
     g.start_hr = time(grow.start_hr),

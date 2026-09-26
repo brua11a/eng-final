@@ -98,7 +98,7 @@
 ```json
 {
 	"weekday": Integer,
-	"type": String,
+	"g_type": String,
 	"number": Integer,
 	"pnp": String,
 	"capacity": Integer,
@@ -114,7 +114,7 @@
 {
 	"id": Integer,
 	"weekday": Integer,
-	"type": String,
+	"g_type": String,
 	"number": Integer,
 	"pnp": String,
 	"capacity": Integer,

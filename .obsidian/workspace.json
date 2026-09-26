@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "endpoint_schema/user_endpoints.md",
+                "file": "endpoint_schema/admin_endpoints.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "user_endpoints"
+              "title": "admin_endpoints"
             }
           }
         ]
@@ -55,7 +55,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "\"Subject catalogue\"",
+                "query": "\"type",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -189,23 +189,24 @@
       "bases:Create new base": false
     }
   },
-  "active": "d59699679803c481",
+  "active": "82d9e8b7a5847c5d",
   "lastOpenFiles": [
-    "endpoint_schema/student_endpoints.md",
+    "app/schemas/dashboard.py~",
+    "app/schemas/dashboard.py",
+    "app/schemas/registration.py~",
+    "app/schemas/registration.py",
+    "app/schemas/opinion.py~",
+    "app/schemas/opinion.py",
+    "app/schemas/group.py~",
+    "app/schemas/student.py~",
+    "app/schemas/teacher.py~",
+    "app/schemas/auth.py~",
+    "app/schemas/auth.py",
     "endpoint_schema/user_endpoints.md",
-    "endpoint_schema/teacher_endpoints.md",
+    "endpoint_schema/student_endpoints.md",
     "endpoint_schema/admin_endpoints.md",
+    "endpoint_schema/teacher_endpoints.md",
     "visualisation(2).png",
-    "app/models/academic_cycle.py~",
-    "requirements.txt~",
-    "app/models/user.py",
-    "app/models/teacher.py",
-    "app/models/subject.py",
-    "app/models/student.py",
-    "app/models/room.py",
-    "app/models/group.py",
-    "app/models/curriculum_term.py",
-    "app/models/faculty.py",
     "venv/lib/python3.14/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
     "venv/lib/python3.14/site-packages/pip/_vendor/idna/LICENSE.md",
     "venv/lib/python3.14/site-packages/starlette-1.6.0.dist-info/licenses/LICENSE.md",
