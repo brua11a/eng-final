@@ -45,7 +45,21 @@ MATCH (st:Student {idx: scarow.student_idx})
 MATCH (ct:CurriculumTerm {id: scarow.term_id})
 MERGE (st)-[:CURRENTLY_AT]->(ct);
 
+CALL apoc.load.json("file:///edges/student_registration_turns.json") YIELD value AS srtrow
+MATCH (st:Student {idx: srtrow.student_idx})
+MATCH (ac:AcademicCycle {id: srtrow.cycle_id})
+MERGE (st)-[r:HAS_REGISTRATION_TURN]->(ac)
+SET r.turn_number = srtrow.turn_number;
+
 CALL apoc.load.json("file:///edges/student_registered.json") YIELD value AS srrow
 MATCH (st:Student {idx: srrow.student_idx})
 MATCH (g:Group {id: srrow.group_id})
-MERGE (st)-[:REGISTERED_IN]->(g);
+MERGE (st)-[r:REGISTERED_IN]->(g)
+SET r.registered_at = datetime(srrow.registered_at);
+
+CALL apoc.load.json("file:///nodes/registrations.json") YIELD value AS regrow
+MATCH (reg:Registration {id: regrow.id})
+MATCH (ac:AcademicCycle {id: regrow.cycle_id})
+MATCH (fa:Faculty {id: regrow.faculty_id})
+MERGE (reg)-[:FOR_CYCLE]->(ac)
+MERGE (reg)-[:FOR_FACULTY]->(fa);

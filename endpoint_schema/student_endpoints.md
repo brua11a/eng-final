@@ -34,7 +34,8 @@
 		"id": Integer,
 		"date": Date,
 		"start": Time,
-		"end": Time
+		"end": Time,
+		"reg_type": "zapisowa" | "poprawkowa"
 	}
 }
 ```

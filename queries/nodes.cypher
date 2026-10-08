@@ -8,7 +8,8 @@ FOREACH (_ IN CASE WHEN trow.email IS NOT NULL THEN [1] ELSE [] END |
 CALL apoc.load.json("file:///nodes/students.json") YIELD value AS strow
 MERGE (st:Student {idx: strow.idx})
 SET st.name = strow.name, st.surname = strow.surname,
-    st.phone = strow.phone, st.photo = strow.photo, st.joined = datetime(strow.joined)
+    st.phone = strow.phone, st.photo = strow.photo, st.joined = datetime(strow.joined),
+    st.avg_grade = strow.avg_grade
 FOREACH (_ IN CASE WHEN strow.email IS NOT NULL THEN [1] ELSE [] END |
     SET st:User, st.email = strow.email, st.passwd_hash = strow.passwd_hash);
 
@@ -45,3 +46,11 @@ SET g.weekday = grow.weekday,
     g.capacity = grow.capacity,
     g.start_hr = time(grow.start_hr),
     g.end_time = time(grow.end_time);
+
+CALL apoc.load.json("file:///nodes/registrations.json") YIELD value AS regrow
+MERGE (reg:Registration {id: regrow.id})
+SET reg.turn_number = regrow.turn_number,
+    reg.reg_type = regrow.reg_type,
+    reg.date = date(regrow.date),
+    reg.start_hr = time(regrow.start_hr),
+    reg.end_time = time(regrow.end_time);

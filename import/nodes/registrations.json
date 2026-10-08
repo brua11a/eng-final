@@ -1,0 +1,18 @@
+[
+  { "id": 1,  "turn_number": 0, "reg_type": "zapisowa",   "date": "2026-02-10", "start_hr": "08:00:00+01:00", "end_time": "08:45:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 2,  "turn_number": 1, "reg_type": "zapisowa",   "date": "2026-02-10", "start_hr": "08:45:00+01:00", "end_time": "09:30:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 3,  "turn_number": 2, "reg_type": "zapisowa",   "date": "2026-02-10", "start_hr": "09:30:00+01:00", "end_time": "10:15:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 4,  "turn_number": 3, "reg_type": "zapisowa",   "date": "2026-02-10", "start_hr": "10:15:00+01:00", "end_time": "11:00:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 5,  "turn_number": 0, "reg_type": "zapisowa",   "date": "2026-02-14", "start_hr": "08:00:00+01:00", "end_time": "08:45:00+01:00", "cycle_id": 1, "faculty_id": 2 },
+  { "id": 6,  "turn_number": 1, "reg_type": "zapisowa",   "date": "2026-02-14", "start_hr": "08:45:00+01:00", "end_time": "09:30:00+01:00", "cycle_id": 1, "faculty_id": 2 },
+  { "id": 7,  "turn_number": 2, "reg_type": "zapisowa",   "date": "2026-02-14", "start_hr": "09:30:00+01:00", "end_time": "10:15:00+01:00", "cycle_id": 1, "faculty_id": 2 },
+  { "id": 8,  "turn_number": 3, "reg_type": "zapisowa",   "date": "2026-02-14", "start_hr": "10:15:00+01:00", "end_time": "11:00:00+01:00", "cycle_id": 1, "faculty_id": 2 },
+  { "id": 9,  "turn_number": 0, "reg_type": "poprawkowa", "date": "2026-02-17", "start_hr": "08:00:00+01:00", "end_time": "08:45:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 10, "turn_number": 1, "reg_type": "poprawkowa", "date": "2026-02-17", "start_hr": "08:45:00+01:00", "end_time": "09:30:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 11, "turn_number": 2, "reg_type": "poprawkowa", "date": "2026-02-17", "start_hr": "09:30:00+01:00", "end_time": "10:15:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 12, "turn_number": 3, "reg_type": "poprawkowa", "date": "2026-02-17", "start_hr": "10:15:00+01:00", "end_time": "11:00:00+01:00", "cycle_id": 1, "faculty_id": 1 },
+  { "id": 13, "turn_number": 0, "reg_type": "poprawkowa", "date": "2026-02-21", "start_hr": "08:00:00+01:00", "end_time": "08:45:00+01:00", "cycle_id": 1, "faculty_id": 2 },
+  { "id": 14, "turn_number": 1, "reg_type": "poprawkowa", "date": "2026-02-21", "start_hr": "08:45:00+01:00", "end_time": "09:30:00+01:00", "cycle_id": 1, "faculty_id": 2 },
+  { "id": 15, "turn_number": 2, "reg_type": "poprawkowa", "date": "2026-02-21", "start_hr": "09:30:00+01:00", "end_time": "10:15:00+01:00", "cycle_id": 1, "faculty_id": 2 },
+  { "id": 16, "turn_number": 3, "reg_type": "poprawkowa", "date": "2026-02-21", "start_hr": "10:15:00+01:00", "end_time": "11:00:00+01:00", "cycle_id": 1, "faculty_id": 2 }
+]

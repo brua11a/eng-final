@@ -259,13 +259,32 @@
 
 ```json
 {
+	"cycle_id": Integer,
+	"faculty_id": Integer,
+	"reg_type": "zapisowa" | "poprawkowa",
+	"turns": List[RegistrationTurn]
 
+	RegistrationTurn = {
+		"turn_number": Integer,
+		"date": Date,
+		"start": Time,
+		"end": Time
+	}
 }
 ```
 
 ```json
 {
+	"registrations": List[Registration],
+	"err": String?
 
+	Registration = {
+		"id": Integer,
+		"date": Date,
+		"start": Time,
+		"end": Time,
+		"reg_type": "zapisowa" | "poprawkowa"
+	}
 }
 ```
 

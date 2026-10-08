@@ -16,7 +16,8 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		surname :: STRING NOT NULL,
 		phone :: STRING,
 		photo :: STRING,
-		joined :: ZONED DATETIME NOT NULL
+		joined :: ZONED DATETIME NOT NULL,
+		avg_grade :: FLOAT
 	}) REQUIRE st.idx IS KEY,
 
 	(u:User => {
@@ -78,16 +79,32 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		full_name :: STRING NOT NULL
 	}) REQUIRE fa.id IS KEY,
 
+	(reg:Registration => {
+		id :: INTEGER,
+		turn_number :: INTEGER NOT NULL,
+		reg_type :: STRING NOT NULL,
+		date :: DATE NOT NULL,
+		start_hr :: ZONED TIME NOT NULL,
+		end_time :: ZONED TIME NOT NULL
+	}) REQUIRE reg.id IS KEY,
+
 	(st)-[:WRITES => {}]->(o),
 	(st)-[:ENROLLED => {}]->(c),
-	(st)-[:REGISTERED_IN => {}]->(g),
+	(st)-[:REGISTERED_IN => {
+		registered_at :: ZONED DATETIME NOT NULL
+	}]->(g),
 	(st)-[:CURRENTLY_AT => {}]->(ct),
+	(st)-[:HAS_REGISTRATION_TURN => {
+		turn_number :: INTEGER NOT NULL
+	}]->(ac),
 	(o)-[:ON => {}]->(g),
 	(c)-[:HAS_TERM => {}]->(ct),
 	(c)-[:IS_IN => {}]->(fa),
 	(ct)-[:CONTAINS => {}]->(su),
 	(g)-[:OF_SUBJECT => {}]->(su),
 	(g)-[:IN_CYCLE => {}]->(ac),
+	(reg)-[:FOR_CYCLE => {}]->(ac),
+	(reg)-[:FOR_FACULTY => {}]->(fa),
 	(g)-[:IN_ROOM => {}]->(r),
 	(t)-[:WORKS_AT => {}]->(fa),
 	(t)-[:TEACHES => {}]->(g)

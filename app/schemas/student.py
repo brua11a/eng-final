@@ -32,6 +32,7 @@ class StudentDetailResponse(BaseModel):
     phone: Optional[str] = None
     photo: Optional[str] = None
     joined: datetime
+    avg_grade: Optional[float] = None
     err: Optional[str] = None
 
 
