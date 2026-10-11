@@ -44,6 +44,7 @@
 ```
 
 ```json
+{
 	teachers: List[Teacher]
 	
 	Teacher = {
@@ -56,6 +57,7 @@
 		"working_since": Date,
 		"faculty": String
 	}
+}
 ```
 
 ### (user) Subject catalogue
@@ -71,7 +73,7 @@
 	SubjectAndGroup = {
 		"code": String,
 		"name": String,
-		"ects": Integer,
+		"ects": Integer?,
 		"groups": List[Group]
 	}
 	
@@ -84,9 +86,8 @@
 		"capacity": Integer,
 		"start_hr": ZonedTime,
 		"end_time": ZonedTime,
-		"subject_code": String,
-		"cycle_id": Integer,
-		"room_id": Integer,
+		"cycle": String,
+		"room": String
 	}
 }
 ```
@@ -95,7 +96,7 @@
 ```json
 {
 	"name": String?,
-	"id": Integer?
+	"code": String?
 }
 ```
 
@@ -106,7 +107,7 @@
 	SubjectAndGroup = {
 		"code": String,
 		"name": String,
-		"ects": Integer,
+		"ects": Integer?,
 		"groups": List[Group]
 	}
 	
@@ -119,9 +120,8 @@
 		"capacity": Integer,
 		"start_hr": ZonedTime,
 		"end_time": ZonedTime,
-		"subject_code": String,
-		"cycle_id": Integer,
-		"room_id": Integer,
+		"cycle": String,
+		"room": String
 	}
 }
 ```
@@ -138,6 +138,7 @@
 	Curriculum = {
 		"id": Integer,
 		"name": String,
+		"intake_year": String,
 		"faculty_id": Integer
 	}
 }
@@ -157,6 +158,7 @@
 	Curriculum = {
 		"id": Integer,
 		"name": String,
+		"intake_year": String,
 		"faculty_id": Integer
 	}
 }
@@ -165,15 +167,14 @@
 
 ```json
 {
-	"course_id": String
+	"code": String
 }
 ```
 
 ```json
 {
 	"name": String,
-	"ects": Integer,
-	"coordinated": TeacherName,
+	"ects": Integer?,
 	"taught_by": List[TeacherName]
 	
 	TeacherName = {
@@ -186,7 +187,7 @@
 
 ```json
 {
-	"course_id": Integer
+	"code": String
 }
 ```
 
@@ -201,13 +202,12 @@
 		"g_type": String,
 		"number": Integer,
 		"pnp": String,
-		"filled": Integer,
 		"capacity": Integer,
 		"start_hr": ZonedTime,
 		"end_time": ZonedTime,
-		"subject_code": String,
-		"cycle_id": Integer,
-		"room_id": Integer,
+		"cycle": String,
+		"room": String,
+		"filled": Integer
 	}
 }
 ```
@@ -215,7 +215,7 @@
 
 ```json
 {
-	"course_id": Integer,
+	"code": String,
 	"group_num": Integer
 }
 ```
@@ -249,7 +249,7 @@
 
 ```json
 {
-	"id": String
+	"idx": String
 }
 ```
 
@@ -258,11 +258,11 @@
 	"degree": String,
 	"name": String,
 	"phone": String?,
-	"e-mail": String?,
+	"email": String?,
 	"groups": List[GroupAndCourse]
 	
 	GroupAndCourse = {
-		"course_id": String,
+		"course_code": String,
 		"g_type": String,
 		"group_num": Integer
 	}

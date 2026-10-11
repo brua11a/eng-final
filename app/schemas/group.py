@@ -14,7 +14,6 @@ class GroupCreateRequest(BaseModel):
     start_hr: time
     end_time: time
     subject_code: str
-    cycle_id: int
     room_id: int
 
 
@@ -28,7 +27,6 @@ class GroupCreateResponse(BaseModel):
     start_hr: time
     end_time: time
     subject_code: str
-    cycle_id: int
     room_id: int
     err: Optional[str] = None
 

@@ -4,15 +4,18 @@ from pydantic import BaseModel, Field
 
 from .generic import OkResponse
 
-RegType = Literal["zapisowa", "poprawkowa"]
+RegType = Literal["zapisowa"]
 
 
 class RegistrationItem(BaseModel):
     id: int
+    name: str
+    reg_type: RegType
+    curriculum_id: int
+    turn_number: int
     date: date
     start: time
     end: time
-    reg_type: RegType
 
 
 class ShowRegistrationsResponse(BaseModel):
@@ -56,12 +59,18 @@ class RegistrationTurnInput(BaseModel):
 
 
 class StartRegistrationsRequest(BaseModel):
+    name: str
     cycle_id: int
     faculty_id: int
     reg_type: RegType
     turns: List[RegistrationTurnInput]
+    group_ids: List[int]
 
 
 class StartRegistrationsResponse(BaseModel):
-    registrations: List[RegistrationItem] = Field(default_factory=list)
+    id: int | None = None
+    name: str | None = None
+    reg_type: RegType | None = None
+    turns: List[RegistrationTurnInput] = Field(default_factory=list)
+    group_ids: List[int] = Field(default_factory=list)
     err: str | None = None

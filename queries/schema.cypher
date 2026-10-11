@@ -49,13 +49,15 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		id :: INTEGER,
 		building :: STRING NOT NULL,
 		room_num :: STRING NOT NULL
-	}) REQUIRE r.id IS KEY,
+	}) REQUIRE r.id IS KEY
+	   REQUIRE (r.building, r.room_num) IS UNIQUE,
 
 	(ac:AcademicCycle => {
 		id :: INTEGER,
 		year :: STRING NOT NULL,
 		season :: STRING NOT NULL
-	}) REQUIRE ac.id IS KEY,
+	}) REQUIRE ac.id IS KEY
+	   REQUIRE (ac.year, ac.season) IS UNIQUE,
 
 	(su:Subject => {
 		code :: STRING,
@@ -70,8 +72,10 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 
 	(c:Curriculum => {
 		id :: INTEGER,
-		name :: STRING NOT NULL
-	}) REQUIRE c.id IS KEY,
+		name :: STRING NOT NULL,
+		intake_year :: STRING NOT NULL
+	}) REQUIRE c.id IS KEY
+	   REQUIRE (c.name, c.intake_year) IS UNIQUE,
 
 	(fa:Faculty => {
 		id :: INTEGER,
@@ -81,30 +85,40 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 
 	(reg:Registration => {
 		id :: INTEGER,
+		name :: STRING NOT NULL,
+		reg_type :: STRING NOT NULL
+	}) REQUIRE reg.id IS KEY,
+
+	(rt:RegistrationTurn => {
+		id :: INTEGER,
 		turn_number :: INTEGER NOT NULL,
-		reg_type :: STRING NOT NULL,
 		date :: DATE NOT NULL,
 		start_hr :: ZONED TIME NOT NULL,
 		end_time :: ZONED TIME NOT NULL
-	}) REQUIRE reg.id IS KEY,
+	}) REQUIRE rt.id IS KEY,
+
+	(asg:TurnAssignment => {
+		id :: INTEGER
+	}) REQUIRE asg.id IS KEY,
 
 	(st)-[:WRITES => {}]->(o),
-	(st)-[:ENROLLED => {}]->(c),
+	(st)-[:ENROLLED => {}]->(ct),
 	(st)-[:REGISTERED_IN => {
 		registered_at :: ZONED DATETIME NOT NULL
 	}]->(g),
-	(st)-[:CURRENTLY_AT => {}]->(ct),
-	(st)-[:HAS_REGISTRATION_TURN => {
-		turn_number :: INTEGER NOT NULL
-	}]->(ac),
-	(o)-[:ON => {}]->(g),
+	(st)-[:ASSIGNED => {}]->(asg),
+	(asg)-[:FOR_TURN => {}]->(rt),
+	(asg)-[:FOR_CURRICULUM => {}]->(c),
+	(o)-[:ABOUT => {}]->(g),
 	(c)-[:HAS_TERM => {}]->(ct),
-	(c)-[:IS_IN => {}]->(fa),
-	(ct)-[:CONTAINS => {}]->(su),
+	(c)-[:OFFERED_BY => {}]->(fa),
+	(ct)-[:INCLUDES => {}]->(su),
+	(ct)-[:TAUGHT_IN => {}]->(ac),
 	(g)-[:OF_SUBJECT => {}]->(su),
-	(g)-[:IN_CYCLE => {}]->(ac),
 	(reg)-[:FOR_CYCLE => {}]->(ac),
 	(reg)-[:FOR_FACULTY => {}]->(fa),
+	(reg)-[:HAS_TURN => {}]->(rt),
+	(reg)-[:OPENS => {}]->(g),
 	(g)-[:IN_ROOM => {}]->(r),
 	(t)-[:WORKS_AT => {}]->(fa),
 	(t)-[:TEACHES => {}]->(g)

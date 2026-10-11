@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StudentCreateRequest(BaseModel):
@@ -33,6 +33,7 @@ class StudentDetailResponse(BaseModel):
     photo: Optional[str] = None
     joined: datetime
     avg_grade: Optional[float] = None
+    term_ids: list[int] = Field(default_factory=list)
     err: Optional[str] = None
 
 

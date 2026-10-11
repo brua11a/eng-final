@@ -45,7 +45,6 @@ class SubjectDetailRequest(BaseModel):
 class SubjectDetailResponse(BaseModel):
     name: str
     ects: Optional[int] = None
-    coordinated: TeacherNameRef
     taught_by: List[TeacherNameRef]
 
 

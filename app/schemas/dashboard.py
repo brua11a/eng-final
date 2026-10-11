@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 
 class GroupLite(BaseModel):
-    type: str
+    g_type: str
     number: int
 
 

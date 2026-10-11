@@ -1,0 +1,11 @@
+idx,name,surname,phone,degree,working_since,email,passwd_hash
+T001,Tomasz,Szandała,696449030,dr inż.,2019-09-01,tomasz.szandala@pwr.edu.pl,12345
+T002,Tadeusz,Więckowski,,prof. dr hab. inż.,1800-10-01,,
+T003,Paweł,Zyblewski,,dr inż.,2025-04-01,,
+T006,Mariusz,Fraś,,dr inż.,1990-10-01,,
+T007,Oleksandr,Yeroshkin,,dr inż.,2018-10-01,,
+T008,Agnieszka,Baran,,dr inż.,2016-10-01,,
+T009,Maciej,Lis,,dr hab. inż.,2012-10-01,,
+T010,Karolina,Maj,,dr inż.,2019-02-01,karolina.maj@pwr.edu.pl,t10hash
+T011,Krzysztof,Walczak,,dr hab. inż.,2008-10-01,,
+T012,Ewa,Rutkowska,,dr inż.,2014-03-01,ewa.rutkowska@pwr.edu.pl,t12hash

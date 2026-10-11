@@ -1,0 +1,216 @@
+code,name,ects
+W04CBE-SI0407G,Aplikacje mobilne,4
+W04CBE-SI0405G,Cyberbezpieczeństwo w Internecie Rzeczy,3
+W04CBE-SI0057G,Metody AI w badaniu zagrożeń w systemach komputerowych,5
+W04CBE-SI0408P,Projekt zespołowy,6
+W04CBE-SI0406G,Przetwarzanie dużych zbiorów danych,4
+W04CBE-SI0056G,Testy penetracyjne,3
+W04CBE-SI0028G,Wykrywanie zagrożeń i reakcja na incydenty,4
+W04CBE-SI0055G,Zarządzanie projektami IT,2
+W04CBE-SI0404G,Bezpieczeństwo chmur obliczeniowych,3
+W04CBE-SI0054G,Bezpieczeństwo elektromagnetyczne,2
+W04CBE-SI0403G,Bezpieczeństwo serwerów i aplikacji Web,5
+W04CBE-SI0014G,Bezpieczeństwo sieci komputerowych,4
+W04CBE-SI0401G,Bezpieczeństwo w Sieciach Bezprzewodowych,3
+W04CBE-SI0402G,Biometria,2
+W04CBE-SI0050G,Bazy danych,5
+W04CBE-SI0049G,Chmury obliczeniowe,3
+W04CBE-SI0053G,Informatyka śledcza,4
+W04CBE-SI0052G,Ochrona systemów operacyjnych,4
+W04CBE-SI0051G,Sieci komputerowe 3,3
+W04CBE-SI0035G,Inżynierskie zastosowania statystyki,3
+W04CBE-SI0046G,Kryptografia stosowana,5
+W04CBE-SI0047G,Programowanie systemowe,4
+W04CBE-SI0048G,Sieci komputerowe 2,4
+W04CBE-SI0005G,Systemy operacyjne,5
+W04CBE-SI0032G,Fizyka 1.1,4
+W04CBE-SI0021L,Miernictwo 2,2
+W04CBE-SI0042G,Ochrona informacji,3
+W04CBE-SI0044L,Programowanie skryptowe,3
+W04CBE-SI0043G,Sieci komputerowe 1,4
+W04CBE-SI0045G,Wprowadzenie do systemów komputerowych,3
+W04CBE-SI0015G,Zaawansowana kombinatoryka,3
+W04CBE-SI0038G,Algebra liniowa z geometrią analityczną,5
+W04CBE-SI0036G,Analiza matematyczna 1.2A,6
+W04CBE-SI0059W,Miernictwo 1,2
+W04CBE-SI0041W,Podstawy cyberbezpieczeństwa,3
+W04CBE-SI0030L,Podstawy programowania,5
+W04CBE-SI0023W,Podstawy telekomunikacji,2
+W04INA-SI0001G,Analiza matematyczna 1,6
+W04INA-SI0002G,Algebra,5
+W04INA-SI0003G,Wstęp do programowania,5
+W04INA-SI0004G,Logika dla informatyków,4
+W04INA-SI0010G,Algorytmy i struktury danych,6
+W04INA-SI0011G,Teoria grafów,4
+W04INA-SI0012G,Programowanie obiektowe,5
+W04INA-SI0020G,Metody numeryczne,4
+W04INA-SI0021G,Języki formalne i kompilatory,5
+W04INA-SI0022G,Sztuczna inteligencja,4
+W05APR-SI0001G,Matematyka 1,6
+W05APR-SI0002G,Fizyka 1,5
+W05APR-SI0003G,Podstawy elektrotechniki,5
+W05APR-SI0010G,Teoria sterowania,5
+W05APR-SI0011G,Maszyny elektryczne,4
+W05APR-SI0012G,Automatyka napędu,4
+W05APR-SI0020G,Sterowniki PLC,4
+W05APR-SI0021G,Robotyka przemysłowa,5
+W05APR-SI0022G,Sieci przemysłowe,3
+W04CBE-SI0407G-2022,Aplikacje mobilne,4
+W04CBE-SI0405G-2022,Cyberbezpieczeństwo w Internecie Rzeczy,3
+W04CBE-SI0057G-2022,Metody AI w badaniu zagrożeń w systemach komputerowych,5
+W04CBE-SI0408P-2022,Projekt zespołowy,6
+W04CBE-SI0406G-2022,Przetwarzanie dużych zbiorów danych,4
+W04CBE-SI0056G-2022,Testy penetracyjne,3
+W04CBE-SI0028G-2022,Wykrywanie zagrożeń i reakcja na incydenty,4
+W04CBE-SI0055G-2022,Zarządzanie projektami IT,2
+W04CBE-SI0404G-2022,Bezpieczeństwo chmur obliczeniowych,3
+W04CBE-SI0054G-2022,Bezpieczeństwo elektromagnetyczne,2
+W04CBE-SI0403G-2022,Bezpieczeństwo serwerów i aplikacji Web,5
+W04CBE-SI0014G-2022,Bezpieczeństwo sieci komputerowych,4
+W04CBE-SI0401G-2022,Bezpieczeństwo w Sieciach Bezprzewodowych,3
+W04CBE-SI0402G-2022,Biometria,2
+W04CBE-SI0050G-2022,Bazy danych,5
+W04CBE-SI0049G-2022,Chmury obliczeniowe,3
+W04CBE-SI0053G-2022,Informatyka śledcza,4
+W04CBE-SI0052G-2022,Ochrona systemów operacyjnych,4
+W04CBE-SI0051G-2022,Sieci komputerowe 3,3
+W04CBE-SI0035G-2022,Inżynierskie zastosowania statystyki,3
+W04CBE-SI0046G-2022,Kryptografia stosowana,5
+W04CBE-SI0047G-2022,Programowanie systemowe,4
+W04CBE-SI0048G-2022,Sieci komputerowe 2,4
+W04CBE-SI0005G-2022,Systemy operacyjne,5
+W04CBE-SI0032G-2022,Fizyka 1.1,4
+W04CBE-SI0021L-2022,Miernictwo 2,2
+W04CBE-SI0042G-2022,Ochrona informacji,3
+W04CBE-SI0044L-2022,Programowanie skryptowe,3
+W04CBE-SI0043G-2022,Sieci komputerowe 1,4
+W04CBE-SI0045G-2022,Wprowadzenie do systemów komputerowych,3
+W04CBE-SI0015G-2022,Zaawansowana kombinatoryka,3
+W04CBE-SI0038G-2022,Algebra liniowa z geometrią analityczną,5
+W04CBE-SI0036G-2022,Analiza matematyczna 1.2A,6
+W04CBE-SI0059W-2022,Miernictwo 1,2
+W04CBE-SI0041W-2022,Podstawy cyberbezpieczeństwa,3
+W04CBE-SI0030L-2022,Podstawy programowania,5
+W04CBE-SI0023W-2022,Podstawy telekomunikacji,2
+W04CBE-SI0050G-2023,Bazy danych,5
+W04CBE-SI0049G-2023,Chmury obliczeniowe,3
+W04CBE-SI0053G-2023,Informatyka śledcza,4
+W04CBE-SI0052G-2023,Ochrona systemów operacyjnych,4
+W04CBE-SI0051G-2023,Sieci komputerowe 3,3
+W04CBE-SI0035G-2023,Inżynierskie zastosowania statystyki,3
+W04CBE-SI0046G-2023,Kryptografia stosowana,5
+W04CBE-SI0047G-2023,Programowanie systemowe,4
+W04CBE-SI0048G-2023,Sieci komputerowe 2,4
+W04CBE-SI0005G-2023,Systemy operacyjne,5
+W04CBE-SI0032G-2023,Fizyka 1.1,4
+W04CBE-SI0021L-2023,Miernictwo 2,2
+W04CBE-SI0042G-2023,Ochrona informacji,3
+W04CBE-SI0044L-2023,Programowanie skryptowe,3
+W04CBE-SI0043G-2023,Sieci komputerowe 1,4
+W04CBE-SI0045G-2023,Wprowadzenie do systemów komputerowych,3
+W04CBE-SI0015G-2023,Zaawansowana kombinatoryka,3
+W04CBE-SI0038G-2023,Algebra liniowa z geometrią analityczną,5
+W04CBE-SI0036G-2023,Analiza matematyczna 1.2A,6
+W04CBE-SI0059W-2023,Miernictwo 1,2
+W04CBE-SI0041W-2023,Podstawy cyberbezpieczeństwa,3
+W04CBE-SI0030L-2023,Podstawy programowania,5
+W04CBE-SI0023W-2023,Podstawy telekomunikacji,2
+W04CBE-SI0407G-2024,Aplikacje mobilne,4
+W04CBE-SI0405G-2024,Cyberbezpieczeństwo w Internecie Rzeczy,3
+W04CBE-SI0057G-2024,Metody AI w badaniu zagrożeń w systemach komputerowych,5
+W04CBE-SI0408P-2024,Projekt zespołowy,6
+W04CBE-SI0406G-2024,Przetwarzanie dużych zbiorów danych,4
+W04CBE-SI0056G-2024,Testy penetracyjne,3
+W04CBE-SI0028G-2024,Wykrywanie zagrożeń i reakcja na incydenty,4
+W04CBE-SI0055G-2024,Zarządzanie projektami IT,2
+W04CBE-SI0404G-2024,Bezpieczeństwo chmur obliczeniowych,3
+W04CBE-SI0054G-2024,Bezpieczeństwo elektromagnetyczne,2
+W04CBE-SI0403G-2024,Bezpieczeństwo serwerów i aplikacji Web,5
+W04CBE-SI0014G-2024,Bezpieczeństwo sieci komputerowych,4
+W04CBE-SI0401G-2024,Bezpieczeństwo w Sieciach Bezprzewodowych,3
+W04CBE-SI0402G-2024,Biometria,2
+W04CBE-SI0032G-2024,Fizyka 1.1,4
+W04CBE-SI0021L-2024,Miernictwo 2,2
+W04CBE-SI0042G-2024,Ochrona informacji,3
+W04CBE-SI0044L-2024,Programowanie skryptowe,3
+W04CBE-SI0043G-2024,Sieci komputerowe 1,4
+W04CBE-SI0045G-2024,Wprowadzenie do systemów komputerowych,3
+W04CBE-SI0015G-2024,Zaawansowana kombinatoryka,3
+W04CBE-SI0038G-2024,Algebra liniowa z geometrią analityczną,5
+W04CBE-SI0036G-2024,Analiza matematyczna 1.2A,6
+W04CBE-SI0059W-2024,Miernictwo 1,2
+W04CBE-SI0041W-2024,Podstawy cyberbezpieczeństwa,3
+W04CBE-SI0030L-2024,Podstawy programowania,5
+W04CBE-SI0023W-2024,Podstawy telekomunikacji,2
+W04INA-SI0001G-2022,Analiza matematyczna 1,6
+W04INA-SI0002G-2022,Algebra,5
+W04INA-SI0003G-2022,Wstęp do programowania,5
+W04INA-SI0004G-2022,Logika dla informatyków,4
+W04INA-SI0010G-2022,Algorytmy i struktury danych,6
+W04INA-SI0011G-2022,Teoria grafów,4
+W04INA-SI0012G-2022,Programowanie obiektowe,5
+W04INA-SI0020G-2022,Metody numeryczne,4
+W04INA-SI0021G-2022,Języki formalne i kompilatory,5
+W04INA-SI0022G-2022,Sztuczna inteligencja,4
+W04INA-SI0001G-2024,Analiza matematyczna 1,6
+W04INA-SI0002G-2024,Algebra,5
+W04INA-SI0003G-2024,Wstęp do programowania,5
+W04INA-SI0004G-2024,Logika dla informatyków,4
+W04INA-SI0020G-2024,Metody numeryczne,4
+W04INA-SI0021G-2024,Języki formalne i kompilatory,5
+W04INA-SI0022G-2024,Sztuczna inteligencja,4
+W05APR-SI0001G-2023,Matematyka 1,6
+W05APR-SI0002G-2023,Fizyka 1,5
+W05APR-SI0003G-2023,Podstawy elektrotechniki,5
+W05APR-SI0010G-2023,Teoria sterowania,5
+W05APR-SI0011G-2023,Maszyny elektryczne,4
+W05APR-SI0012G-2023,Automatyka napędu,4
+W05APR-SI0010G-2025,Teoria sterowania,5
+W05APR-SI0011G-2025,Maszyny elektryczne,4
+W05APR-SI0012G-2025,Automatyka napędu,4
+W05APR-SI0020G-2025,Sterowniki PLC,4
+W05APR-SI0021G-2025,Robotyka przemysłowa,5
+W05APR-SI0022G-2025,Sieci przemysłowe,3
+W04CBE-SI0407G-2025,Aplikacje mobilne,4
+W04CBE-SI0405G-2025,Cyberbezpieczeństwo w Internecie Rzeczy,3
+W04CBE-SI0057G-2025,Metody AI w badaniu zagrożeń w systemach komputerowych,5
+W04CBE-SI0408P-2025,Projekt zespołowy,6
+W04CBE-SI0406G-2025,Przetwarzanie dużych zbiorów danych,4
+W04CBE-SI0056G-2025,Testy penetracyjne,3
+W04CBE-SI0028G-2025,Wykrywanie zagrożeń i reakcja na incydenty,4
+W04CBE-SI0055G-2025,Zarządzanie projektami IT,2
+W04CBE-SI0404G-2025,Bezpieczeństwo chmur obliczeniowych,3
+W04CBE-SI0054G-2025,Bezpieczeństwo elektromagnetyczne,2
+W04CBE-SI0403G-2025,Bezpieczeństwo serwerów i aplikacji Web,5
+W04CBE-SI0014G-2025,Bezpieczeństwo sieci komputerowych,4
+W04CBE-SI0401G-2025,Bezpieczeństwo w Sieciach Bezprzewodowych,3
+W04CBE-SI0402G-2025,Biometria,2
+W04CBE-SI0050G-2025,Bazy danych,5
+W04CBE-SI0049G-2025,Chmury obliczeniowe,3
+W04CBE-SI0053G-2025,Informatyka śledcza,4
+W04CBE-SI0052G-2025,Ochrona systemów operacyjnych,4
+W04CBE-SI0051G-2025,Sieci komputerowe 3,3
+W04CBE-SI0035G-2025,Inżynierskie zastosowania statystyki,3
+W04CBE-SI0046G-2025,Kryptografia stosowana,5
+W04CBE-SI0047G-2025,Programowanie systemowe,4
+W04CBE-SI0048G-2025,Sieci komputerowe 2,4
+W04CBE-SI0005G-2025,Systemy operacyjne,5
+W04INA-SI0001G-2023,Analiza matematyczna 1,6
+W04INA-SI0002G-2023,Algebra,5
+W04INA-SI0003G-2023,Wstęp do programowania,5
+W04INA-SI0004G-2023,Logika dla informatyków,4
+W04INA-SI0010G-2023,Algorytmy i struktury danych,6
+W04INA-SI0011G-2023,Teoria grafów,4
+W04INA-SI0012G-2023,Programowanie obiektowe,5
+W04INA-SI0010G-2025,Algorytmy i struktury danych,6
+W04INA-SI0011G-2025,Teoria grafów,4
+W04INA-SI0012G-2025,Programowanie obiektowe,5
+W04INA-SI0020G-2025,Metody numeryczne,4
+W04INA-SI0021G-2025,Języki formalne i kompilatory,5
+W04INA-SI0022G-2025,Sztuczna inteligencja,4
+W05APR-SI0001G-2024,Matematyka 1,6
+W05APR-SI0002G-2024,Fizyka 1,5
+W05APR-SI0003G-2024,Podstawy elektrotechniki,5
+W05APR-SI0020G-2024,Sterowniki PLC,4
+W05APR-SI0021G-2024,Robotyka przemysłowa,5
+W05APR-SI0022G-2024,Sieci przemysłowe,3

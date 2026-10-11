@@ -14,6 +14,8 @@
 	"phone": String?,
 	"photo": String?,
 	"joined": ZonedDateTime,
+	"avg_grade": Float?,
+	"term_ids": List[Integer],
 	"err": String?
 }
 ```

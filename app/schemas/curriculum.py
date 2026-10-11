@@ -4,12 +4,14 @@ from pydantic import BaseModel
 
 class CurriculumCreateRequest(BaseModel):
     name: str
+    intake_year: str
     faculty_id: int
 
 
 class CurriculumCreateResponse(BaseModel):
     id: int
     name: str
+    intake_year: str
     faculty_id: int
     err: Optional[str] = None
 
@@ -17,6 +19,7 @@ class CurriculumCreateResponse(BaseModel):
 class CurriculumCatalogueItem(BaseModel):
     id: int
     name: str
+    intake_year: str
     faculty_id: int
 
 

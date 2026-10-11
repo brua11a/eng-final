@@ -32,10 +32,13 @@
 	
 	Registrations = {
 		"id": Integer,
-		"date": Date,
+		"name": String,
+		"reg_type": "zapisowa",
+		"curriculum_id": Integer,
+		"turn_number": Integer,
+		"date": Date,  %%this curriculum's turn inside the faculty registration%%
 		"start": Time,
-		"end": Time,
-		"reg_type": "zapisowa" | "poprawkowa"
+		"end": Time
 	}
 }
 ```
@@ -85,18 +88,32 @@
 ### (student) List my Academic Cycles
 
 ```json
-{}
+{} %%derive from session%%
 ```
 
 ```json
-{}
+{
+	"cycles": List[AcademicCycle]
+	
+	AcademicCycle = {
+		"id": Integer,
+		"year": String,
+		"season": String
+	}
+}
 ```
 ### (student) My Academic Cycle detail
 
 ```json
-{}
+{
+	"cycle_id": Integer
+}
 ```
 
 ```json
-{}
+{
+	"id": Integer,
+	"year": String,
+	"season": String
+}
 ```

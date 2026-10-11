@@ -74,7 +74,7 @@
 
 ```json
 {
-	"user_id": String,
+	"student_idx": String,
 	"grade": Float,
 	"content": String?,
 	"submit": ZonedDateTime,
@@ -105,7 +105,6 @@
 	"start_hr": ZonedTime,
 	"end_time": ZonedTime,
 	"subject_code": String,
-	"cycle_id": Integer,
 	"room_id": Integer
 }
 ```
@@ -121,7 +120,6 @@
 	"start_hr": ZonedTime,
 	"end_time": ZonedTime,
 	"subject_code": String,
-	"cycle_id": Integer,
 	"room_id": Integer,
 	"err": String?
 }
@@ -186,7 +184,8 @@
 ```json
 {
 	"sem": Integer,
-	"curriculum_id": Integer
+	"curriculum_id": Integer,
+	"cycle_id": Integer?
 }
 ```
 
@@ -195,6 +194,7 @@
 	"id": Integer,
 	"sem": Integer,
 	"curriculum_id": Integer,
+	"cycle_id": Integer?,
 	"err": String?
 }
 ```
@@ -204,6 +204,7 @@
 ```json
 {
 	"name": String,
+	"intake_year": String,
 	"faculty_id": Integer
 }
 ```
@@ -212,6 +213,7 @@
 {
 	"id": Integer,
 	"name": String,
+	"intake_year": String,
 	"faculty_id": Integer,
 	"err": String?
 }
@@ -251,6 +253,8 @@
 	"phone": String?,
 	"photo": String?,
 	"joined": ZonedDateTime,
+	"avg_grade": Float?,
+	"term_ids": List[Integer],
 	"err": String?
 }
 ```
@@ -259,10 +263,12 @@
 
 ```json
 {
+	"name": String,
 	"cycle_id": Integer,
 	"faculty_id": Integer,
-	"reg_type": "zapisowa" | "poprawkowa",
-	"turns": List[RegistrationTurn]
+	"reg_type": "zapisowa",
+	"turns": List[RegistrationTurn],
+	"group_ids": List[Integer]
 
 	RegistrationTurn = {
 		"turn_number": Integer,
@@ -275,16 +281,12 @@
 
 ```json
 {
-	"registrations": List[Registration],
+	"id": Integer,
+	"name": String,
+	"reg_type": "zapisowa",
+	"turns": List[RegistrationTurn],
+	"group_ids": List[Integer],
 	"err": String?
-
-	Registration = {
-		"id": Integer,
-		"date": Date,
-		"start": Time,
-		"end": Time,
-		"reg_type": "zapisowa" | "poprawkowa"
-	}
 }
 ```
 

@@ -1,5 +1,5 @@
 from datetime import time
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 class Group(BaseModel):
     id: int
@@ -11,5 +11,4 @@ class Group(BaseModel):
     start_hr: time
     end_time: time
     subject_code: str
-    cycle_id: int
     room_id: int
