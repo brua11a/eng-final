@@ -79,8 +79,7 @@
               "title": "Bookmarks"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "horizontal",
@@ -191,6 +190,8 @@
   },
   "active": "82d9e8b7a5847c5d",
   "lastOpenFiles": [
+    "queries/schema.cypher~",
+    "Untitled",
     "app/schemas/dashboard.py~",
     "app/schemas/dashboard.py",
     "app/schemas/registration.py~",
@@ -200,8 +201,6 @@
     "app/schemas/group.py~",
     "app/schemas/student.py~",
     "app/schemas/teacher.py~",
-    "app/schemas/auth.py~",
-    "app/schemas/auth.py",
     "endpoint_schema/user_endpoints.md",
     "endpoint_schema/student_endpoints.md",
     "endpoint_schema/admin_endpoints.md",

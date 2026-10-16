@@ -4,21 +4,23 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		idx :: STRING,
 		name :: STRING NOT NULL,
 		surname :: STRING NOT NULL,
-		phone :: STRING,
+		phone :: STRING NOT NULL,
 		degree :: STRING NOT NULL,
 		photo :: STRING,
 		working_since :: DATE NOT NULL
 	}) REQUIRE t.idx IS KEY,
+  	REQUIRE (t.name, t.surname, t.phone) IS UNIQUE,
 
 	(st:Student => {
 		idx :: STRING,
 		name :: STRING NOT NULL,
 		surname :: STRING NOT NULL,
-		phone :: STRING,
+		phone :: STRING NOT NULL,
 		photo :: STRING,
 		joined :: ZONED DATETIME NOT NULL,
 		avg_grade :: FLOAT
 	}) REQUIRE st.idx IS KEY,
+    REQUIRE (st.name, st.surname, st.phone) IS UNIQUE,
 
 	(u:User => {
 		email :: STRING,

@@ -4,7 +4,7 @@
 {
 	"name": String,
 	"surname": String,
-	"phone": String?,
+	"phone": String,
 	"degree": String,
 	"photo": String?,
 	"working_since": Date,
@@ -26,6 +26,27 @@
 }
 ```
 
+```cypher
+MATCH (i:Teacher)
+WITH coalesce(max(toInteger(substring(i.idx, 1))), 0) AS last_num
+
+MATCH (f:Faculty {id: 1})
+
+MERGE (t:Teacher {
+	name: "Adam",
+	surname: "Wiktor",
+	phone: "883 481 136"
+})
+  ON CREATE SET
+    t.idx = "T" + (last_num + 1),
+    t.degree = "dr inż.",
+    t.working_since = date("2010-10-01"),
+    t.photo = "photo"
+
+MERGE (t)-[w:WORKS_AT]->(f)
+
+RETURN t, w, f
+```
 ### (admin) Create Student
 
 ```json
@@ -34,7 +55,9 @@
 	"surname": String,
 	"phone": String?,
 	"photo": String?,
-	"joined": ZonedDateTime
+	"joined": ZonedDateTime,
+	"faculty": Integer,
+	"curriculum": Integer
 }
 ```
 
@@ -43,13 +66,32 @@
 	"idx": String,
 	"name": String,
 	"surname": String,
-	"phone": String?,
+	"phone": String,
 	"photo": String?,
 	"joined": ZonedDateTime,
 	"err": String?
 }
 ```
 
+```cypher
+MATCH (i:Student)
+WITH coalesce(max(toInteger(i.idx)), 0) AS last_num
+
+MATCH (:Faculty {id: 1})<-[:OFFERED_BY]-(c:Curriculum {name: "Cyberbezpieczeństwo"})-[h:HAS_TERM]->(ct:CurriculumTerm {sem: 1})
+WITH last_num, ct, c, h ORDER BY c.intake_year DESC LIMIT 1
+
+MERGE (st:Student {
+    name: "Adam",
+    surname: "Wiktor",
+    phone: "883 481 2000"
+})
+  ON CREATE SET
+    st.idx = toString(last_num + 1),
+    st.joined = datetime(),
+    st.photo = "photo"
+MERGE (st)-[e:ENROLLED]->(ct)
+RETURN st, e, ct, c, h
+```
 ### (admin) Assign User to account
 
 ```json
@@ -123,6 +165,27 @@
 	"room_id": Integer,
 	"err": String?
 }
+```
+
+```cypher
+MATCH (su:Subject {code: "W04CBE-SI0401G"})
+MATCH (r:Room {id: 14})
+OPTIONAL MATCH (x:Group)
+
+WITH su, r, coalesce(max(x.id), 0) + 1 AS new_id
+
+CREATE (g:Group {
+  id: new_id,
+  weekday: 0,
+  g_type: "W",
+  number: 90,
+  pnp: "ALL",
+  capacity: 900,
+  start_hr: time({hour: 7, minute: 0}),
+  end_time: time({hour: 7, minute: 1})
+})-[:OF_SUBJECT]->(su),
+(g)-[:IN_ROOM]->(r)
+RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 ```
 ### (admin) Create room
 
