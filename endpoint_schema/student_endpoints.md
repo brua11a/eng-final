@@ -20,6 +20,21 @@
 }
 ```
 
+```cypher
+MATCH (st:Student {idx: "279413"})
+MATCH (g:Group {id: 6032})
+OPTIONAL MATCH (x:Opinion)
+WITH st, g, coalesce(max(x.id), 0) + 1 AS new_id
+
+MERGE (st)-[w:WRITES]->(o:Opinion)-[a:ABOUT]->(g)
+  ON CREATE SET
+    o.id = new_id,
+    o.grade = 4.0,
+    o.content = "bylo OK",
+    o.submit = datetime()
+
+RETURN g,o,st,w,a
+```
 ### (student) Show registrations
 
 ```json
@@ -36,13 +51,30 @@
 		"reg_type": "zapisowa",
 		"curriculum_id": Integer,
 		"turn_number": Integer,
-		"date": Date,  %%this curriculum's turn inside the faculty registration%%
+		"date": Date,
 		"start": Time,
 		"end": Time
 	}
 }
 ```
 
+```cypher
+MATCH (st:Student {idx: "279413"})-[:ASSIGNED]->(tu:TurnAssignment)-[:FOR_TURN]->(rt:RegistrationTurn)
+MATCH (tu)-[:FOR_CURRICULUM]->(c:Curriculum)
+MATCH (reg:Registration)-[:HAS_TURN]->(rt)
+
+RETURN
+  reg.id AS id,
+  reg.name AS name,
+  reg.reg_type AS reg_type,
+  c.id AS curriculum_id,
+  rt.turn_number AS turn_number,
+  rt.date AS date,
+  rt.start_hr AS start,
+  rt.end_time AS end
+
+ORDER BY rt.date, rt.start_hr
+```
 ### (student) Show courses in registration
 
 
@@ -70,6 +102,12 @@
 }
 ```
 
+```cypher
+MATCH (n:RegistrationTurn {id: 7})<-[r:HAS_TURN]-(reg:Registration)
+MATCH (reg)-[op:OPENS]->(gr:Group)
+
+RETURN reg, op, gr;
+```
 ### (student) Register to Group
 
 ```json
@@ -84,6 +122,22 @@
 	"ok": Boolean,
 	"err": String?
 }
+```
+
+```cypher
+MATCH (st:Student {idx: "279413"})
+MATCH (g:Group {id: 6011})-[:OF_SUBJECT]->(su:Subject {code: "W04CBE-SI0403G"})
+OPTIONAL MATCH (:Student)-[taken:REGISTERED_IN]->(g)
+WITH st, g, su, count(taken) AS taken_seats
+
+WHERE EXISTS { (st)-[:REGISTERED_IN]->(g) }
+   OR taken_seats < g.capacity
+
+MERGE (st)-[r:REGISTERED_IN]->(g)
+  ON CREATE SET
+    r.registered_at = datetime()
+
+RETURN st, r, g, su
 ```
 ### (student) List my Academic Cycles
 
