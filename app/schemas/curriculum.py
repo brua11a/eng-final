@@ -3,24 +3,22 @@ from pydantic import BaseModel
 
 
 class CurriculumCreateRequest(BaseModel):
-    name: str
+    programme_id: int
     intake_year: str
-    faculty_id: int
 
 
 class CurriculumCreateResponse(BaseModel):
     id: int
-    name: str
+    programme_id: int
     intake_year: str
-    faculty_id: int
     err: Optional[str] = None
 
 
 class CurriculumCatalogueItem(BaseModel):
     id: int
+    programme_id: int
     name: str
     intake_year: str
-    faculty_id: int
 
 
 class CurriculumCatalogueResponse(BaseModel):

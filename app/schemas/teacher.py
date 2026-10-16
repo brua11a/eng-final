@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class TeacherCreateRequest(BaseModel):
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     degree: str
     photo: Optional[str] = None
     working_since: date
@@ -17,7 +17,7 @@ class TeacherCreateResponse(BaseModel):
     idx: str
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     degree: str
     photo: Optional[str] = None
     working_since: date
@@ -29,7 +29,7 @@ class TeacherCatalogueItem(BaseModel):
     idx: str
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     degree: str
     photo: Optional[str] = None
     working_since: date
@@ -61,6 +61,6 @@ class GroupAndCourse(BaseModel):
 class TeacherDetailResponse(BaseModel):
     degree: str
     name: str
-    phone: Optional[str] = None
+    phone: str
     email: Optional[str] = None
     groups: List[GroupAndCourse]

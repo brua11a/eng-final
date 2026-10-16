@@ -11,7 +11,7 @@
 	"idx": String,
 	"name": String,
 	"surname": String,
-	"phone": String?,
+	"phone": String,
 	"photo": String?,
 	"joined": ZonedDateTime,
 	"avg_grade": Float?,
@@ -36,7 +36,7 @@
 		"idx": String,
 		"name": String,
 		"surname": String,
-		"phone": String?,
+		"phone": String,
 		"photo": String?,
 		"joined": ZonedDateTime
 	}

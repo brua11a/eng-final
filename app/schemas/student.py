@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class StudentCreateRequest(BaseModel):
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     photo: Optional[str] = None
     joined: datetime
 
@@ -15,7 +15,7 @@ class StudentCreateResponse(BaseModel):
     idx: str
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     photo: Optional[str] = None
     joined: datetime
     err: Optional[str] = None
@@ -29,7 +29,7 @@ class StudentDetailResponse(BaseModel):
     idx: str
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     photo: Optional[str] = None
     joined: datetime
     avg_grade: Optional[float] = None
@@ -41,7 +41,7 @@ class StudentInGroup(BaseModel):
     idx: str
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     photo: Optional[str] = None
     joined: datetime
 

@@ -8,7 +8,7 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		degree :: STRING NOT NULL,
 		photo :: STRING,
 		working_since :: DATE NOT NULL
-	}) REQUIRE t.idx IS KEY,
+	}) REQUIRE t.idx IS KEY
   	REQUIRE (t.name, t.surname, t.phone) IS UNIQUE,
 
 	(st:Student => {
@@ -19,7 +19,7 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		photo :: STRING,
 		joined :: ZONED DATETIME NOT NULL,
 		avg_grade :: FLOAT
-	}) REQUIRE st.idx IS KEY,
+	}) REQUIRE st.idx IS KEY
     REQUIRE (st.name, st.surname, st.phone) IS UNIQUE,
 
 	(u:User => {
@@ -72,12 +72,16 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		sem :: INTEGER NOT NULL
 	}) REQUIRE ct.id IS KEY,
 
+	(p:Programme => {
+		id :: INTEGER,
+		name :: STRING NOT NULL
+	}) REQUIRE p.id IS KEY
+	   REQUIRE p.name IS UNIQUE,
+
 	(c:Curriculum => {
 		id :: INTEGER,
-		name :: STRING NOT NULL,
 		intake_year :: STRING NOT NULL
-	}) REQUIRE c.id IS KEY
-	   REQUIRE (c.name, c.intake_year) IS UNIQUE,
+	}) REQUIRE c.id IS KEY,
 
 	(fa:Faculty => {
 		id :: INTEGER,
@@ -112,8 +116,9 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(asg)-[:FOR_TURN => {}]->(rt),
 	(asg)-[:FOR_CURRICULUM => {}]->(c),
 	(o)-[:ABOUT => {}]->(g),
+	(p)-[:HAS_CURRICULUM => {}]->(c),
+	(p)-[:OFFERED_BY => {}]->(fa),
 	(c)-[:HAS_TERM => {}]->(ct),
-	(c)-[:OFFERED_BY => {}]->(fa),
 	(ct)-[:INCLUDES => {}]->(su),
 	(ct)-[:TAUGHT_IN => {}]->(ac),
 	(g)-[:OF_SUBJECT => {}]->(su),

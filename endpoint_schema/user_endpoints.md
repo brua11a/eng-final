@@ -27,7 +27,7 @@
 		"idx": String,
 		"name": String,
 		"surname": String,
-		"phone": String?,
+		"phone": String,
 		"degree": String,
 		"photo": String?,
 		"working_since": Date,
@@ -51,7 +51,7 @@
 		"idx": String,
 		"name": String,
 		"surname": String,
-		"phone": String?,
+		"phone": String,
 		"degree": String,
 		"photo": String?,
 		"working_since": Date,
@@ -137,9 +137,9 @@
 	
 	Curriculum = {
 		"id": Integer,
+		"programme_id": Integer,
 		"name": String,
-		"intake_year": String,
-		"faculty_id": Integer
+		"intake_year": String
 	}
 }
 ```
@@ -157,9 +157,9 @@
 	
 	Curriculum = {
 		"id": Integer,
+		"programme_id": Integer,
 		"name": String,
-		"intake_year": String,
-		"faculty_id": Integer
+		"intake_year": String
 	}
 }
 ```
@@ -257,7 +257,7 @@
 {
 	"degree": String,
 	"name": String,
-	"phone": String?,
+	"phone": String,
 	"email": String?,
 	"groups": List[GroupAndCourse]
 	

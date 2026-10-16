@@ -1,7 +1,7 @@
 LOAD CSV WITH HEADERS FROM "file:///nodes/teachers.csv" AS trow
 MERGE (t:Teacher {idx: trow.idx})
 SET t.name = trow.name, t.surname = trow.surname,
-    t.phone = nullif(trow.phone, ""), t.degree = trow.degree,
+    t.phone = trow.phone, t.degree = trow.degree,
     t.photo = nullif(trow.photo, ""), t.working_since = date(trow.working_since)
 FOREACH (_ IN CASE WHEN trow.email <> "" THEN [1] ELSE [] END |
     SET t:User, t.email = trow.email, t.passwd_hash = trow.passwd_hash);
@@ -9,15 +9,19 @@ FOREACH (_ IN CASE WHEN trow.email <> "" THEN [1] ELSE [] END |
 LOAD CSV WITH HEADERS FROM "file:///nodes/students.csv" AS strow
 MERGE (st:Student {idx: strow.idx})
 SET st.name = strow.name, st.surname = strow.surname,
-    st.phone = nullif(strow.phone, ""), st.photo = nullif(strow.photo, ""),
+    st.phone = strow.phone, st.photo = nullif(strow.photo, ""),
     st.joined = datetime(strow.joined),
     st.avg_grade = toFloat(nullif(strow.avg_grade, ""))
 FOREACH (_ IN CASE WHEN strow.email <> "" THEN [1] ELSE [] END |
     SET st:User, st.email = strow.email, st.passwd_hash = strow.passwd_hash);
 
+LOAD CSV WITH HEADERS FROM "file:///nodes/programmes.csv" AS prow
+MERGE (p:Programme {id: toInteger(prow.id)})
+SET p.name = prow.name;
+
 LOAD CSV WITH HEADERS FROM "file:///nodes/curriculums.csv" AS curow
 MERGE (c:Curriculum {id: toInteger(curow.id)})
-SET c.name = curow.name, c.intake_year = curow.intake_year;
+SET c.intake_year = curow.intake_year;
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/faculties.csv" AS farow
 MERGE (fa:Faculty {id: toInteger(farow.id)})

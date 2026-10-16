@@ -17,7 +17,7 @@
 	"idx": String,
 	"name": String,
 	"surname": String,
-	"phone": String?,
+	"phone": String,
 	"degree": String,
 	"photo": String?,
 	"working_since": Date,
@@ -53,11 +53,10 @@ RETURN t, w, f
 {
 	"name": String,
 	"surname": String,
-	"phone": String?,
+	"phone": String,
 	"photo": String?,
 	"joined": ZonedDateTime,
-	"faculty": Integer,
-	"curriculum": Integer
+	"programme": Integer
 }
 ```
 
@@ -77,8 +76,8 @@ RETURN t, w, f
 MATCH (i:Student)
 WITH coalesce(max(toInteger(i.idx)), 0) AS last_num
 
-MATCH (:Faculty {id: 1})<-[:OFFERED_BY]-(c:Curriculum {name: "Cyberbezpieczeństwo"})-[h:HAS_TERM]->(ct:CurriculumTerm {sem: 1})
-WITH last_num, ct, c, h ORDER BY c.intake_year DESC LIMIT 1
+MATCH (p:Programme {id: 1})-[ha:HAS_CURRICULUM]->(c:Curriculum)-[h:HAS_TERM]->(ct:CurriculumTerm {sem: 1})
+WITH p, ha, last_num, ct, c, h ORDER BY c.intake_year DESC LIMIT 1
 
 MERGE (st:Student {
     name: "Adam",
@@ -90,7 +89,7 @@ MERGE (st:Student {
     st.joined = datetime(),
     st.photo = "photo"
 MERGE (st)-[e:ENROLLED]->(ct)
-RETURN st, e, ct, c, h
+RETURN st, e, ct, c, h, p, ha
 ```
 ### (admin) Assign User to account
 
@@ -135,6 +134,21 @@ RETURN st, e, ct, c, h
 }
 ```
 
+```cypher
+MATCH (st:Student {idx: "279413"})
+MATCH (g:Group {id: 6032})
+OPTIONAL MATCH (x:Opinion)
+WITH st, g, coalesce(max(x.id), 0) + 1 AS new_id
+
+MERGE (st)-[w:WRITES]->(o:Opinion)-[a:ABOUT]->(g)
+  ON CREATE SET
+    o.id = new_id,
+    o.grade = 4.0,
+    o.content = "bylo OK",
+    o.submit = datetime()
+
+RETURN g,o,st,w,a
+```
 ### (admin) Create Group
 
 ```json
@@ -205,6 +219,14 @@ RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 }
 ```
 
+```cypher
+MERGE (r:Room {
+  building: $building,
+  room_num: $room_num
+})
+  ON CREATE SET r.id = $id
+RETURN r
+```
 ### (admin) Create AcademicCycle
 
 ```json
@@ -223,6 +245,16 @@ RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 }
 ```
 
+```cypher
+MERGE (ac:AcademicCycle {
+  year: "2025/2026",
+  season: "Z"
+})
+  ON CREATE SET
+    ac.id = 100
+
+RETURN ac
+```
 ### (admin) Create Subject
 
 ```json
@@ -242,13 +274,23 @@ RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 }
 ```
 
+```cypher
+MERGE (su:Subject {
+  code: "W04-001",
+})
+  ON CREATE SET
+    su.ects = 5,
+    su.name = "Bazy danych"
+
+RETURN su
+```
 ### (admin) Create CurriculumTerm
 
 ```json
 {
 	"sem": Integer,
 	"curriculum_id": Integer,
-	"cycle_id": Integer?
+	"cycle_id": Integer
 }
 ```
 
@@ -257,31 +299,54 @@ RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 	"id": Integer,
 	"sem": Integer,
 	"curriculum_id": Integer,
-	"cycle_id": Integer?,
+	"cycle_id": Integer,
 	"err": String?
 }
 ```
 
+```cypher
+MATCH (c:Curriculum {id: 1})
+MATCH (ac:AcademicCycle {id: 1})
+
+MERGE (c)-[:HAS_TERM]->(ct:CurriculumTerm {
+  sem: 1
+})
+  ON CREATE SET
+    ct.id = 100
+
+MERGE (ct)-[:TAUGHT_IN]->(ac)
+
+RETURN ct, c, ac
+```
 ### (admin) Create Curriculum
 
 ```json
 {
-	"name": String,
-	"intake_year": String,
-	"faculty_id": Integer
+	"programme_id": Integer,
+	"intake_year": String
 }
 ```
 
 ```json
 {
 	"id": Integer,
-	"name": String,
+	"programme_id": Integer,
 	"intake_year": String,
-	"faculty_id": Integer,
 	"err": String?
 }
 ```
 
+```cypher
+MATCH (p:Programme {id: 1})
+
+MERGE (p)-[:HAS_CURRICULUM]->(c:Curriculum {
+  intake_year: "2025/26"
+})
+  ON CREATE SET
+    c.id = 10
+
+RETURN c, p
+```
 ### (admin) Create Faculty
 
 ```json
@@ -300,6 +365,16 @@ RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 }
 ```
 
+```cypher
+MERGE (fa:Faculty {
+  name: "W4N",
+  full_name: "Faculty of Fundamental Problems of Technology"
+})
+  ON CREATE SET
+    fa.id = 1
+
+RETURN fa
+```
 ### (admin | teacher) Student detail
 
 ```json
@@ -313,7 +388,7 @@ RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 	"idx": String,
 	"name": String,
 	"surname": String,
-	"phone": String?,
+	"phone": String,
 	"photo": String?,
 	"joined": ZonedDateTime,
 	"avg_grade": Float?,
@@ -322,6 +397,11 @@ RETURN g { .*, subject_code: su.code, room_id: r.id } AS group
 }
 ```
 
+```cypher
+MATCH (st:Student {idx: "279413"})
+MATCH (st)-[e:ENROLLED]->(ct:CurriculumTerm)
+RETURN st, e, ct
+```
 ### (admin) Start registrations
 
 ```json

@@ -6,7 +6,7 @@ class Teacher(BaseModel):
     idx: str
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     degree: str
     photo: Optional[str] = None
     working_since: date

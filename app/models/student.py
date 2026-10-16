@@ -6,7 +6,7 @@ class Student(BaseModel):
     idx: str
     name: str
     surname: str
-    phone: Optional[str] = None
+    phone: str
     photo: Optional[str] = None
     joined: datetime
     avg_grade: Optional[float] = None

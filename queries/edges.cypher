@@ -14,10 +14,15 @@ MATCH (c:Curriculum {id: toInteger(csrow.curriculum_id)})-[:HAS_TERM]->(ct:Curri
 MATCH (su:Subject {code: csrow.subject_code})
 MERGE (ct)-[:INCLUDES]->(su);
 
-LOAD CSV WITH HEADERS FROM "file:///edges/curriculum_faculties.csv" AS ccrow
-MATCH (c:Curriculum {id: toInteger(ccrow.curriculum_id)})
-MATCH (fa:Faculty {id: toInteger(ccrow.faculty_id)})
-MERGE (c)-[:OFFERED_BY]->(fa);
+LOAD CSV WITH HEADERS FROM "file:///nodes/curriculums.csv" AS curow
+MATCH (p:Programme {id: toInteger(curow.programme_id)})
+MATCH (c:Curriculum {id: toInteger(curow.id)})
+MERGE (p)-[:HAS_CURRICULUM]->(c);
+
+LOAD CSV WITH HEADERS FROM "file:///edges/programme_faculties.csv" AS pfrow
+MATCH (p:Programme {id: toInteger(pfrow.programme_id)})
+MATCH (fa:Faculty {id: toInteger(pfrow.faculty_id)})
+MERGE (p)-[:OFFERED_BY]->(fa);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS grow
 MATCH (g:Group {id: toInteger(grow.id)})
@@ -75,13 +80,13 @@ MATCH (reg)-[:FOR_FACULTY]->(fa:Faculty)
 MATCH (g:Group {id: toInteger(rgrow.group_id)})-[:OF_SUBJECT]->(su:Subject)
 MATCH (ct:CurriculumTerm)-[:INCLUDES]->(su)
 MATCH (ct)-[:TAUGHT_IN]->(ac)
-MATCH (ct)<-[:HAS_TERM]-(:Curriculum)-[:OFFERED_BY]->(fa)
+MATCH (ct)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa)
 MERGE (reg)-[:OPENS]->(g);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/turn_assignments.csv" AS asgrow
 MATCH (asg:TurnAssignment {id: toInteger(asgrow.id)})
 MATCH (st:Student {idx: asgrow.student_idx})
-MATCH (c:Curriculum {id: toInteger(asgrow.curriculum_id)})-[:OFFERED_BY]->(fa:Faculty)
+MATCH (c:Curriculum {id: toInteger(asgrow.curriculum_id)})<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
 MATCH (ac:AcademicCycle {id: toInteger(asgrow.cycle_id)})
 MATCH (rt:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration)-[:FOR_CYCLE]->(ac)
 MATCH (reg)-[:FOR_FACULTY]->(fa)
