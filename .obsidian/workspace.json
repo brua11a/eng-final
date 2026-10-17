@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "endpoint_schema/student_endpoints.md",
+                "file": "endpoint_schema/user_endpoints.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "student_endpoints"
+              "title": "user_endpoints"
             }
           }
         ]
@@ -190,8 +190,11 @@
   },
   "active": "82d9e8b7a5847c5d",
   "lastOpenFiles": [
-    "visualisation.svg",
+    "2026-10-17.md",
+    "endpoint_schema/user_endpoints.md",
+    "endpoint_schema/teacher_endpoints.md",
     "endpoint_schema/student_endpoints.md",
+    "visualisation.svg",
     "endpoint_schema/admin_endpoints.md",
     "queries/schema.cypher~",
     "data.svg.part",
@@ -203,8 +206,6 @@
     "import/nodes/programmes.csv",
     "Untitled",
     "app/schemas/dashboard.py~",
-    "endpoint_schema/user_endpoints.md",
-    "endpoint_schema/teacher_endpoints.md",
     "visualisation(2).png",
     "venv/lib/python3.14/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
     "venv/lib/python3.14/site-packages/pip/_vendor/idna/LICENSE.md",

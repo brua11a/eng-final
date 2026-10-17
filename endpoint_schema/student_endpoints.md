@@ -156,6 +156,17 @@ RETURN st, r, g, su
 	}
 }
 ```
+
+```cypher
+MATCH (st:Student {idx: "279413"})-[:ENROLLED]->(ct:CurriculumTerm)-[:TAUGHT_IN]->(ac:AcademicCycle)
+
+RETURN
+  ac.id AS id,
+  ac.year AS year,
+  ac.season AS season
+
+ORDER BY ac.year DESC, ac.season
+```
 ### (student) My Academic Cycle detail
 
 ```json
