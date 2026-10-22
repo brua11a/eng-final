@@ -1,5 +1,5 @@
 from datetime import date, time
-from typing import List, Literal
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from .generic import OkResponse
@@ -49,6 +49,45 @@ class RegisterToGroupRequest(BaseModel):
 
 class RegisterToGroupResponse(OkResponse):
     pass
+
+
+class OpenGroupsRequest(BaseModel):
+    registration_id: int
+    course_id: str
+
+
+class OpenGroup(BaseModel):
+    id: int
+    g_type: str
+    number: int
+    weekday: int
+    start: time
+    end: time
+    capacity: int
+    filled: int
+    room: Optional[str] = None
+    teacher: Optional[str] = None
+    registered: bool
+
+
+class OpenGroupsResponse(BaseModel):
+    groups: List[OpenGroup]
+
+
+class Enrolment(BaseModel):
+    programme_id: int
+    programme: str
+    curriculum_id: int
+    intake_year: str
+    term_id: int
+    sem: int
+    cycle_id: Optional[int] = None
+    year: Optional[str] = None
+    season: Optional[str] = None
+
+
+class MyEnrolmentsResponse(BaseModel):
+    enrolments: List[Enrolment]
 
 
 class RegistrationTurnInput(BaseModel):

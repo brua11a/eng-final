@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -12,3 +12,13 @@ class FacultyCreateResponse(BaseModel):
     name: str
     full_name: str
     err: Optional[str] = None
+
+
+class FacultyItem(BaseModel):
+    id: int
+    name: str
+    full_name: str
+
+
+class FacultyListResponse(BaseModel):
+    faculties: List[FacultyItem]

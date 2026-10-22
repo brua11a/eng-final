@@ -9,17 +9,20 @@
 ```json
 {
 	"ok": Boolean,
-	"err": String?
+	"err": String?,
+	"email": String?,
+	"idx": String?,
+	"user_type": "Student" | "Teacher"?
 }
 ```
 
 ```cypher
-MATCH (u:User {email: "adam@example.com"})
+MATCH (u:User {email: $email})
 RETURN
   u.email AS email,
   u.passwd_hash AS passwd_hash,
-  u:Student AS is_student,
-  u:Teacher AS is_teacher,
+  'Student' IN labels(u) AS is_student,
+  'Teacher' IN labels(u) AS is_teacher,
   u.idx AS idx
 ```
 ### (user) Teacher catalogue
@@ -69,7 +72,8 @@ RETURN
 ```
 
 ```cypher
-MATCH (t:Teacher)-[:WORKS_AT]->(fa:Faculty)
+MATCH (t:Teacher)
+OPTIONAL MATCH (t)-[:WORKS_AT]->(fa:Faculty)
 WHERE $name IS NULL
    OR toLower(t.name + " " + t.surname) CONTAINS toLower($name)
 
@@ -155,34 +159,29 @@ ORDER BY t.surname, t.name
 MATCH (su:Subject)
 WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
   AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))
+OPTIONAL MATCH (g:Group)-[:OF_SUBJECT]->(su)
+OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
+OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
 
 RETURN
-  su.code AS code,
-  su.name AS name,
+  su.code AS subject_code,
+  su.name AS subject_name,
   su.ects AS ects,
-  COLLECT {
-    MATCH (g:Group)-[:OF_SUBJECT]->(su)
-    OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-    OPTIONAL MATCH (:Registration)-[:OPENS]->(g)
-    OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
-    OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
-    WITH g, r, ac
-    ORDER BY g.g_type, g.number, g.weekday, g.start_hr
-    RETURN {
-      id: g.id,
-      weekday: g.weekday,
-      g_type: g.g_type,
-      number: g.number,
-      pnp: g.pnp,
-      capacity: g.capacity,
-      start_hr: g.start_hr,
-      end_time: g.end_time,
-      cycle: ac.year + " " + ac.season,
-      room: r.building + " " + r.room_num
-    }
-  } AS groups
+  g.id AS group_id,
+  g.weekday AS weekday,
+  g.g_type AS g_type,
+  g.number AS number,
+  g.pnp AS pnp,
+  g.capacity AS capacity,
+  g.start_hr AS start_hr,
+  g.end_time AS end_time,
+  r.building AS building,
+  r.room_num AS room_num,
+  ac.year AS cycle_year,
+  ac.season AS cycle_season
 
-ORDER BY su.name
+ORDER BY su.name, g.g_type, g.number
 ```
 ### (user) Curriculum catalogue
 
@@ -256,15 +255,15 @@ ORDER BY p.name, c.intake_year DESC
 ```
 
 ```cypher
-MATCH (s:Subject {code: "W04CBE-SI0403G"})<-[a:OF_SUBJECT]-(b:Group)<-[c:TEACHES]-(t:Teacher)
+MATCH (s:Subject {code: $code})
+OPTIONAL MATCH (s)<-[:OF_SUBJECT]-(:Group)<-[:TEACHES]-(t:Teacher)
 
 RETURN
   s.name AS name,
   s.ects AS ects,
-  collect(DISTINCT {
-    id: t.idx,
-    name: t.name + " " + t.surname
-  }) AS taught_by
+  t.idx AS teacher_idx,
+  t.name AS teacher_name,
+  t.surname AS teacher_surname
 ```
 ### (user) List Subject groups
 
@@ -296,38 +295,29 @@ RETURN
 ```
 
 ```cypher
-MATCH (su:Subject {code: "W04CBE-SI0403G"})
+MATCH (su:Subject {code: $code})<-[:OF_SUBJECT]-(g:Group)
+OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
+OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
+OPTIONAL MATCH (st:Student)-[:REGISTERED_IN]->(g)
 
 RETURN
-  su.name AS name,
-  COLLECT {
-    MATCH (g:Group)-[:OF_SUBJECT]->(su)
-    WITH DISTINCT su, g.g_type AS g_type
-    ORDER BY g_type
-    RETURN {
-      g_type: g_type,
-      groups: COLLECT {
-        MATCH (g:Group {g_type: g_type})-[:OF_SUBJECT]->(su)
-        OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-        OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
-        OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
-        WITH DISTINCT g, r, ac
-        ORDER BY g.weekday, g.start_hr, g.number
-        RETURN {
-          id: g.id,
-          weekday: g.weekday,
-          number: g.number,
-          pnp: g.pnp,
-          capacity: g.capacity,
-          start_hr: g.start_hr,
-          end_hr: g.end_time,
-          cycle: ac.year + " " + ac.season,
-          room: r.building + " " + r.room_num,
-          filled: COUNT { (:Student)-[:REGISTERED_IN]->(g) }
-        }
-      }
-    }
-  } AS groups_by_type
+  su.name AS subject_name,
+  g.id AS id,
+  g.weekday AS weekday,
+  g.g_type AS g_type,
+  g.number AS number,
+  g.pnp AS pnp,
+  g.capacity AS capacity,
+  g.start_hr AS start_hr,
+  g.end_time AS end_time,
+  r.building AS building,
+  r.room_num AS room_num,
+  ac.year AS cycle_year,
+  ac.season AS cycle_season,
+  count(st) AS filled
+
+ORDER BY g.g_type, g.weekday, g.start_hr, g.number
 ```
 ### (user) Group detail
 
@@ -366,37 +356,29 @@ RETURN
 ```
 
 ```cypher
-MATCH (su:Subject {code: "W04CBE-SI0403G"})<-[:OF_SUBJECT]-(g:Group {number: 1, g_type: "C"})
+MATCH (su:Subject {code: $code})<-[:OF_SUBJECT]-(g:Group {number: $group_num, g_type: $g_type})
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-
-WITH su, g, r,
-  date() + duration({days: (g.weekday - date().dayOfWeek + 7) % 7}) AS first_date
+OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
+OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
+OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
+OPTIONAL MATCH (st:Student)-[:REGISTERED_IN]->(g)
 
 RETURN
   su.name AS course_name,
   g.g_type AS g_type,
-  head(COLLECT {
-    MATCH (:Registration)-[:OPENS]->(g)
-    MATCH (:Registration)-[:FOR_CYCLE]->(ac:AcademicCycle)
-    RETURN ac.year + " " + ac.season
-  }) AS academic_cycle,
   g.number AS group_num,
-  r.building AS building,
-  [d IN [w IN range(0, 4) | first_date + duration({days: 7 * w})]
-   WHERE datetime({date: d, time: g.end_time}) > datetime() |
-   {
-     class_date: d,
-     class_start: g.start_hr,
-     class_end: g.end_time,
-     building: r.building
-   }
-  ][..4] AS nearest_classes,
-  COUNT { (:Student)-[:REGISTERED_IN]->(g) } AS filled,
+  g.weekday AS weekday,
+  g.start_hr AS start_hr,
+  g.end_time AS end_time,
   g.capacity AS capacity,
-  head(COLLECT {
-    MATCH (t:Teacher)-[:TEACHES]->(g)
-    RETURN {id: t.idx, name: t.name + " " + t.surname}
-  }) AS teacher
+  r.building AS building,
+  r.room_num AS room_num,
+  ac.year AS cycle_year,
+  ac.season AS cycle_season,
+  t.idx AS teacher_idx,
+  t.name AS teacher_name,
+  t.surname AS teacher_surname,
+  count(st) AS filled
 ```
 ### (user) Teacher detail
 
@@ -423,32 +405,18 @@ RETURN
 ```
 
 ```cypher
-MATCH (n:Teacher {idx: "T001"})
+MATCH (t:Teacher {idx: $idx})
+OPTIONAL MATCH (t)-[:TEACHES]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
 
 RETURN
-  n.degree AS degree,
-  n.name + " " + n.surname AS name,
-  n.email AS email,
-  n.phone AS phone,
-  COLLECT {
-    MATCH (n)-[:TEACHES]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
-    WITH su, g
-    ORDER BY g.g_type, g.number
-    WITH su, collect({
-      id: g.id,
-      g_type: g.g_type,
-      number: g.number,
-      weekday: g.weekday,
-      start_hr: g.start_hr,
-      end_time: g.end_time
-    }) AS groups
-    ORDER BY su.name
-    RETURN {
-      code: su.code,
-      name: su.name,
-      groups: groups
-    }
-  } AS courses
+  t.degree AS degree,
+  t.name AS name,
+  t.surname AS surname,
+  t.email AS email,
+  t.phone AS phone,
+  su.code AS course_code,
+  g.g_type AS g_type,
+  g.number AS group_num
 ```
 ### (user) Dashboard
 
@@ -458,26 +426,36 @@ RETURN
 
 ```json
 {
-	"groups": List[GroupInList],
-	"index": Integer,
-	"this_week": Callendar,
-	"next_week": Callendar
+	"groups": List[RegisteredGroup]
 	
-	GroupInList = {
-		"cycle": String,
-		"name": String,
+	RegisteredGroup = {
 		"course_code": String,
-		"groups": List[GroupLite],
-		
-	}
-	
-	GroupLite = {
+		"course_name": String,
 		"g_type": String,
-		"number": Integer
-	}
-	
-	Callendar = {
-		%%zostawie to na koniec%%
+		"number": Integer,
+		"weekday": Integer,
+		"start": ZonedTime,
+		"end": ZonedTime,
+		"room": String?,
+		"cycle": String?
 	}
 }
+```
+
+```cypher
+MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
+OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
+OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
+
+RETURN
+  su.code AS course_code,
+  su.name AS course_name,
+  g.g_type AS g_type,
+  g.number AS number,
+  g.weekday AS weekday,
+  g.start_hr AS start,
+  g.end_time AS end,
+  r.building + " " + r.room_num AS room,
+  ac.year + " " + ac.season AS cycle
 ```

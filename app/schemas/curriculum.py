@@ -31,3 +31,13 @@ class CurriculumFindRequest(BaseModel):
 
 class CurriculumFindResponse(BaseModel):
     curricula: List[CurriculumCatalogueItem]
+
+
+class ProgrammeItem(BaseModel):
+    id: int
+    name: str
+    faculty_id: int
+
+
+class ProgrammeListResponse(BaseModel):
+    programmes: List[ProgrammeItem]

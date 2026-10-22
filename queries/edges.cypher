@@ -91,6 +91,9 @@ MATCH (ac:AcademicCycle {id: toInteger(asgrow.cycle_id)})
 MATCH (rt:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration)-[:FOR_CYCLE]->(ac)
 MATCH (reg)-[:FOR_FACULTY]->(fa)
 WHERE rt.turn_number = toInteger(asgrow.turn_number)
+WITH asg, st, c, rt, reg
+ORDER BY reg.id
+WITH asg, st, c, head(collect(rt)) AS rt
 MERGE (st)-[:ASSIGNED]->(asg)
 MERGE (asg)-[:FOR_CURRICULUM]->(c)
 MERGE (asg)-[:FOR_TURN]->(rt)

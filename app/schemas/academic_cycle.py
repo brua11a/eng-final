@@ -23,6 +23,10 @@ class MyAcademicCyclesResponse(BaseModel):
     cycles: List[MyAcademicCycleItem]
 
 
+class AcademicCycleListResponse(BaseModel):
+    cycles: List[MyAcademicCycleItem]
+
+
 class MyAcademicCycleDetailRequest(BaseModel):
     cycle_id: int
 

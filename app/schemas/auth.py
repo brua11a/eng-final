@@ -26,4 +26,6 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(OkResponse):
-    pass
+    email: Optional[str] = None
+    idx: Optional[str] = None
+    user_type: Optional[UserType] = None
