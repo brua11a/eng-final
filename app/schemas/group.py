@@ -62,6 +62,7 @@ class GroupTracked(GroupNested):
 class GroupDetailRequest(BaseModel):
     code: str
     group_num: int
+    g_type: str
 
 
 class ClassOccurrence(BaseModel):

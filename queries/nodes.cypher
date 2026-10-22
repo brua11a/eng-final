@@ -6,6 +6,10 @@ SET t.name = trow.name, t.surname = trow.surname,
 FOREACH (_ IN CASE WHEN trow.email <> "" THEN [1] ELSE [] END |
     SET t:User, t.email = trow.email, t.passwd_hash = trow.passwd_hash);
 
+LOAD CSV WITH HEADERS FROM "file:///nodes/admins.csv" AS arow
+MERGE (a:User:Admin {email: arow.email})
+SET a.passwd_hash = arow.passwd_hash, a.kind = arow.kind;
+
 LOAD CSV WITH HEADERS FROM "file:///nodes/students.csv" AS strow
 MERGE (st:Student {idx: strow.idx})
 SET st.name = strow.name, st.surname = strow.surname,

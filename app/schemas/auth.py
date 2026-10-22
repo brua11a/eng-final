@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 from .generic import OkResponse
 
-UserType = Literal["Teacher", "Student"]
+UserType = Literal["Teacher", "Student", "Admin"]
 
 
 class AssignUserRequest(BaseModel):
@@ -29,3 +29,4 @@ class LoginResponse(OkResponse):
     email: Optional[str] = None
     idx: Optional[str] = None
     user_type: Optional[UserType] = None
+    token: Optional[str] = None

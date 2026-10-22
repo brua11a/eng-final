@@ -27,7 +27,9 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		passwd_hash :: STRING NOT NULL
 	}) REQUIRE u.email IS KEY,
 
-//	(a:Admin => {}),
+	(a:Admin => {
+		kind :: STRING NOT NULL
+	}),
 
 	(o:Opinion => {
 		id :: INTEGER,

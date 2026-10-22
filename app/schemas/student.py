@@ -9,6 +9,7 @@ class StudentCreateRequest(BaseModel):
     phone: str
     photo: Optional[str] = None
     joined: datetime
+    programme: int
 
 
 class StudentCreateResponse(BaseModel):
