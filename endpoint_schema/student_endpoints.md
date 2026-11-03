@@ -97,12 +97,12 @@ RETURN
 
 ```cypher
 MATCH (reg:Registration {id: $registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
-MATCH (reg)-[:OPENS]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
+MATCH (reg)-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
 
 RETURN
   su.code AS subject_code,
   su.name AS subject_name,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.id AS group_id,
   ac.year AS cycle_year,
   ac.season AS cycle_season
@@ -125,7 +125,7 @@ RETURN
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})
-MATCH (g:Group {id: $group_id})-[:OF_SUBJECT]->(su:Subject {code: $course_id})
+MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject {code: $course_id})
 
 MERGE (st)-[r:REGISTERED_IN]->(g)
   ON CREATE SET r.registered_at = datetime()
@@ -163,14 +163,14 @@ RETURN g.id AS group_id, su.code AS course_id, r.registered_at AS registered_at
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})
-MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)-[:OF_SUBJECT]->(:Subject {code: $course_id})
+MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $course_id})
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
 OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)
 
 RETURN
   g.id AS id,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS number,
   g.weekday AS weekday,
   g.start_hr AS start,
@@ -180,7 +180,7 @@ RETURN
   r.building + " " + r.room_num AS room,
   t.name + " " + t.surname AS teacher,
   mine IS NOT NULL AS registered
-ORDER BY g.g_type, g.number
+ORDER BY gt.g_type, g.number
 ```
 ### (student) My enrolments
 

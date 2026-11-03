@@ -1,35 +1,35 @@
 CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 
-	(t:Teacher => {
-		idx :: STRING,
-		name :: STRING NOT NULL,
-		surname :: STRING NOT NULL,
-		phone :: STRING NOT NULL,
+	(t:Teacher => :Person {
 		degree :: STRING NOT NULL,
-		photo :: STRING,
 		working_since :: DATE NOT NULL
-	}) REQUIRE t.idx IS KEY
-  	REQUIRE (t.name, t.surname, t.phone) IS UNIQUE,
+	}),
 
-	(st:Student => {
-		idx :: STRING,
-		name :: STRING NOT NULL,
-		surname :: STRING NOT NULL,
-		phone :: STRING NOT NULL,
-		photo :: STRING,
-		joined :: ZONED DATETIME NOT NULL,
-		avg_grade :: FLOAT
-	}) REQUIRE st.idx IS KEY
-    REQUIRE (st.name, st.surname, st.phone) IS UNIQUE,
+	(st:Student => :Person {
+		joined :: ZONED DATETIME NOT NULL
+	}),
 
-	(u:User => {
+	(u:User => :Person {
 		email :: STRING,
 		passwd_hash :: STRING NOT NULL
 	}) REQUIRE u.email IS KEY,
 
-	(a:Admin => {
-		kind :: STRING NOT NULL
+	(a:Admin => :Person),
+
+	(i:Inactive => :Person {
+		deactivated_at :: ZONED DATETIME NOT NULL
 	}),
+
+	CONSTRAINT person_idx FOR (pe:Person) REQUIRE pe.idx IS KEY,
+	CONSTRAINT person_identity FOR (pe:Person) REQUIRE (pe.name, pe.surname, pe.phone) IS UNIQUE,
+	CONSTRAINT person_idx_type FOR (pe:Person) REQUIRE pe.idx IS :: STRING,
+	CONSTRAINT person_name FOR (pe:Person) REQUIRE pe.name IS NOT NULL,
+	CONSTRAINT person_name_type FOR (pe:Person) REQUIRE pe.name IS :: STRING,
+	CONSTRAINT person_surname FOR (pe:Person) REQUIRE pe.surname IS NOT NULL,
+	CONSTRAINT person_surname_type FOR (pe:Person) REQUIRE pe.surname IS :: STRING,
+	CONSTRAINT person_phone FOR (pe:Person) REQUIRE pe.phone IS NOT NULL,
+	CONSTRAINT person_phone_type FOR (pe:Person) REQUIRE pe.phone IS :: STRING,
+	CONSTRAINT person_photo FOR (pe:Person) REQUIRE pe.photo IS :: STRING,
 
 	(o:Opinion => {
 		id :: INTEGER,
@@ -41,13 +41,18 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(g:Group => {
 		id :: INTEGER,
 		weekday :: INTEGER NOT NULL,
-		g_type :: STRING NOT NULL,
 		number :: INTEGER NOT NULL,
 		pnp :: STRING NOT NULL,
 		capacity :: INTEGER NOT NULL,
 		start_hr :: ZONED TIME NOT NULL,
 		end_time :: ZONED TIME NOT NULL
 	}) REQUIRE g.id IS KEY,
+
+	(gt:GroupType => {
+		id :: INTEGER,
+		g_type :: STRING NOT NULL,
+		weight :: FLOAT NOT NULL
+	}) REQUIRE gt.id IS KEY,
 
 	(r:Room => {
 		id :: INTEGER,
@@ -112,7 +117,8 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(st)-[:WRITES => {}]->(o),
 	(st)-[:ENROLLED => {}]->(ct),
 	(st)-[:REGISTERED_IN => {
-		registered_at :: ZONED DATETIME NOT NULL
+		registered_at :: ZONED DATETIME NOT NULL,
+		grade :: FLOAT
 	}]->(g),
 	(st)-[:ASSIGNED => {}]->(asg),
 	(asg)-[:FOR_TURN => {}]->(rt),
@@ -123,7 +129,8 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(c)-[:HAS_TERM => {}]->(ct),
 	(ct)-[:INCLUDES => {}]->(su),
 	(ct)-[:TAUGHT_IN => {}]->(ac),
-	(g)-[:OF_SUBJECT => {}]->(su),
+	(su)-[:HAS_TYPE => {}]->(gt),
+	(g)-[:OF_TYPE => {}]->(gt),
 	(reg)-[:FOR_CYCLE => {}]->(ac),
 	(reg)-[:FOR_FACULTY => {}]->(fa),
 	(reg)-[:HAS_TURN => {}]->(rt),

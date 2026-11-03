@@ -1,4 +1,5 @@
-from typing import Literal, Optional
+from datetime import date, datetime
+from typing import List, Literal, Optional
 from pydantic import BaseModel
 
 from .generic import OkResponse
@@ -28,5 +29,28 @@ class LoginRequest(BaseModel):
 class LoginResponse(OkResponse):
     email: Optional[str] = None
     idx: Optional[str] = None
-    user_type: Optional[UserType] = None
+    roles: List[UserType] = []
     token: Optional[str] = None
+
+
+class AddRoleRequest(BaseModel):
+    email: str
+    role: UserType
+    degree: Optional[str] = None
+    working_since: Optional[date] = None
+    joined: Optional[datetime] = None
+
+
+class AddRoleResponse(BaseModel):
+    email: str
+    roles: List[UserType] = []
+    err: Optional[str] = None
+
+
+class UserEmailRequest(BaseModel):
+    email: str
+
+
+class UserAccountResponse(BaseModel):
+    email: str
+    err: Optional[str] = None

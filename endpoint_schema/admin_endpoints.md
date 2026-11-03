@@ -29,7 +29,7 @@
 ```cypher
 MATCH (f:Faculty {id: $faculty_id})
 
-CREATE (t:Teacher {
+CREATE (t:Teacher:Person {
   idx: $idx,
   name: $name,
   surname: $surname,
@@ -79,7 +79,7 @@ RETURN
 MATCH (p:Programme {id: $programme})-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm {sem: 1})
 WITH ct, c ORDER BY c.intake_year DESC LIMIT 1
 
-CREATE (st:Student {
+CREATE (st:Student:Person {
   idx: $idx,
   name: $name,
   surname: $surname,
@@ -136,6 +136,85 @@ RETURN
   owner.idx AS owner_idx
 ```
 
+### (admin) Deactivate user account
+
+```json
+{
+	"email": String
+}
+```
+
+```json
+{
+	"email": String,
+	"err": String?
+}
+```
+
+```cypher
+MATCH (u:User {email: $email})
+SET u:Inactive, u.deactivated_at = datetime()
+RETURN u.email AS email
+```
+
+### (admin) Activate user account
+
+```json
+{
+	"email": String
+}
+```
+
+```json
+{
+	"email": String,
+	"err": String?
+}
+```
+
+```cypher
+MATCH (u:User {email: $email})
+REMOVE u:Inactive, u.deactivated_at
+RETURN u.email AS email
+```
+
+### (admin) Add role
+
+Adds `Admin`, `Teacher`, or `Student` to an existing account. `Teacher` requires `degree` and `working_since`. `Student` requires `joined`. `Admin` needs no extra fields. One account can hold all three.
+
+```json
+{
+	"email": String,
+	"role": "Admin" | "Teacher" | "Student",
+	"degree": String?,
+	"working_since": Date?,
+	"joined": ZonedDateTime?
+}
+```
+
+```json
+{
+	"email": String,
+	"roles": List["Admin" | "Teacher" | "Student"],
+	"err": String?
+}
+```
+
+```cypher
+MATCH (u:User {email: $email})
+SET u:Admin
+```
+
+```cypher
+MATCH (u:User {email: $email})
+SET u:Teacher, u.degree = $degree, u.working_since = date($working_since)
+```
+
+```cypher
+MATCH (u:User {email: $email})
+SET u:Student, u.joined = datetime($joined)
+```
+
 ### (student | admin) Create Opinion
 
 ```json
@@ -179,6 +258,33 @@ RETURN
   o.submit AS submit,
   g.id AS group_id
 ```
+### (admin) Create Group Type
+
+```json
+{
+	"subject_code": String,
+	"g_type": String,
+	"weight": Float
+}
+```
+
+```json
+{
+	"id": Integer,
+	"subject_code": String,
+	"g_type": String,
+	"weight": Float,
+	"err": String?
+}
+```
+
+```cypher
+MATCH (su:Subject {code: $subject_code})
+CREATE (gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
+CREATE (su)-[:HAS_TYPE]->(gt)
+RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS weight
+```
+
 ### (admin) Create Group
 
 ```json
@@ -212,25 +318,24 @@ RETURN
 ```
 
 ```cypher
-MATCH (su:Subject {code: $subject_code})
+MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
 MATCH (r:Room {id: $room_id})
 
 CREATE (g:Group {
   id: $id,
   weekday: $weekday,
-  g_type: $g_type,
   number: $number,
   pnp: $pnp,
   capacity: $capacity,
   start_hr: $start_hr,
   end_time: $end_time
-})-[:OF_SUBJECT]->(su),
+})-[:OF_TYPE]->(gt),
 (g)-[:IN_ROOM]->(r)
 
 RETURN
   g.id AS id,
   g.weekday AS weekday,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS number,
   g.pnp AS pnp,
   g.capacity AS capacity,
@@ -450,6 +555,21 @@ RETURN
 ```cypher
 MATCH (st:Student {idx: $idx})
 OPTIONAL MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm)
+OPTIONAL CALL (st) {
+  MATCH (st)-[:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
+  WITH DISTINCT st, su
+  MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
+  OPTIONAL MATCH (st)-[rg:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(gt)
+  WHERE rg.grade IS NOT NULL
+  WITH su, gt, avg(rg.grade) AS type_grade
+  WITH su, collect({weight: gt.weight, grade: type_grade}) AS parts
+  WHERE size(parts) > 0 AND all(part IN parts WHERE part.grade IS NOT NULL)
+  WITH su.ects AS ects,
+    reduce(total = 0.0, part IN parts | total + part.grade * part.weight)
+      / reduce(total = 0.0, part IN parts | total + part.weight) AS subject_grade
+  WITH sum(subject_grade * ects) AS weighted, sum(ects) AS ects_total
+  RETURN CASE WHEN ects_total = 0 THEN null ELSE weighted / ects_total END AS avg_grade
+}
 
 RETURN
   st.idx AS idx,
@@ -458,9 +578,11 @@ RETURN
   st.phone AS phone,
   st.photo AS photo,
   st.joined AS joined,
-  st.avg_grade AS avg_grade,
+  avg_grade,
   collect(DISTINCT ct.id) AS term_ids
 ```
+
+`REGISTERED_IN.grade` is the mark for that group. `avg_grade` is the ECTS-weighted mean of subject grades. A subject grade is the weighted mean of its group-type marks, using `GroupType.weight`, and it is included only when every group type of that subject has a mark.
 ### (admin) Start registrations
 
 ```json

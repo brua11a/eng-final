@@ -29,10 +29,15 @@ MATCH (g:Group {id: toInteger(grow.id)})
 MATCH (r:Room {id: toInteger(grow.room_id)})
 MERGE (g)-[:IN_ROOM]->(r);
 
-LOAD CSV WITH HEADERS FROM "file:///edges/group_subject.csv" AS gsrow
-MATCH (g:Group {id: toInteger(gsrow.group_id)})
-MATCH (su:Subject {code: gsrow.subject_code})
-MERGE (g)-[:OF_SUBJECT]->(su);
+LOAD CSV WITH HEADERS FROM "file:///nodes/group_types.csv" AS gtrow
+MATCH (su:Subject {code: gtrow.subject_code})
+MATCH (gt:GroupType {id: toInteger(gtrow.id)})
+MERGE (su)-[:HAS_TYPE]->(gt);
+
+LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS grow
+MATCH (g:Group {id: toInteger(grow.id)})
+MATCH (gt:GroupType {id: toInteger(grow.group_type_id)})
+MERGE (g)-[:OF_TYPE]->(gt);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/teacher_group.csv" AS row
 MATCH (t:Teacher {idx: row.teacher_idx})
@@ -77,7 +82,7 @@ MERGE (reg)-[:HAS_TURN]->(rt);
 LOAD CSV WITH HEADERS FROM "file:///edges/registration_groups.csv" AS rgrow
 MATCH (reg:Registration {id: toInteger(rgrow.registration_id)})-[:FOR_CYCLE]->(ac:AcademicCycle)
 MATCH (reg)-[:FOR_FACULTY]->(fa:Faculty)
-MATCH (g:Group {id: toInteger(rgrow.group_id)})-[:OF_SUBJECT]->(su:Subject)
+MATCH (g:Group {id: toInteger(rgrow.group_id)})-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
 MATCH (ct:CurriculumTerm)-[:INCLUDES]->(su)
 MATCH (ct)-[:TAUGHT_IN]->(ac)
 MATCH (ct)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa)

@@ -12,7 +12,8 @@
 	"err": String?,
 	"email": String?,
 	"idx": String?,
-	"user_type": "Student" | "Teacher"?
+	"roles": List["Admin" | "Teacher" | "Student"]?,
+	"token": String?
 }
 ```
 
@@ -21,10 +22,14 @@ MATCH (u:User {email: $email})
 RETURN
   u.email AS email,
   u.passwd_hash AS passwd_hash,
-  'Student' IN labels(u) AS is_student,
-  'Teacher' IN labels(u) AS is_teacher,
-  u.idx AS idx
+  u.idx AS idx,
+  u:Inactive AS inactive,
+  u:Admin AS admin,
+  u:Teacher AS teacher,
+  u:Student AS student
 ```
+
+If `inactive` is true, return `ok: false` and `err: "Account inactive"` without a token. Every `User` is also a `Person`. The token carries every role label on that account: `Admin`, `Teacher`, and `Student` can all be present.
 ### (user) Teacher catalogue
 
 ```json
@@ -159,7 +164,7 @@ ORDER BY t.surname, t.name
 MATCH (su:Subject)
 WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
   AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))
-OPTIONAL MATCH (g:Group)-[:OF_SUBJECT]->(su)
+OPTIONAL MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
 OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -170,7 +175,7 @@ RETURN
   su.ects AS ects,
   g.id AS group_id,
   g.weekday AS weekday,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS number,
   g.pnp AS pnp,
   g.capacity AS capacity,
@@ -181,7 +186,7 @@ RETURN
   ac.year AS cycle_year,
   ac.season AS cycle_season
 
-ORDER BY su.name, g.g_type, g.number
+ORDER BY su.name, gt.g_type, g.number
 ```
 ### (user) Curriculum catalogue
 
@@ -256,7 +261,7 @@ ORDER BY p.name, c.intake_year DESC
 
 ```cypher
 MATCH (s:Subject {code: $code})
-OPTIONAL MATCH (s)<-[:OF_SUBJECT]-(:Group)<-[:TEACHES]-(t:Teacher)
+OPTIONAL MATCH (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
 
 RETURN
   s.name AS name,
@@ -295,7 +300,7 @@ RETURN
 ```
 
 ```cypher
-MATCH (su:Subject {code: $code})<-[:OF_SUBJECT]-(g:Group)
+MATCH (su:Subject {code: $code})-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
 OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -305,7 +310,7 @@ RETURN
   su.name AS subject_name,
   g.id AS id,
   g.weekday AS weekday,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS number,
   g.pnp AS pnp,
   g.capacity AS capacity,
@@ -317,7 +322,7 @@ RETURN
   ac.season AS cycle_season,
   count(st) AS filled
 
-ORDER BY g.g_type, g.weekday, g.start_hr, g.number
+ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
 ```
 ### (user) Group detail
 
@@ -356,7 +361,7 @@ ORDER BY g.g_type, g.weekday, g.start_hr, g.number
 ```
 
 ```cypher
-MATCH (su:Subject {code: $code})<-[:OF_SUBJECT]-(g:Group {number: $group_num, g_type: $g_type})
+MATCH (su:Subject {code: $code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})<-[:OF_TYPE]-(g:Group {number: $group_num})
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
 OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -365,7 +370,7 @@ OPTIONAL MATCH (st:Student)-[:REGISTERED_IN]->(g)
 
 RETURN
   su.name AS course_name,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS group_num,
   g.weekday AS weekday,
   g.start_hr AS start_hr,
@@ -406,7 +411,7 @@ RETURN
 
 ```cypher
 MATCH (t:Teacher {idx: $idx})
-OPTIONAL MATCH (t)-[:TEACHES]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
+OPTIONAL MATCH (t)-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
 
 RETURN
   t.degree AS degree,
@@ -415,7 +420,7 @@ RETURN
   t.email AS email,
   t.phone AS phone,
   su.code AS course_code,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS group_num
 ```
 ### (user) Dashboard
@@ -443,7 +448,7 @@ RETURN
 ```
 
 ```cypher
-MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
+MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
 OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -451,7 +456,7 @@ OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
 RETURN
   su.code AS course_code,
   su.name AS course_name,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS number,
   g.weekday AS weekday,
   g.start_hr AS start,

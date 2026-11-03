@@ -14,11 +14,22 @@ _secret = os.getenv("JWT_SECRET", "dev-secret")
 _algorithm = "HS256"
 
 
+def roles_from_flags(admin: bool, teacher: bool, student: bool) -> tuple[Role, ...]:
+    found: list[Role] = []
+    if admin:
+        found.append("Admin")
+    if teacher:
+        found.append("Teacher")
+    if student:
+        found.append("Student")
+    return tuple(found)
+
+
 @dataclass
 class Caller:
     email: str
     idx: str | None
-    role: Role
+    roles: tuple[Role, ...]
 
 
 def hash_password(password: str) -> str:
@@ -36,7 +47,7 @@ def create_token(caller: Caller) -> str:
     payload = {
         "sub": caller.email,
         "idx": caller.idx,
-        "role": caller.role,
+        "roles": list(caller.roles),
         "exp": datetime.now(timezone.utc) + timedelta(hours=12),
     }
     return jwt.encode(payload, _secret, algorithm=_algorithm)
@@ -49,17 +60,22 @@ async def get_caller(
         raise HTTPException(status_code=401, detail="Missing token")
     try:
         payload = jwt.decode(creds.credentials, _secret, algorithms=[_algorithm])
-        role = payload["role"]
-        if role not in ("Student", "Teacher", "Admin"):
+        raw = payload.get("roles")
+        if raw is None and payload.get("role") in ("Student", "Teacher", "Admin"):
+            raw = [payload["role"]]
+        if not isinstance(raw, list) or any(role not in ("Student", "Teacher", "Admin") for role in raw):
             raise HTTPException(status_code=401, detail="Invalid token")
-        return Caller(email=payload["sub"], idx=payload.get("idx"), role=role)
+        roles = tuple(role for role in ("Admin", "Teacher", "Student") if role in raw)
+        if not roles:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return Caller(email=payload["sub"], idx=payload.get("idx"), roles=roles)
     except (JWTError, KeyError):
         raise HTTPException(status_code=401, detail="Invalid token") from None
 
 
 def require(*roles: Role):
     async def checker(caller: Caller = Depends(get_caller)) -> Caller:
-        if caller.role not in roles:
+        if not any(role in caller.roles for role in roles):
             raise HTTPException(status_code=403, detail="Forbidden")
         return caller
 

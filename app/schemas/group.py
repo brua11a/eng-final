@@ -5,6 +5,20 @@ from pydantic import BaseModel
 from .generic import TeacherNameRef
 
 
+class GroupTypeCreateRequest(BaseModel):
+    subject_code: str
+    g_type: str
+    weight: float
+
+
+class GroupTypeCreateResponse(BaseModel):
+    id: int
+    subject_code: str
+    g_type: str
+    weight: float
+    err: Optional[str] = None
+
+
 class GroupCreateRequest(BaseModel):
     weekday: int
     g_type: str

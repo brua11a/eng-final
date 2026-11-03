@@ -97,11 +97,11 @@ async def show_courses(
         session,
         """
         MATCH (reg:Registration {id: $registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
-        MATCH (reg)-[:OPENS]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
+        MATCH (reg)-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
         RETURN
           su.code AS subject_code,
           su.name AS subject_name,
-          g.g_type AS g_type,
+          gt.g_type AS g_type,
           ac.year AS cycle_year,
           ac.season AS cycle_season
         """,
@@ -136,13 +136,13 @@ async def show_groups(
         session,
         """
         MATCH (st:Student {idx: $student_idx})
-        MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)-[:OF_SUBJECT]->(:Subject {code: $course_id})
+        MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $course_id})
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
         OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)
         RETURN
           g.id AS id,
-          g.g_type AS g_type,
+          gt.g_type AS g_type,
           g.number AS number,
           g.weekday AS weekday,
           g.start_hr AS start,
@@ -152,7 +152,7 @@ async def show_groups(
           r.building + " " + r.room_num AS room,
           t.name + " " + t.surname AS teacher,
           mine IS NOT NULL AS registered
-        ORDER BY g.g_type, g.number
+        ORDER BY gt.g_type, g.number
         """,
         student_idx=caller.idx,
         registration_id=body.registration_id,
@@ -170,7 +170,7 @@ async def register_to_group(
     row = await one(
         session,
         """
-        MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})-[:OF_SUBJECT]->(:Subject {code: $course_id})
+        MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:Subject {code: $course_id})
         MERGE (st)-[r:REGISTERED_IN]->(g)
           ON CREATE SET r.registered_at = datetime()
         RETURN g.id AS group_id
@@ -255,14 +255,14 @@ async def dashboard(
     rows = await run(
         session,
         """
-        MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
+        MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
         OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
         RETURN
           su.code AS course_code,
           su.name AS course_name,
-          g.g_type AS g_type,
+          gt.g_type AS g_type,
           g.number AS number,
           g.weekday AS weekday,
           g.start_hr AS start,
@@ -281,7 +281,12 @@ async def create_opinion(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_opinion_roles),
 ) -> OpinionCreateResponse:
-    student_idx = caller.idx if caller.role == "Student" else body.student_idx
+    if "Admin" in caller.roles and body.student_idx:
+        student_idx = body.student_idx
+    elif "Student" in caller.roles:
+        student_idx = caller.idx
+    else:
+        student_idx = body.student_idx
     if not student_idx:
         return OpinionCreateResponse(
             id=0,

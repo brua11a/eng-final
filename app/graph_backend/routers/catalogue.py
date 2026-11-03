@@ -66,7 +66,7 @@ _SUBJECTS = """
 MATCH (su:Subject)
 WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
   AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))
-OPTIONAL MATCH (g:Group)-[:OF_SUBJECT]->(su)
+OPTIONAL MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
 OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -76,7 +76,7 @@ RETURN
   su.ects AS ects,
   g.id AS group_id,
   g.weekday AS weekday,
-  g.g_type AS g_type,
+  gt.g_type AS g_type,
   g.number AS number,
   g.pnp AS pnp,
   g.capacity AS capacity,
@@ -86,7 +86,7 @@ RETURN
   r.room_num AS room_num,
   ac.year AS cycle_year,
   ac.season AS cycle_season
-ORDER BY su.name, g.g_type, g.number
+ORDER BY su.name, gt.g_type, g.number
 """
 
 _CURRICULA = """
@@ -212,7 +212,7 @@ async def subject_detail(
         session,
         """
         MATCH (s:Subject {code: $code})
-        OPTIONAL MATCH (s)<-[:OF_SUBJECT]-(:Group)<-[:TEACHES]-(t:Teacher)
+        OPTIONAL MATCH (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
         RETURN
           s.name AS name,
           s.ects AS ects,
@@ -247,7 +247,7 @@ async def subject_groups(
     rows = await run(
         session,
         """
-        MATCH (su:Subject {code: $code})<-[:OF_SUBJECT]-(g:Group)
+        MATCH (su:Subject {code: $code})-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
         OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -256,7 +256,7 @@ async def subject_groups(
           su.name AS subject_name,
           g.id AS id,
           g.weekday AS weekday,
-          g.g_type AS g_type,
+          gt.g_type AS g_type,
           g.number AS number,
           g.pnp AS pnp,
           g.capacity AS capacity,
@@ -267,7 +267,7 @@ async def subject_groups(
           ac.year AS cycle_year,
           ac.season AS cycle_season,
           count(st) AS filled
-        ORDER BY g.g_type, g.weekday, g.start_hr, g.number
+        ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
         """,
         code=body.code,
     )
@@ -306,7 +306,7 @@ async def group_detail(
     rows = await run(
         session,
         """
-        MATCH (su:Subject {code: $code})<-[:OF_SUBJECT]-(g:Group {number: $group_num, g_type: $g_type})
+        MATCH (su:Subject {code: $code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})<-[:OF_TYPE]-(g:Group {number: $group_num})
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
         OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -314,7 +314,7 @@ async def group_detail(
         OPTIONAL MATCH (st:Student)-[:REGISTERED_IN]->(g)
         RETURN
           su.name AS course_name,
-          g.g_type AS g_type,
+          gt.g_type AS g_type,
           g.number AS group_num,
           g.weekday AS weekday,
           g.start_hr AS start_hr,
@@ -364,7 +364,7 @@ async def teacher_detail(
         session,
         """
         MATCH (t:Teacher {idx: $idx})
-        OPTIONAL MATCH (t)-[:TEACHES]->(g:Group)-[:OF_SUBJECT]->(su:Subject)
+        OPTIONAL MATCH (t)-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
         RETURN
           t.degree AS degree,
           t.name AS name,
@@ -372,7 +372,7 @@ async def teacher_detail(
           t.email AS email,
           t.phone AS phone,
           su.code AS course_code,
-          g.g_type AS g_type,
+          gt.g_type AS g_type,
           g.number AS group_num
         """,
         idx=body.idx,

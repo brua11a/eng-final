@@ -45,6 +45,7 @@ class StudentInGroup(BaseModel):
     phone: str
     photo: Optional[str] = None
     joined: datetime
+    grade: Optional[float] = None
 
 
 class StudentsInGroupRequest(BaseModel):
@@ -53,3 +54,16 @@ class StudentsInGroupRequest(BaseModel):
 
 class StudentsInGroupResponse(BaseModel):
     students: List[StudentInGroup]
+
+
+class SetGroupGradeRequest(BaseModel):
+    group_id: int
+    student_idx: str
+    grade: float
+
+
+class SetGroupGradeResponse(BaseModel):
+    group_id: int
+    student_idx: str
+    grade: float
+    err: Optional[str] = None

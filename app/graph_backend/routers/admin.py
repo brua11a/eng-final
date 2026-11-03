@@ -5,7 +5,7 @@ from neo4j import AsyncSession
 from neo4j.exceptions import Neo4jError
 
 from app.database import get_session
-from app.graph_backend.auth import hash_password, require
+from app.graph_backend.auth import hash_password, require, roles_from_flags
 from app.graph_backend.query import next_id, one, run, tx_one
 from app.schemas.academic_cycle import (
     AcademicCycleCreateRequest,
@@ -13,7 +13,14 @@ from app.schemas.academic_cycle import (
     AcademicCycleListResponse,
     MyAcademicCycleItem,
 )
-from app.schemas.auth import AssignUserRequest, AssignUserResponse
+from app.schemas.auth import (
+    AddRoleRequest,
+    AddRoleResponse,
+    AssignUserRequest,
+    AssignUserResponse,
+    UserAccountResponse,
+    UserEmailRequest,
+)
 from app.schemas.curriculum import (
     CurriculumCreateRequest,
     CurriculumCreateResponse,
@@ -22,7 +29,12 @@ from app.schemas.curriculum import (
 )
 from app.schemas.curriculum_term import CurriculumTermCreateRequest, CurriculumTermCreateResponse
 from app.schemas.faculty import FacultyCreateRequest, FacultyCreateResponse, FacultyItem, FacultyListResponse
-from app.schemas.group import GroupCreateRequest, GroupCreateResponse
+from app.schemas.group import (
+    GroupCreateRequest,
+    GroupCreateResponse,
+    GroupTypeCreateRequest,
+    GroupTypeCreateResponse,
+)
 from app.schemas.registration import StartRegistrationsRequest, StartRegistrationsResponse
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomItem, RoomListResponse
 from app.schemas.student import StudentCreateRequest, StudentCreateResponse
@@ -76,7 +88,7 @@ async def create_teacher(
             session,
             """
             MATCH (f:Faculty {id: $faculty_id})
-            CREATE (t:Teacher {
+            CREATE (t:Teacher:Person {
               idx: $idx,
               name: $name,
               surname: $surname,
@@ -128,7 +140,7 @@ async def create_student(
             """
             MATCH (p:Programme {id: $programme})-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm {sem: 1})
             WITH ct, c ORDER BY c.intake_year DESC LIMIT 1
-            CREATE (st:Student {
+            CREATE (st:Student:Person {
               idx: $idx, name: $name, surname: $surname, phone: $phone,
               joined: datetime($joined), photo: $photo
             })
@@ -189,6 +201,155 @@ async def assign_user(
     return AssignUserResponse(**row)
 
 
+@router.post("/users/deactivate", response_model=UserAccountResponse)
+async def deactivate_user(
+    body: UserEmailRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> UserAccountResponse:
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (u:User {email: $email})
+            SET u:Inactive, u.deactivated_at = datetime()
+            RETURN u.email AS email
+            """,
+            email=body.email,
+        )
+    except Neo4jError as exc:
+        return UserAccountResponse(email=body.email, err=_db_err(exc))
+    if row is None:
+        return UserAccountResponse(email=body.email, err="Account not found")
+    return UserAccountResponse(**row)
+
+
+@router.post("/users/activate", response_model=UserAccountResponse)
+async def activate_user(
+    body: UserEmailRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> UserAccountResponse:
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (u:User {email: $email})
+            REMOVE u:Inactive, u.deactivated_at
+            RETURN u.email AS email
+            """,
+            email=body.email,
+        )
+    except Neo4jError as exc:
+        return UserAccountResponse(email=body.email, err=_db_err(exc))
+    if row is None:
+        return UserAccountResponse(email=body.email, err="Account not found")
+    return UserAccountResponse(**row)
+
+
+_ROLE_STATE = """
+MATCH (u:User {email: $email})
+RETURN u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+"""
+
+_ADD_ROLE = {
+    "Admin": """
+        MATCH (u:User {email: $email})
+        SET u:Admin
+        RETURN u.email AS email, u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+    """,
+    "Teacher": """
+        MATCH (u:User {email: $email})
+        SET u:Teacher, u.degree = $degree, u.working_since = date($working_since)
+        RETURN u.email AS email, u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+    """,
+    "Student": """
+        MATCH (u:User {email: $email})
+        SET u:Student, u.joined = datetime($joined)
+        RETURN u.email AS email, u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+    """,
+}
+
+
+@router.post("/users/roles", response_model=AddRoleResponse)
+async def add_role(
+    body: AddRoleRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AddRoleResponse:
+    current = await one(session, _ROLE_STATE, email=body.email)
+    if current is None:
+        return AddRoleResponse(email=body.email, err="Account not found")
+    if current[body.role.lower()]:
+        return AddRoleResponse(
+            email=body.email,
+            roles=list(roles_from_flags(current["admin"], current["teacher"], current["student"])),
+            err="Role already assigned",
+        )
+    params: dict = {"email": body.email}
+    if body.role == "Teacher":
+        if not body.degree or body.working_since is None:
+            return AddRoleResponse(email=body.email, err="degree and working_since are required")
+        params["degree"] = body.degree
+        params["working_since"] = body.working_since.isoformat()
+    elif body.role == "Student":
+        if body.joined is None:
+            return AddRoleResponse(email=body.email, err="joined is required")
+        params["joined"] = _zoned_datetime(body.joined)
+    try:
+        row = await one(session, _ADD_ROLE[body.role], **params)
+    except Neo4jError as exc:
+        return AddRoleResponse(email=body.email, err=_db_err(exc))
+    if row is None:
+        return AddRoleResponse(email=body.email, err="Account not found")
+    return AddRoleResponse(
+        email=row["email"],
+        roles=list(roles_from_flags(row["admin"], row["teacher"], row["student"])),
+    )
+
+
+@router.post("/group-types", response_model=GroupTypeCreateResponse)
+async def create_group_type(
+    body: GroupTypeCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> GroupTypeCreateResponse:
+    existing = await one(
+        session,
+        """
+        MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+        RETURN gt.id AS id
+        """,
+        subject_code=body.subject_code,
+        g_type=body.g_type,
+    )
+    if existing is not None:
+        return GroupTypeCreateResponse(
+            id=existing["id"], subject_code=body.subject_code, g_type=body.g_type,
+            weight=body.weight, err="Group type already exists",
+        )
+    type_id = await next_id(session, "GroupType")
+    row = await one(
+        session,
+        """
+        MATCH (su:Subject {code: $subject_code})
+        CREATE (gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
+        CREATE (su)-[:HAS_TYPE]->(gt)
+        RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS weight
+        """,
+        subject_code=body.subject_code,
+        id=type_id,
+        g_type=body.g_type,
+        weight=body.weight,
+    )
+    if row is None:
+        return GroupTypeCreateResponse(
+            id=type_id, subject_code=body.subject_code, g_type=body.g_type,
+            weight=body.weight, err="Subject not found",
+        )
+    return GroupTypeCreateResponse(**row)
+
+
 @router.post("/groups", response_model=GroupCreateResponse)
 async def create_group(
     body: GroupCreateRequest,
@@ -199,14 +360,14 @@ async def create_group(
     row = await one(
         session,
         """
-        MATCH (su:Subject {code: $subject_code})
+        MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
         MATCH (r:Room {id: $room_id})
         CREATE (g:Group {
-          id: $id, weekday: $weekday, g_type: $g_type, number: $number, pnp: $pnp,
+          id: $id, weekday: $weekday, number: $number, pnp: $pnp,
           capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
-        })-[:OF_SUBJECT]->(su),
+        })-[:OF_TYPE]->(gt),
         (g)-[:IN_ROOM]->(r)
-        RETURN g.id AS id, g.weekday AS weekday, g.g_type AS g_type, g.number AS number,
+        RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
                g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
                su.code AS subject_code, r.id AS room_id
         """,
@@ -225,7 +386,7 @@ async def create_group(
         return GroupCreateResponse(
             id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
             pnp=body.pnp, capacity=body.capacity, start_hr=body.start_hr, end_time=body.end_time,
-            subject_code=body.subject_code, room_id=body.room_id, err="Subject or room not found",
+            subject_code=body.subject_code, room_id=body.room_id, err="Group type or room not found",
         )
     return GroupCreateResponse(**row)
 

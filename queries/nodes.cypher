@@ -1,5 +1,5 @@
 LOAD CSV WITH HEADERS FROM "file:///nodes/teachers.csv" AS trow
-MERGE (t:Teacher {idx: trow.idx})
+MERGE (t:Teacher:Person {idx: trow.idx})
 SET t.name = trow.name, t.surname = trow.surname,
     t.phone = trow.phone, t.degree = trow.degree,
     t.photo = nullif(trow.photo, ""), t.working_since = date(trow.working_since)
@@ -7,15 +7,15 @@ FOREACH (_ IN CASE WHEN trow.email <> "" THEN [1] ELSE [] END |
     SET t:User, t.email = trow.email, t.passwd_hash = trow.passwd_hash);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/admins.csv" AS arow
-MERGE (a:User:Admin {email: arow.email})
-SET a.passwd_hash = arow.passwd_hash, a.kind = arow.kind;
+MERGE (a:User:Person:Admin {idx: arow.idx})
+SET a.name = arow.name, a.surname = arow.surname, a.phone = arow.phone,
+    a.email = arow.email, a.passwd_hash = arow.passwd_hash;
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/students.csv" AS strow
-MERGE (st:Student {idx: strow.idx})
+MERGE (st:Student:Person {idx: strow.idx})
 SET st.name = strow.name, st.surname = strow.surname,
     st.phone = strow.phone, st.photo = nullif(strow.photo, ""),
-    st.joined = datetime(strow.joined),
-    st.avg_grade = toFloat(nullif(strow.avg_grade, ""))
+    st.joined = datetime(strow.joined)
 FOREACH (_ IN CASE WHEN strow.email <> "" THEN [1] ELSE [] END |
     SET st:User, st.email = strow.email, st.passwd_hash = strow.passwd_hash);
 
@@ -47,11 +47,14 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/rooms.csv" AS rrow
 MERGE (r:Room {id: toInteger(rrow.id)})
 SET r.building = rrow.building, r.room_num = rrow.room_num;
 
+LOAD CSV WITH HEADERS FROM "file:///nodes/group_types.csv" AS gtrow
+MERGE (gt:GroupType {id: toInteger(gtrow.id)})
+SET gt.g_type = gtrow.g_type, gt.weight = toFloat(gtrow.weight);
+
 LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS grow
 MERGE (g:Group {id: toInteger(grow.id)})
 SET g.weekday = toInteger(grow.weekday),
     g.number = toInteger(grow.number),
-    g.g_type = grow.g_type,
     g.pnp = grow.pnp,
     g.capacity = toInteger(grow.capacity),
     g.start_hr = time(grow.start_hr),

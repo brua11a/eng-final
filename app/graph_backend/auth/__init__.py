@@ -1,4 +1,4 @@
-from .deps import Caller, create_token, get_caller, hash_password, require, verify_password
+from .deps import Caller, create_token, get_caller, hash_password, require, roles_from_flags, verify_password
 
 __all__ = [
     "Caller",
@@ -6,5 +6,6 @@ __all__ = [
     "get_caller",
     "hash_password",
     "require",
+    "roles_from_flags",
     "verify_password",
 ]
