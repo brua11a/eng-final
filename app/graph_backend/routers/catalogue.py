@@ -7,7 +7,6 @@ from app.graph_backend.query import run
 from app.schemas.curriculum import (
     CurriculumCatalogueItem,
     CurriculumCatalogueResponse,
-    CurriculumFindRequest,
 )
 from app.schemas.generic import TeacherNameRef
 from app.schemas.group import GroupDetailRequest, GroupDetailResponse, GroupNested, GroupTracked
@@ -16,7 +15,6 @@ from app.schemas.subject import (
     SubjectCatalogueResponse,
     SubjectDetailRequest,
     SubjectDetailResponse,
-    SubjectFindRequest,
     SubjectGroupsRequest,
     SubjectGroupsResponse,
 )
@@ -25,7 +23,6 @@ from app.schemas.teacher import (
     TeacherCatalogueResponse,
     TeacherDetailRequest,
     TeacherDetailResponse,
-    TeacherFindRequest,
 )
 from app.schemas.teacher import GroupAndCourse
 
@@ -152,15 +149,6 @@ async def teacher_catalogue(
     )
 
 
-@router.post("/teachers/search", response_model=TeacherCatalogueResponse)
-async def find_teachers(
-    body: TeacherFindRequest,
-    session: AsyncSession = Depends(get_session),
-    caller: Caller = Depends(_logged_in),
-) -> TeacherCatalogueResponse:
-    return await teacher_catalogue(body.name, session, caller)
-
-
 @router.get("/subjects", response_model=SubjectCatalogueResponse)
 async def subject_catalogue(
     name: str | None = None,
@@ -170,15 +158,6 @@ async def subject_catalogue(
 ) -> SubjectCatalogueResponse:
     rows = await run(session, _SUBJECTS, name=name, code=code)
     return SubjectCatalogueResponse(subject_and_groups=_subjects(rows))
-
-
-@router.post("/subjects/search", response_model=SubjectCatalogueResponse)
-async def find_subjects(
-    body: SubjectFindRequest,
-    session: AsyncSession = Depends(get_session),
-    caller: Caller = Depends(_logged_in),
-) -> SubjectCatalogueResponse:
-    return await subject_catalogue(body.name, body.code, session, caller)
 
 
 @router.get("/curricula", response_model=CurriculumCatalogueResponse)
@@ -191,15 +170,6 @@ async def curriculum_catalogue(
     return CurriculumCatalogueResponse(
         curricula=[CurriculumCatalogueItem(**row) for row in rows]
     )
-
-
-@router.post("/curricula/search", response_model=CurriculumCatalogueResponse)
-async def find_curricula(
-    body: CurriculumFindRequest,
-    session: AsyncSession = Depends(get_session),
-    caller: Caller = Depends(_logged_in),
-) -> CurriculumCatalogueResponse:
-    return await curriculum_catalogue(body.name, session, caller)
 
 
 @router.post("/subjects/detail", response_model=SubjectDetailResponse)
@@ -306,7 +276,7 @@ async def group_detail(
     rows = await run(
         session,
         """
-        MATCH (su:Subject {code: $code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})<-[:OF_TYPE]-(g:Group {number: $group_num})
+        MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
         OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -328,9 +298,7 @@ async def group_detail(
           t.surname AS teacher_surname,
           count(st) AS filled
         """,
-        code=body.code,
-        group_num=body.group_num,
-        g_type=body.g_type,
+        group_id=body.group_id,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Group not found")

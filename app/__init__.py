@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import close_driver, verify_connectivity
+from app.graph_backend.errors import register_exception_handlers
 from app.graph_backend.routers.admin import router as admin_router
 from app.graph_backend.routers.catalogue import router as catalogue_router
 from app.graph_backend.routers.public import router as public_router
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="eng-final", lifespan=lifespan)
+register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],

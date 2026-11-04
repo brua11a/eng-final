@@ -29,15 +29,6 @@ class SubjectCatalogueResponse(BaseModel):
     subject_and_groups: List[SubjectAndGroups]
 
 
-class SubjectFindRequest(BaseModel):
-    name: Optional[str] = None
-    code: Optional[str] = None
-
-
-class SubjectFindResponse(BaseModel):
-    subject_and_groups: List[SubjectAndGroups]
-
-
 class SubjectDetailRequest(BaseModel):
     code: str
 

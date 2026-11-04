@@ -5,17 +5,17 @@
 	"grade": Float,
 	"content": String?,
 	"submit": ZonedDateTime,
-	"group_id": Integer
+	"group_id": String
 }
 ```
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"grade": Float,
 	"content": String?,
 	"submit": ZonedDateTime,
-	"group_id": Integer,
+	"group_id": String,
 	"err": String?
 }
 ```
@@ -41,10 +41,10 @@ RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit, g
 	available_registrations: List[Registrations]
 	
 	Registrations = {
-		"id": Integer,
+		"id": String,
 		"name": String,
 		"reg_type": "zapisowa",
-		"curriculum_id": Integer,
+		"curriculum_id": String,
 		"turn_number": Integer,
 		"date": Date,
 		"start": Time,
@@ -73,7 +73,7 @@ RETURN
 
 ```json
 {
-	"registration_id": Integer
+	"registration_id": String
 }
 ```
 
@@ -112,7 +112,7 @@ RETURN
 ```json
 {
 	"course_id": String,
-	"group_id": Integer
+	"group_id": String
 }
 ```
 
@@ -136,7 +136,7 @@ RETURN g.id AS group_id, su.code AS course_id, r.registered_at AS registered_at
 
 ```json
 {
-	"registration_id": Integer,
+	"registration_id": String,
 	"course_id": String
 }
 ```
@@ -146,7 +146,7 @@ RETURN g.id AS group_id, su.code AS course_id, r.registered_at AS registered_at
 	"groups": List[OpenGroup]
 	
 	OpenGroup = {
-		"id": Integer,
+		"id": String,
 		"g_type": String,
 		"number": Integer,
 		"weekday": Integer,
@@ -193,13 +193,13 @@ ORDER BY gt.g_type, g.number
 	"enrolments": List[Enrolment]
 	
 	Enrolment = {
-		"programme_id": Integer,
+		"programme_id": String,
 		"programme": String,
-		"curriculum_id": Integer,
+		"curriculum_id": String,
 		"intake_year": String,
-		"term_id": Integer,
+		"term_id": String,
 		"sem": Integer,
-		"cycle_id": Integer?,
+		"cycle_id": String?,
 		"year": String?,
 		"season": String?
 	}
@@ -233,7 +233,7 @@ ORDER BY p.name, ct.sem
 	"cycles": List[AcademicCycle]
 	
 	AcademicCycle = {
-		"id": Integer,
+		"id": String,
 		"year": String,
 		"season": String
 	}
@@ -249,13 +249,13 @@ RETURN DISTINCT ac.id AS id, ac.year AS year, ac.season AS season
 
 ```json
 {
-	"cycle_id": Integer
+	"cycle_id": String
 }
 ```
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"year": String,
 	"season": String
 }

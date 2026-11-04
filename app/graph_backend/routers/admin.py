@@ -19,7 +19,7 @@ from app.schemas.auth import (
     AssignUserRequest,
     AssignUserResponse,
     UserAccountResponse,
-    UserEmailRequest,
+    UserIdxRequest,
 )
 from app.schemas.curriculum import (
     CurriculumCreateRequest,
@@ -34,6 +34,8 @@ from app.schemas.group import (
     GroupCreateResponse,
     GroupTypeCreateRequest,
     GroupTypeCreateResponse,
+    TeacherAssignRequest,
+    TeacherAssignResponse,
 )
 from app.schemas.registration import StartRegistrationsRequest, StartRegistrationsResponse
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomItem, RoomListResponse
@@ -41,13 +43,10 @@ from app.schemas.student import StudentCreateRequest, StudentCreateResponse
 from app.schemas.subject import SubjectCreateRequest, SubjectCreateResponse
 from app.schemas.teacher import TeacherCreateRequest, TeacherCreateResponse
 
+from app.graph_backend.errors import db_err
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 _admin = require("Admin")
-
-
-def _db_err(exc: Neo4jError) -> str:
-    message = getattr(exc, "message", None)
-    return message or str(exc)
 
 
 def _zoned_time(value: time) -> str:
@@ -116,7 +115,7 @@ async def create_teacher(
         return TeacherCreateResponse(
             idx=idx, name=body.name, surname=body.surname, phone=body.phone,
             degree=body.degree, photo=body.photo, working_since=body.working_since,
-            faculty_id=body.faculty_id, err=_db_err(exc),
+            faculty_id=body.faculty_id, err=db_err(exc),
         )
     if row is None:
         return TeacherCreateResponse(
@@ -159,7 +158,7 @@ async def create_student(
     except Neo4jError as exc:
         return StudentCreateResponse(
             idx=idx, name=body.name, surname=body.surname, phone=body.phone,
-            photo=body.photo, joined=body.joined, err=_db_err(exc),
+            photo=body.photo, joined=body.joined, err=db_err(exc),
         )
     if row is None:
         return StudentCreateResponse(
@@ -179,31 +178,32 @@ async def assign_user(
         row = await one(
             session,
             """
-            MATCH (owner)
-            WHERE ($user_type = "Teacher" AND owner:Teacher AND owner.idx = $assigned_id)
-               OR ($user_type = "Student" AND owner:Student AND owner.idx = $assigned_id)
+            MATCH (owner:Person {idx: $idx})
             SET owner:User, owner.email = $email, owner.passwd_hash = $passwd_hash
             RETURN owner.email AS email,
-              CASE WHEN owner:Teacher THEN "Teacher" WHEN owner:Student THEN "Student" END AS owner_type,
-              owner.idx AS owner_idx
+              owner.idx AS idx,
+              owner:Admin AS admin,
+              owner:Teacher AS teacher,
+              owner:Student AS student
             """,
-            user_type=body.user_type,
-            assigned_id=body.assigned_id,
+            idx=body.idx,
             email=body.email,
             passwd_hash=hash_password(body.passwd),
         )
     except Neo4jError as exc:
-        return AssignUserResponse(email=body.email, owner_type=body.user_type, owner_idx=body.assigned_id, err=_db_err(exc))
+        return AssignUserResponse(email=body.email, idx=body.idx, err=db_err(exc))
     if row is None:
-        return AssignUserResponse(
-            email=body.email, owner_type=body.user_type, owner_idx=body.assigned_id, err="Account not found",
-        )
-    return AssignUserResponse(**row)
+        return AssignUserResponse(email=body.email, idx=body.idx, err="Account not found")
+    return AssignUserResponse(
+        email=row["email"],
+        idx=row["idx"],
+        roles=list(roles_from_flags(row["admin"], row["teacher"], row["student"])),
+    )
 
 
 @router.post("/users/deactivate", response_model=UserAccountResponse)
 async def deactivate_user(
-    body: UserEmailRequest,
+    body: UserIdxRequest,
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> UserAccountResponse:
@@ -211,22 +211,22 @@ async def deactivate_user(
         row = await one(
             session,
             """
-            MATCH (u:User {email: $email})
+            MATCH (u:User {idx: $idx})
             SET u:Inactive, u.deactivated_at = datetime()
-            RETURN u.email AS email
+            RETURN u.idx AS idx
             """,
-            email=body.email,
+            idx=body.idx,
         )
     except Neo4jError as exc:
-        return UserAccountResponse(email=body.email, err=_db_err(exc))
+        return UserAccountResponse(idx=body.idx, err=db_err(exc))
     if row is None:
-        return UserAccountResponse(email=body.email, err="Account not found")
+        return UserAccountResponse(idx=body.idx, err="Account not found")
     return UserAccountResponse(**row)
 
 
 @router.post("/users/activate", response_model=UserAccountResponse)
 async def activate_user(
-    body: UserEmailRequest,
+    body: UserIdxRequest,
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> UserAccountResponse:
@@ -234,39 +234,39 @@ async def activate_user(
         row = await one(
             session,
             """
-            MATCH (u:User {email: $email})
+            MATCH (u:User {idx: $idx})
             REMOVE u:Inactive, u.deactivated_at
-            RETURN u.email AS email
+            RETURN u.idx AS idx
             """,
-            email=body.email,
+            idx=body.idx,
         )
     except Neo4jError as exc:
-        return UserAccountResponse(email=body.email, err=_db_err(exc))
+        return UserAccountResponse(idx=body.idx, err=db_err(exc))
     if row is None:
-        return UserAccountResponse(email=body.email, err="Account not found")
+        return UserAccountResponse(idx=body.idx, err="Account not found")
     return UserAccountResponse(**row)
 
 
 _ROLE_STATE = """
-MATCH (u:User {email: $email})
-RETURN u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+MATCH (p:Person {idx: $idx})
+RETURN p:Admin AS admin, p:Teacher AS teacher, p:Student AS student, p.email AS email
 """
 
 _ADD_ROLE = {
     "Admin": """
-        MATCH (u:User {email: $email})
-        SET u:Admin
-        RETURN u.email AS email, u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+        MATCH (p:Person {idx: $idx})
+        SET p:Admin
+        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
     """,
     "Teacher": """
-        MATCH (u:User {email: $email})
-        SET u:Teacher, u.degree = $degree, u.working_since = date($working_since)
-        RETURN u.email AS email, u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+        MATCH (p:Person {idx: $idx})
+        SET p:Teacher, p.degree = $degree, p.working_since = date($working_since)
+        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
     """,
     "Student": """
-        MATCH (u:User {email: $email})
-        SET u:Student, u.joined = datetime($joined)
-        RETURN u.email AS email, u:Admin AS admin, u:Teacher AS teacher, u:Student AS student
+        MATCH (p:Person {idx: $idx})
+        SET p:Student, p.joined = datetime($joined)
+        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
     """,
 }
 
@@ -277,32 +277,36 @@ async def add_role(
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> AddRoleResponse:
-    current = await one(session, _ROLE_STATE, email=body.email)
+    try:
+        current = await one(session, _ROLE_STATE, idx=body.idx)
+    except Neo4jError as exc:
+        return AddRoleResponse(idx=body.idx, err=db_err(exc))
     if current is None:
-        return AddRoleResponse(email=body.email, err="Account not found")
+        return AddRoleResponse(idx=body.idx, err="Person not found")
     if current[body.role.lower()]:
         return AddRoleResponse(
-            email=body.email,
+            idx=body.idx,
             roles=list(roles_from_flags(current["admin"], current["teacher"], current["student"])),
             err="Role already assigned",
         )
-    params: dict = {"email": body.email}
+    params: dict = {"idx": body.idx}
     if body.role == "Teacher":
         if not body.degree or body.working_since is None:
-            return AddRoleResponse(email=body.email, err="degree and working_since are required")
+            return AddRoleResponse(idx=body.idx, err="degree and working_since are required")
         params["degree"] = body.degree
         params["working_since"] = body.working_since.isoformat()
     elif body.role == "Student":
         if body.joined is None:
-            return AddRoleResponse(email=body.email, err="joined is required")
+            return AddRoleResponse(idx=body.idx, err="joined is required")
         params["joined"] = _zoned_datetime(body.joined)
     try:
         row = await one(session, _ADD_ROLE[body.role], **params)
     except Neo4jError as exc:
-        return AddRoleResponse(email=body.email, err=_db_err(exc))
+        return AddRoleResponse(idx=body.idx, err=db_err(exc))
     if row is None:
-        return AddRoleResponse(email=body.email, err="Account not found")
+        return AddRoleResponse(idx=body.idx, err="Person not found")
     return AddRoleResponse(
+        idx=row["idx"],
         email=row["email"],
         roles=list(roles_from_flags(row["admin"], row["teacher"], row["student"])),
     )
@@ -314,34 +318,40 @@ async def create_group_type(
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> GroupTypeCreateResponse:
-    existing = await one(
-        session,
-        """
-        MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
-        RETURN gt.id AS id
-        """,
-        subject_code=body.subject_code,
-        g_type=body.g_type,
-    )
-    if existing is not None:
-        return GroupTypeCreateResponse(
-            id=existing["id"], subject_code=body.subject_code, g_type=body.g_type,
-            weight=body.weight, err="Group type already exists",
-        )
     type_id = await next_id(session, "GroupType")
-    row = await one(
-        session,
-        """
-        MATCH (su:Subject {code: $subject_code})
-        CREATE (gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
-        CREATE (su)-[:HAS_TYPE]->(gt)
-        RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS weight
-        """,
-        subject_code=body.subject_code,
-        id=type_id,
-        g_type=body.g_type,
-        weight=body.weight,
-    )
+    try:
+        existing = await one(
+            session,
+            """
+            MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+            RETURN gt.id AS id
+            """,
+            subject_code=body.subject_code,
+            g_type=body.g_type,
+        )
+        if existing is not None:
+            return GroupTypeCreateResponse(
+                id=existing["id"], subject_code=body.subject_code, g_type=body.g_type,
+                weight=body.weight, err="Group type already exists",
+            )
+        row = await one(
+            session,
+            """
+            MATCH (su:Subject {code: $subject_code})
+            CREATE (gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
+            CREATE (su)-[:HAS_TYPE]->(gt)
+            RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS weight
+            """,
+            subject_code=body.subject_code,
+            id=type_id,
+            g_type=body.g_type,
+            weight=body.weight,
+        )
+    except Neo4jError as exc:
+        return GroupTypeCreateResponse(
+            id=type_id, subject_code=body.subject_code, g_type=body.g_type,
+            weight=body.weight, err=db_err(exc),
+        )
     if row is None:
         return GroupTypeCreateResponse(
             id=type_id, subject_code=body.subject_code, g_type=body.g_type,
@@ -357,31 +367,38 @@ async def create_group(
     caller=Depends(_admin),
 ) -> GroupCreateResponse:
     group_id = await next_id(session, "Group")
-    row = await one(
-        session,
-        """
-        MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
-        MATCH (r:Room {id: $room_id})
-        CREATE (g:Group {
-          id: $id, weekday: $weekday, number: $number, pnp: $pnp,
-          capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
-        })-[:OF_TYPE]->(gt),
-        (g)-[:IN_ROOM]->(r)
-        RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
-               g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
-               su.code AS subject_code, r.id AS room_id
-        """,
-        subject_code=body.subject_code,
-        room_id=body.room_id,
-        id=group_id,
-        weekday=body.weekday,
-        g_type=body.g_type,
-        number=body.number,
-        pnp=body.pnp,
-        capacity=body.capacity,
-        start_hr=_zoned_time(body.start_hr),
-        end_time=_zoned_time(body.end_time),
-    )
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+            MATCH (r:Room {id: $room_id})
+            CREATE (g:Group {
+              id: $id, weekday: $weekday, number: $number, pnp: $pnp,
+              capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
+            })-[:OF_TYPE]->(gt),
+            (g)-[:IN_ROOM]->(r)
+            RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
+                   g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
+                   su.code AS subject_code, r.id AS room_id
+            """,
+            subject_code=body.subject_code,
+            room_id=body.room_id,
+            id=group_id,
+            weekday=body.weekday,
+            g_type=body.g_type,
+            number=body.number,
+            pnp=body.pnp,
+            capacity=body.capacity,
+            start_hr=_zoned_time(body.start_hr),
+            end_time=_zoned_time(body.end_time),
+        )
+    except Neo4jError as exc:
+        return GroupCreateResponse(
+            id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
+            pnp=body.pnp, capacity=body.capacity, start_hr=body.start_hr, end_time=body.end_time,
+            subject_code=body.subject_code, room_id=body.room_id, err=db_err(exc),
+        )
     if row is None:
         return GroupCreateResponse(
             id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
@@ -391,6 +408,39 @@ async def create_group(
     return GroupCreateResponse(**row)
 
 
+@router.post("/groups/teachers", response_model=TeacherAssignResponse)
+async def assign_teacher_to_group(
+    body: TeacherAssignRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> TeacherAssignResponse:
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (t:Teacher {idx: $teacher_idx})
+            MATCH (g:Group {id: $group_id})
+            MERGE (t)-[:TEACHES]->(g)
+            RETURN t.idx AS teacher_idx, g.id AS group_id
+            """,
+            teacher_idx=body.teacher_idx,
+            group_id=body.group_id,
+        )
+    except Neo4jError as exc:
+        return TeacherAssignResponse(
+            teacher_idx=body.teacher_idx,
+            group_id=body.group_id,
+            err=db_err(exc),
+        )
+    if row is None:
+        return TeacherAssignResponse(
+            teacher_idx=body.teacher_idx,
+            group_id=body.group_id,
+            err="Teacher or group not found",
+        )
+    return TeacherAssignResponse(**row)
+
+
 @router.post("/rooms", response_model=RoomCreateResponse)
 async def create_room(
     body: RoomCreateRequest,
@@ -398,16 +448,24 @@ async def create_room(
     caller=Depends(_admin),
 ) -> RoomCreateResponse:
     room_id = await next_id(session, "Room")
-    row = await one(
-        session,
-        """
-        CREATE (r:Room {id: $id, building: $building, room_num: $room_num})
-        RETURN r.id AS id, r.building AS building, r.room_num AS room_num
-        """,
-        id=room_id,
-        building=body.building,
-        room_num=body.room_num,
-    )
+    try:
+        row = await one(
+            session,
+            """
+            CREATE (r:Room {id: $id, building: $building, room_num: $room_num})
+            RETURN r.id AS id, r.building AS building, r.room_num AS room_num
+            """,
+            id=room_id,
+            building=body.building,
+            room_num=body.room_num,
+        )
+    except Neo4jError as exc:
+        return RoomCreateResponse(
+            id=room_id,
+            building=body.building,
+            room_num=body.room_num,
+            err=db_err(exc),
+        )
     return RoomCreateResponse(**row)
 
 
@@ -430,7 +488,7 @@ async def create_cycle(
             season=body.season,
         )
     except Neo4jError as exc:
-        return AcademicCycleCreateResponse(id=cycle_id, year=body.year, season=body.season, err=_db_err(exc))
+        return AcademicCycleCreateResponse(id=cycle_id, year=body.year, season=body.season, err=db_err(exc))
     return AcademicCycleCreateResponse(**row)
 
 
@@ -440,17 +498,20 @@ async def create_subject(
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> SubjectCreateResponse:
-    row = await one(
-        session,
-        """
-        MERGE (su:Subject {code: $code})
-        SET su.name = $name, su.ects = $ects
-        RETURN su.code AS code, su.name AS name, su.ects AS ects
-        """,
-        code=body.code,
-        name=body.name,
-        ects=body.ects,
-    )
+    try:
+        row = await one(
+            session,
+            """
+            MERGE (su:Subject {code: $code})
+            SET su.name = $name, su.ects = $ects
+            RETURN su.code AS code, su.name AS name, su.ects AS ects
+            """,
+            code=body.code,
+            name=body.name,
+            ects=body.ects,
+        )
+    except Neo4jError as exc:
+        return SubjectCreateResponse(code=body.code, name=body.name, ects=body.ects, err=db_err(exc))
     return SubjectCreateResponse(**row)
 
 
@@ -465,21 +526,27 @@ async def create_term(
         return CurriculumTermCreateResponse(
             id=term_id, sem=body.sem, curriculum_id=body.curriculum_id, err="cycle_id is required",
         )
-    row = await one(
-        session,
-        """
-        MATCH (c:Curriculum {id: $curriculum_id})
-        MATCH (ac:AcademicCycle {id: $cycle_id})
-        CREATE (ct:CurriculumTerm {id: $id, sem: $sem})
-        CREATE (c)-[:HAS_TERM]->(ct)
-        CREATE (ct)-[:TAUGHT_IN]->(ac)
-        RETURN ct.id AS id, ct.sem AS sem, c.id AS curriculum_id, ac.id AS cycle_id
-        """,
-        curriculum_id=body.curriculum_id,
-        cycle_id=body.cycle_id,
-        id=term_id,
-        sem=body.sem,
-    )
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (c:Curriculum {id: $curriculum_id})
+            MATCH (ac:AcademicCycle {id: $cycle_id})
+            CREATE (ct:CurriculumTerm {id: $id, sem: $sem})
+            CREATE (c)-[:HAS_TERM]->(ct)
+            CREATE (ct)-[:TAUGHT_IN]->(ac)
+            RETURN ct.id AS id, ct.sem AS sem, c.id AS curriculum_id, ac.id AS cycle_id
+            """,
+            curriculum_id=body.curriculum_id,
+            cycle_id=body.cycle_id,
+            id=term_id,
+            sem=body.sem,
+        )
+    except Neo4jError as exc:
+        return CurriculumTermCreateResponse(
+            id=term_id, sem=body.sem, curriculum_id=body.curriculum_id,
+            cycle_id=body.cycle_id, err=db_err(exc),
+        )
     if row is None:
         return CurriculumTermCreateResponse(
             id=term_id, sem=body.sem, curriculum_id=body.curriculum_id,
@@ -495,18 +562,24 @@ async def create_curriculum(
     caller=Depends(_admin),
 ) -> CurriculumCreateResponse:
     curriculum_id = await next_id(session, "Curriculum")
-    row = await one(
-        session,
-        """
-        MATCH (p:Programme {id: $programme_id})
-        CREATE (c:Curriculum {id: $id, intake_year: $intake_year})
-        CREATE (p)-[:HAS_CURRICULUM]->(c)
-        RETURN c.id AS id, p.id AS programme_id, c.intake_year AS intake_year
-        """,
-        programme_id=body.programme_id,
-        id=curriculum_id,
-        intake_year=body.intake_year,
-    )
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (p:Programme {id: $programme_id})
+            CREATE (c:Curriculum {id: $id, intake_year: $intake_year})
+            CREATE (p)-[:HAS_CURRICULUM]->(c)
+            RETURN c.id AS id, p.id AS programme_id, c.intake_year AS intake_year
+            """,
+            programme_id=body.programme_id,
+            id=curriculum_id,
+            intake_year=body.intake_year,
+        )
+    except Neo4jError as exc:
+        return CurriculumCreateResponse(
+            id=curriculum_id, programme_id=body.programme_id, intake_year=body.intake_year,
+            err=db_err(exc),
+        )
     if row is None:
         return CurriculumCreateResponse(
             id=curriculum_id, programme_id=body.programme_id, intake_year=body.intake_year,
@@ -522,16 +595,21 @@ async def create_faculty(
     caller=Depends(_admin),
 ) -> FacultyCreateResponse:
     faculty_id = await next_id(session, "Faculty")
-    row = await one(
-        session,
-        """
-        CREATE (fa:Faculty {id: $id, name: $name, full_name: $full_name})
-        RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name
-        """,
-        id=faculty_id,
-        name=body.name,
-        full_name=body.full_name,
-    )
+    try:
+        row = await one(
+            session,
+            """
+            CREATE (fa:Faculty {id: $id, name: $name, full_name: $full_name})
+            RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name
+            """,
+            id=faculty_id,
+            name=body.name,
+            full_name=body.full_name,
+        )
+    except Neo4jError as exc:
+        return FacultyCreateResponse(
+            id=faculty_id, name=body.name, full_name=body.full_name, err=db_err(exc),
+        )
     return FacultyCreateResponse(**row)
 
 
@@ -542,7 +620,6 @@ async def start_registrations(
     caller=Depends(_admin),
 ) -> StartRegistrationsResponse:
     registration_id = await next_id(session, "Registration")
-    turn_id = await next_id(session, "RegistrationTurn")
     begun = session.begin_transaction()
     tx = await begun if hasattr(begun, "__await__") else begun
     try:
@@ -565,7 +642,8 @@ async def start_registrations(
         if created is None:
             await tx.rollback()
             return StartRegistrationsResponse(err="Cycle or faculty not found")
-        for offset, turn in enumerate(body.turns):
+        for turn in body.turns:
+            turn_id = await next_id(session, "RegistrationTurn")
             written = await tx_one(
                 tx,
                 """
@@ -578,7 +656,7 @@ async def start_registrations(
                 RETURN rt.id AS id
                 """,
                 registration_id=registration_id,
-                turn_id=turn_id + offset,
+                turn_id=turn_id,
                 turn_number=turn.turn_number,
                 date=turn.date.isoformat(),
                 start=_zoned_time(turn.start),
@@ -605,7 +683,7 @@ async def start_registrations(
         await tx.commit()
     except Neo4jError as exc:
         await tx.rollback()
-        return StartRegistrationsResponse(err=_db_err(exc))
+        return StartRegistrationsResponse(err=db_err(exc))
     finally:
         try:
             await tx.close()

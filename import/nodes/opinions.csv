@@ -1,33 +1,33 @@
 id,grade,content,submit,student_idx,group_id
-1,3.0,Za mało przykładów praktycznych.,2026-01-14T14:31:00+01:00,279413,6011
-2,3.0,Zajęcia często odwoływane bez uprzedzenia.,2026-01-27T08:10:00+01:00,279413,6012
-3,2.0,Zajęcia często odwoływane bez uprzedzenia.,2026-01-24T12:59:00+01:00,281056,6014
-4,3.5,Zajęcia często odwoływane bez uprzedzenia.,2026-01-26T19:46:00+01:00,283504,6020
-5,5.0,,2026-01-29T10:12:00+01:00,283471,6021
-6,3.0,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-21T17:47:00+01:00,283502,6021
-7,2.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-29T08:03:00+01:00,283503,6021
-8,4.0,Za mało przykładów praktycznych.,2026-01-30T08:32:00+01:00,283471,6022
-9,3.0,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-14T17:04:00+01:00,282765,6024
-10,4.0,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-19T17:15:00+01:00,283503,6024
-11,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-30T17:05:00+01:00,285901,6032
-12,5.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-25T12:13:00+01:00,285902,6034
-13,3.0,Kolokwia nie pokrywały się z materiałem z wykładu.,2026-01-22T14:08:00+01:00,285903,6036
-14,4.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-21T20:59:00+01:00,283601,6205
-15,2.0,,2026-01-14T17:36:00+01:00,280701,6209
-16,2.0,"Świetne laboratoria, polecam.",2026-01-15T16:16:00+01:00,280519,6309
-17,3.5,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-16T11:23:00+01:00,282765,7001
-18,3.0,,2026-01-21T21:34:00+01:00,281056,7003
-19,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-21T18:52:00+01:00,285901,7005
-20,3.5,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-29T10:16:00+01:00,285901,7009
-21,2.0,Za mało przykładów praktycznych.,2026-01-15T12:18:00+01:00,285901,7011
-22,5.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-18T11:43:00+01:00,285903,7011
-23,4.5,,2026-01-20T12:57:00+01:00,283503,7013
-24,2.0,Zajęcia często odwoływane bez uprzedzenia.,2026-01-13T21:17:00+01:00,283504,7016
-25,2.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-13T20:08:00+01:00,283471,7017
-26,3.0,,2026-01-20T16:45:00+01:00,283503,7018
-27,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-25T09:04:00+01:00,280601,7019
-28,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-16T21:23:00+01:00,279988,7020
-29,4.5,Za mało przykładów praktycznych.,2026-01-30T14:08:00+01:00,281056,7021
-30,3.5,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-13T20:55:00+01:00,280602,7027
-31,3.5,"Świetne laboratoria, polecam.",2026-01-13T18:15:00+01:00,285701,7050
-32,3.5,Zajęcia często odwoływane bez uprzedzenia.,2026-01-15T17:47:00+01:00,280519,7062
+da0b17fd-0587-55ec-8964-b3f1a8fe3b33,3.0,Za mało przykładów praktycznych.,2026-01-14T14:31:00+01:00,279413,63824bd7-beaf-5d98-8b89-b9b14a04341c
+93e3582e-51e8-5980-bd97-dc5ff327b372,3.0,Zajęcia często odwoływane bez uprzedzenia.,2026-01-27T08:10:00+01:00,279413,96992b82-07dc-58c0-b3bf-4d64e58ad87f
+39a50690-a87b-5963-b580-d1ed0c437a5e,2.0,Zajęcia często odwoływane bez uprzedzenia.,2026-01-24T12:59:00+01:00,281056,4925bb42-1eb1-5b07-9eef-8b917bf4f78d
+5eb72c80-e60f-5e3a-9a9d-ffdb45a12ef9,3.5,Zajęcia często odwoływane bez uprzedzenia.,2026-01-26T19:46:00+01:00,283504,129fe1e5-6c7d-57dc-9702-159a532ccf49
+8719a16f-6a79-5096-93ff-f04fe8b73149,5.0,,2026-01-29T10:12:00+01:00,283471,38235b9b-6b61-53d1-9ba4-556013d4970e
+da70e9fa-f17b-5fff-81de-6e13ad3c44db,3.0,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-21T17:47:00+01:00,283502,38235b9b-6b61-53d1-9ba4-556013d4970e
+27fd5809-78d6-5a80-9591-d3c1ce1cfcec,2.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-29T08:03:00+01:00,283503,38235b9b-6b61-53d1-9ba4-556013d4970e
+e36a2074-786a-56d2-a6ad-2b4fecb5ba21,4.0,Za mało przykładów praktycznych.,2026-01-30T08:32:00+01:00,283471,575e3764-c815-5f58-ab0e-7a805622224e
+d04fc003-3f95-54dc-b629-337ae3c1b5c2,3.0,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-14T17:04:00+01:00,282765,ebdfab54-39c8-508a-ae18-2f1b7e6bdcf5
+31e5bd5f-3106-5c82-8781-4a4c31e5cecb,4.0,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-19T17:15:00+01:00,283503,ebdfab54-39c8-508a-ae18-2f1b7e6bdcf5
+036ee141-f948-57d2-b6b0-b772dbddbf1c,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-30T17:05:00+01:00,285901,c24aa942-9cf2-53a3-a343-ccc4ebe8c0fe
+daa94f2d-1e46-541f-a60f-99ed587e5d5c,5.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-25T12:13:00+01:00,285902,f3ae8a63-41de-51ab-9ce0-ab2ab46299e9
+e5ddd671-3328-506b-9177-cfbdb390f0a9,3.0,Kolokwia nie pokrywały się z materiałem z wykładu.,2026-01-22T14:08:00+01:00,285903,65ff7c4e-f6b2-53e8-a5d9-3e1e6419cac5
+32eedc81-557a-5068-861e-25d88d7a854d,4.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-21T20:59:00+01:00,283601,42d494cb-d199-58d7-8f0b-b1f6666cf92d
+b1f11ce1-66ba-5a34-afcf-6bb3b9726857,2.0,,2026-01-14T17:36:00+01:00,280701,136420a1-8be1-5b67-9620-6c6289d50ff9
+fcee6b1d-04d5-54c2-a118-0b4789c03711,2.0,"Świetne laboratoria, polecam.",2026-01-15T16:16:00+01:00,280519,fc1af749-6599-565f-ae10-7eb20e9420de
+c23328f1-95b5-5d43-a5f6-6d9f55d4d9fb,3.5,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-16T11:23:00+01:00,282765,e62bebef-7de4-5963-9d73-82a30875e0f7
+c132a430-6967-5703-9f0c-e92f3fa89d40,3.0,,2026-01-21T21:34:00+01:00,281056,fbfcfc9c-b05a-5ee0-a7e4-bb6a57887aed
+efc4ad87-64db-55b2-9d4f-a0c41b461a42,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-21T18:52:00+01:00,285901,358ed30a-5eb9-5691-ba64-6b330f721f1f
+69104a0c-27be-5780-b0bb-340f628d33eb,3.5,"Wymagający prowadzący, ale dużo się nauczyłem.",2026-01-29T10:16:00+01:00,285901,09430c8f-6555-5335-83a6-fd662e79873f
+7e647c41-abaa-5c65-9aa5-924fb821f03a,2.0,Za mało przykładów praktycznych.,2026-01-15T12:18:00+01:00,285901,93e11453-d100-57e5-b695-8bdab757d887
+c94f7675-ab29-5720-9f46-352dbb105a96,5.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-18T11:43:00+01:00,285903,93e11453-d100-57e5-b695-8bdab757d887
+0f339ed6-36bb-5878-a42c-e5d6af7c7699,4.5,,2026-01-20T12:57:00+01:00,283503,c798fc10-c169-58c8-9c55-c0fd2d104535
+9cfe31b6-d4a0-55a6-bd95-9ca4f820c903,2.0,Zajęcia często odwoływane bez uprzedzenia.,2026-01-13T21:17:00+01:00,283504,2dfbfe8f-8b43-5aea-a080-2a0030e9e01a
+469f490a-3541-569b-81ec-082d8df39dc7,2.0,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-13T20:08:00+01:00,283471,08092063-c22c-589c-b891-36b3144435d1
+11b6ad26-a594-5449-ba32-c14ad1cb90fc,3.0,,2026-01-20T16:45:00+01:00,283503,7b45abd2-eba7-536b-b376-130083c2fc8b
+4bd43000-a3e6-5608-b693-c827bfd36414,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-25T09:04:00+01:00,280601,b9aa4a65-afe4-5ea1-8e53-a1c33ab04d70
+db6a75a9-2715-5947-87df-bee7a3e7ad27,4.5,"Bardzo dobrze prowadzone zajęcia, materiały zawsze dostępne na czas.",2026-01-16T21:23:00+01:00,279988,785ddcee-bf0a-5399-8b8b-aef85cf6046a
+5c910d97-940e-58fa-857c-dd4b991c04a6,4.5,Za mało przykładów praktycznych.,2026-01-30T14:08:00+01:00,281056,926a8add-4a46-5ab3-ae56-9933b92e6f4e
+e42c99e2-b450-57f7-8961-c80abcb1725f,3.5,Prowadzący zawsze chętnie odpowiada na pytania.,2026-01-13T20:55:00+01:00,280602,3fcb9aee-467d-5ffc-af9f-1a31bd6d2e88
+2b7c1cfa-0b89-509f-b301-2d3e8b16aada,3.5,"Świetne laboratoria, polecam.",2026-01-13T18:15:00+01:00,285701,a496492e-b4d7-5d12-abfb-e61c46709bef
+4902e9bd-7e70-5398-8619-c436b6d420bf,3.5,Zajęcia często odwoływane bez uprzedzenia.,2026-01-15T17:47:00+01:00,280519,3ea120bd-a70b-58e8-99cf-bc5532e12e09

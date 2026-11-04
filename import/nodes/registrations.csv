@@ -1,5 +1,5 @@
 id,name,reg_type,cycle_id,faculty_id
-1,W4N - tura zapisowa 2025/26-Z,zapisowa,1,1
-2,W5 - tura zapisowa 2025/26-Z,zapisowa,1,2
-5,W4N - tura zapisowa 2025/26-L,zapisowa,2,1
-6,W5 - tura zapisowa 2025/26-L,zapisowa,2,2
+8324f6b2-bd39-589e-88a0-a61423325d54,W4N - tura zapisowa 2025/26-Z,zapisowa,e3efab49-3222-58a3-a329-2bf8c5d9a363,e1a07f27-4987-5e8e-a29c-b71e582ebd12
+c4f459a7-7ce4-50a5-b0ac-6f77ce4d33b9,W5 - tura zapisowa 2025/26-Z,zapisowa,e3efab49-3222-58a3-a329-2bf8c5d9a363,25320a4b-ab07-585a-a749-ac8821271015
+b8e7e814-0e2e-52b7-9949-385edc8e1f7a,W4N - tura zapisowa 2025/26-L,zapisowa,cf8e9d6c-d684-56cd-bdba-b10b48add04b,e1a07f27-4987-5e8e-a29c-b71e582ebd12
+48ccbfa7-f343-5441-9d3f-35e8e84cb5e8,W5 - tura zapisowa 2025/26-L,zapisowa,cf8e9d6c-d684-56cd-bdba-b10b48add04b,25320a4b-ab07-585a-a749-ac8821271015

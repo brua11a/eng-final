@@ -2,9 +2,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from neo4j import AsyncSession
+from neo4j.exceptions import Neo4jError
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
+from app.graph_backend.errors import db_err
 from app.graph_backend.query import next_id, one, run
 from app.schemas.academic_cycle import (
     MyAcademicCycleDetailRequest,
@@ -47,7 +49,7 @@ RETURN reg.id AS id
 """
 
 
-async def _require_registration(session: AsyncSession, student_idx: str, registration_id: int) -> None:
+async def _require_registration(session: AsyncSession, student_idx: str, registration_id: str) -> None:
     row = await one(
         session,
         _CAN_USE_REGISTRATION,
@@ -289,7 +291,6 @@ async def create_opinion(
         student_idx = body.student_idx
     if not student_idx:
         return OpinionCreateResponse(
-            id=0,
             grade=body.grade,
             content=body.content,
             submit=body.submit,
@@ -297,22 +298,37 @@ async def create_opinion(
             err="student_idx is required",
         )
     opinion_id = await next_id(session, "Opinion")
-    row = await one(
-        session,
-        """
-        MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
-        CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
-        CREATE (st)-[:WRITES]->(o)
-        CREATE (o)-[:ABOUT]->(g)
-        RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit, g.id AS group_id
-        """,
-        student_idx=student_idx,
-        group_id=body.group_id,
-        id=opinion_id,
-        grade=body.grade,
-        content=body.content,
-        submit=_zoned_datetime(body.submit),
-    )
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
+            CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
+            CREATE (st)-[:WRITES]->(o)
+            CREATE (o)-[:ABOUT]->(g)
+            RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit, g.id AS group_id
+            """,
+            student_idx=student_idx,
+            group_id=body.group_id,
+            id=opinion_id,
+            grade=body.grade,
+            content=body.content,
+            submit=_zoned_datetime(body.submit),
+        )
+    except Neo4jError as exc:
+        return OpinionCreateResponse(
+            grade=body.grade,
+            content=body.content,
+            submit=body.submit,
+            group_id=body.group_id,
+            err=db_err(exc),
+        )
     if row is None:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        return OpinionCreateResponse(
+            grade=body.grade,
+            content=body.content,
+            submit=body.submit,
+            group_id=body.group_id,
+            err="Forbidden",
+        )
     return OpinionCreateResponse(**row)

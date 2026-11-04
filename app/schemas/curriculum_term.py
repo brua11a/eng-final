@@ -4,13 +4,13 @@ from pydantic import BaseModel
 
 class CurriculumTermCreateRequest(BaseModel):
     sem: int
-    curriculum_id: int
-    cycle_id: Optional[int] = None
+    curriculum_id: str
+    cycle_id: Optional[str] = None
 
 
 class CurriculumTermCreateResponse(BaseModel):
-    id: int
+    id: str
     sem: int
-    curriculum_id: int
-    cycle_id: Optional[int] = None
+    curriculum_id: str
+    cycle_id: Optional[str] = None
     err: Optional[str] = None

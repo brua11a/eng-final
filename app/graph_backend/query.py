@@ -1,5 +1,7 @@
 from typing import Any
 
+from uuid import uuid4
+
 from neo4j import AsyncSession
 
 
@@ -29,9 +31,11 @@ async def tx_one(tx: Any, query: str, **params: Any) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
-async def next_id(session: AsyncSession, label: str) -> int:
-    row = await one(
-        session,
-        f"OPTIONAL MATCH (n:{label}) RETURN coalesce(max(n.id), 0) + 1 AS id",
-    )
-    return int(row["id"])
+def new_id() -> str:
+    return str(uuid4())
+
+
+async def next_id(session: AsyncSession, label: str) -> str:
+    """Return a new unique id for a domain node (label ignored; kept for call-site compatibility)."""
+    del session, label
+    return new_id()

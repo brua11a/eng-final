@@ -8,14 +8,14 @@ class RoomCreateRequest(BaseModel):
 
 
 class RoomCreateResponse(BaseModel):
-    id: int
+    id: str
     building: str
     room_num: str
     err: Optional[str] = None
 
 
 class RoomItem(BaseModel):
-    id: int
+    id: str
     building: str
     room_num: str
 

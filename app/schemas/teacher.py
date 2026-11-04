@@ -10,7 +10,7 @@ class TeacherCreateRequest(BaseModel):
     degree: str
     photo: Optional[str] = None
     working_since: date
-    faculty_id: int
+    faculty_id: str
 
 
 class TeacherCreateResponse(BaseModel):
@@ -21,7 +21,7 @@ class TeacherCreateResponse(BaseModel):
     degree: str
     photo: Optional[str] = None
     working_since: date
-    faculty_id: int
+    faculty_id: str
     err: Optional[str] = None
 
 
@@ -37,14 +37,6 @@ class TeacherCatalogueItem(BaseModel):
 
 
 class TeacherCatalogueResponse(BaseModel):
-    teachers: List[TeacherCatalogueItem]
-
-
-class TeacherFindRequest(BaseModel):
-    name: str
-
-
-class TeacherFindResponse(BaseModel):
     teachers: List[TeacherCatalogueItem]
 
 

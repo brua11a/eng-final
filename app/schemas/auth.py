@@ -10,14 +10,13 @@ UserType = Literal["Teacher", "Student", "Admin"]
 class AssignUserRequest(BaseModel):
     email: str
     passwd: str
-    user_type: UserType
-    assigned_id: str
+    idx: str
 
 
 class AssignUserResponse(BaseModel):
     email: str
-    owner_type: UserType
-    owner_idx: str
+    idx: str
+    roles: List[UserType] = []
     err: Optional[str] = None
 
 
@@ -34,7 +33,7 @@ class LoginResponse(OkResponse):
 
 
 class AddRoleRequest(BaseModel):
-    email: str
+    idx: str
     role: UserType
     degree: Optional[str] = None
     working_since: Optional[date] = None
@@ -42,15 +41,16 @@ class AddRoleRequest(BaseModel):
 
 
 class AddRoleResponse(BaseModel):
-    email: str
+    idx: str
+    email: Optional[str] = None
     roles: List[UserType] = []
     err: Optional[str] = None
 
 
-class UserEmailRequest(BaseModel):
-    email: str
+class UserIdxRequest(BaseModel):
+    idx: str
 
 
 class UserAccountResponse(BaseModel):
-    email: str
+    idx: str
     err: Optional[str] = None

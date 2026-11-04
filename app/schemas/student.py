@@ -9,7 +9,7 @@ class StudentCreateRequest(BaseModel):
     phone: str
     photo: Optional[str] = None
     joined: datetime
-    programme: int
+    programme: str
 
 
 class StudentCreateResponse(BaseModel):
@@ -34,7 +34,7 @@ class StudentDetailResponse(BaseModel):
     photo: Optional[str] = None
     joined: datetime
     avg_grade: Optional[float] = None
-    term_ids: list[int] = Field(default_factory=list)
+    term_ids: list[str] = Field(default_factory=list)
     err: Optional[str] = None
 
 
@@ -49,7 +49,7 @@ class StudentInGroup(BaseModel):
 
 
 class StudentsInGroupRequest(BaseModel):
-    group_id: int
+    group_id: str
 
 
 class StudentsInGroupResponse(BaseModel):
@@ -57,13 +57,13 @@ class StudentsInGroupResponse(BaseModel):
 
 
 class SetGroupGradeRequest(BaseModel):
-    group_id: int
+    group_id: str
     student_idx: str
     grade: float
 
 
 class SetGroupGradeResponse(BaseModel):
-    group_id: int
+    group_id: str
     student_idx: str
     grade: float
     err: Optional[str] = None

@@ -32,32 +32,7 @@ RETURN
 If `inactive` is true, return `ok: false` and `err: "Account inactive"` without a token. Every `User` is also a `Person`. The token carries every role label on that account: `Admin`, `Teacher`, and `Student` can all be present.
 ### (user) Teacher catalogue
 
-```json
-{}
-```
-
-```json
-{
-	teachers: List[Teacher]
-	
-	Teacher = {
-		"idx": String,
-		"name": String,
-		"surname": String,
-		"phone": String,
-		"degree": String,
-		"photo": String?,
-		"working_since": Date,
-		"faculty": String
-	}
-}
-```
-
-```json
-{
-	"name": String
-}
-```
+`GET /teachers` — query: `name` (optional String), substring match on full name.
 
 ```json
 {
@@ -97,9 +72,7 @@ ORDER BY t.surname, t.name
 
 ### (user) Subject catalogue
 
-```json
-{}
-```
+`GET /subjects` — query: `name`, `code` (optional String), substring match.
 
 ```json
 {
@@ -113,40 +86,7 @@ ORDER BY t.surname, t.name
 	}
 	
 	Group = {
-		"id": Integer,
-		"weekday": Integer,
-		"g_type": String,
-		"number": Integer,
-		"pnp": String,
-		"capacity": Integer,
-		"start_hr": ZonedTime,
-		"end_time": ZonedTime,
-		"cycle": String,
-		"room": String
-	}
-}
-```
-
-```json
-{
-	"name": String?,
-	"code": String?
-}
-```
-
-```json
-{
-	subject_and_groups: List[SubjectAndGroup]
-	
-	SubjectAndGroup = {
-		"code": String,
-		"name": String,
-		"ects": Integer?,
-		"groups": List[Group]
-	}
-	
-	Group = {
-		"id": Integer,
+		"id": String,
 		"weekday": Integer,
 		"g_type": String,
 		"number": Integer,
@@ -190,36 +130,15 @@ ORDER BY su.name, gt.g_type, g.number
 ```
 ### (user) Curriculum catalogue
 
-```json
-{}
-```
+`GET /curricula` — query: `name` (optional String), substring match on programme name.
 
 ```json
 {
 	curricula: List[Curriculum]
 	
 	Curriculum = {
-		"id": Integer,
-		"programme_id": Integer,
-		"name": String,
-		"intake_year": String
-	}
-}
-```
-
-```json
-{
-	"name": String,
-}
-```
-
-```json
-{
-	curricula: List[Curriculum]
-	
-	Curriculum = {
-		"id": Integer,
-		"programme_id": Integer,
+		"id": String,
+		"programme_id": String,
 		"name": String,
 		"intake_year": String
 	}
@@ -284,7 +203,7 @@ RETURN
 	"groups": List[Group]
 	
 	GroupTracked = {
-		"id": Integer,
+		"id": String,
 		"weekday": Integer,
 		"g_type": String,
 		"number": Integer,
@@ -328,9 +247,7 @@ ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
 
 ```json
 {
-	"code": String,
-	"group_num": Integer,
-	"g_type": String
+	"group_id": String
 }
 ```
 
@@ -361,7 +278,7 @@ ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
 ```
 
 ```cypher
-MATCH (su:Subject {code: $code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})<-[:OF_TYPE]-(g:Group {number: $group_num})
+MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
 OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
@@ -377,7 +294,6 @@ RETURN
   g.end_time AS end_time,
   g.capacity AS capacity,
   r.building AS building,
-  r.room_num AS room_num,
   ac.year AS cycle_year,
   ac.season AS cycle_season,
   t.idx AS teacher_idx,

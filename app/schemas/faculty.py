@@ -8,14 +8,14 @@ class FacultyCreateRequest(BaseModel):
 
 
 class FacultyCreateResponse(BaseModel):
-    id: int
+    id: str
     name: str
     full_name: str
     err: Optional[str] = None
 
 
 class FacultyItem(BaseModel):
-    id: int
+    id: str
     name: str
     full_name: str
 

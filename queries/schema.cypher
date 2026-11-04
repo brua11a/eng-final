@@ -32,14 +32,14 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	CONSTRAINT person_photo FOR (pe:Person) REQUIRE pe.photo IS :: STRING,
 
 	(o:Opinion => {
-		id :: INTEGER,
+		id :: STRING,
 		grade :: FLOAT NOT NULL,
 		content :: STRING,
 		submit :: ZONED DATETIME NOT NULL
 	}) REQUIRE o.id IS KEY,
 
 	(g:Group => {
-		id :: INTEGER,
+		id :: STRING,
 		weekday :: INTEGER NOT NULL,
 		number :: INTEGER NOT NULL,
 		pnp :: STRING NOT NULL,
@@ -49,20 +49,20 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	}) REQUIRE g.id IS KEY,
 
 	(gt:GroupType => {
-		id :: INTEGER,
+		id :: STRING,
 		g_type :: STRING NOT NULL,
 		weight :: FLOAT NOT NULL
 	}) REQUIRE gt.id IS KEY,
 
 	(r:Room => {
-		id :: INTEGER,
+		id :: STRING,
 		building :: STRING NOT NULL,
 		room_num :: STRING NOT NULL
 	}) REQUIRE r.id IS KEY
 	   REQUIRE (r.building, r.room_num) IS UNIQUE,
 
 	(ac:AcademicCycle => {
-		id :: INTEGER,
+		id :: STRING,
 		year :: STRING NOT NULL,
 		season :: STRING NOT NULL
 	}) REQUIRE ac.id IS KEY
@@ -75,35 +75,35 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	}) REQUIRE su.code IS KEY,
 
 	(ct:CurriculumTerm => {
-		id :: INTEGER,
+		id :: STRING,
 		sem :: INTEGER NOT NULL
 	}) REQUIRE ct.id IS KEY,
 
 	(p:Programme => {
-		id :: INTEGER,
+		id :: STRING,
 		name :: STRING NOT NULL
 	}) REQUIRE p.id IS KEY
 	   REQUIRE p.name IS UNIQUE,
 
 	(c:Curriculum => {
-		id :: INTEGER,
+		id :: STRING,
 		intake_year :: STRING NOT NULL
 	}) REQUIRE c.id IS KEY,
 
 	(fa:Faculty => {
-		id :: INTEGER,
+		id :: STRING,
 		name :: STRING NOT NULL,
 		full_name :: STRING NOT NULL
 	}) REQUIRE fa.id IS KEY,
 
 	(reg:Registration => {
-		id :: INTEGER,
+		id :: STRING,
 		name :: STRING NOT NULL,
 		reg_type :: STRING NOT NULL
 	}) REQUIRE reg.id IS KEY,
 
 	(rt:RegistrationTurn => {
-		id :: INTEGER,
+		id :: STRING,
 		turn_number :: INTEGER NOT NULL,
 		date :: DATE NOT NULL,
 		start_hr :: ZONED TIME NOT NULL,
@@ -111,7 +111,7 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	}) REQUIRE rt.id IS KEY,
 
 	(asg:TurnAssignment => {
-		id :: INTEGER
+		id :: STRING
 	}) REQUIRE asg.id IS KEY,
 
 	(st)-[:WRITES => {}]->(o),

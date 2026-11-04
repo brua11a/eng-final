@@ -3,20 +3,20 @@ from pydantic import BaseModel
 
 
 class CurriculumCreateRequest(BaseModel):
-    programme_id: int
+    programme_id: str
     intake_year: str
 
 
 class CurriculumCreateResponse(BaseModel):
-    id: int
-    programme_id: int
+    id: str
+    programme_id: str
     intake_year: str
     err: Optional[str] = None
 
 
 class CurriculumCatalogueItem(BaseModel):
-    id: int
-    programme_id: int
+    id: str
+    programme_id: str
     name: str
     intake_year: str
 
@@ -25,18 +25,10 @@ class CurriculumCatalogueResponse(BaseModel):
     curricula: List[CurriculumCatalogueItem]
 
 
-class CurriculumFindRequest(BaseModel):
-    name: str
-
-
-class CurriculumFindResponse(BaseModel):
-    curricula: List[CurriculumCatalogueItem]
-
-
 class ProgrammeItem(BaseModel):
-    id: int
+    id: str
     name: str
-    faculty_id: int
+    faculty_id: str
 
 
 class ProgrammeListResponse(BaseModel):

@@ -8,10 +8,10 @@ RegType = Literal["zapisowa"]
 
 
 class RegistrationItem(BaseModel):
-    id: int
+    id: str
     name: str
     reg_type: RegType
-    curriculum_id: int
+    curriculum_id: str
     turn_number: int
     date: date
     start: time
@@ -35,7 +35,7 @@ class CourseInRegistration(BaseModel):
 
 
 class ShowCoursesInRegistrationRequest(BaseModel):
-    registration_id: int
+    registration_id: str
 
 
 class ShowCoursesInRegistrationResponse(BaseModel):
@@ -44,7 +44,7 @@ class ShowCoursesInRegistrationResponse(BaseModel):
 
 class RegisterToGroupRequest(BaseModel):
     course_id: str
-    group_id: int
+    group_id: str
 
 
 class RegisterToGroupResponse(OkResponse):
@@ -52,12 +52,12 @@ class RegisterToGroupResponse(OkResponse):
 
 
 class OpenGroupsRequest(BaseModel):
-    registration_id: int
+    registration_id: str
     course_id: str
 
 
 class OpenGroup(BaseModel):
-    id: int
+    id: str
     g_type: str
     number: int
     weekday: int
@@ -75,13 +75,13 @@ class OpenGroupsResponse(BaseModel):
 
 
 class Enrolment(BaseModel):
-    programme_id: int
+    programme_id: str
     programme: str
-    curriculum_id: int
+    curriculum_id: str
     intake_year: str
-    term_id: int
+    term_id: str
     sem: int
-    cycle_id: Optional[int] = None
+    cycle_id: Optional[str] = None
     year: Optional[str] = None
     season: Optional[str] = None
 
@@ -99,17 +99,17 @@ class RegistrationTurnInput(BaseModel):
 
 class StartRegistrationsRequest(BaseModel):
     name: str
-    cycle_id: int
-    faculty_id: int
+    cycle_id: str
+    faculty_id: str
     reg_type: RegType
     turns: List[RegistrationTurnInput]
-    group_ids: List[int]
+    group_ids: List[str]
 
 
 class StartRegistrationsResponse(BaseModel):
-    id: int | None = None
+    id: str | None = None
     name: str | None = None
     reg_type: RegType | None = None
     turns: List[RegistrationTurnInput] = Field(default_factory=list)
-    group_ids: List[int] = Field(default_factory=list)
+    group_ids: List[str] = Field(default_factory=list)
     err: str | None = None

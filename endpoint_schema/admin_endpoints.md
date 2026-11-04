@@ -8,7 +8,7 @@
 	"degree": String,
 	"photo": String?,
 	"working_since": Date,
-	"faculty_id": Integer
+	"faculty_id": String
 }
 ```
 
@@ -21,7 +21,7 @@
 	"degree": String,
 	"photo": String?,
 	"working_since": Date,
-	"faculty_id": Integer,
+	"faculty_id": String,
 	"err": String?
 }
 ```
@@ -59,7 +59,7 @@ RETURN
 	"phone": String,
 	"photo": String?,
 	"joined": ZonedDateTime,
-	"programme": Integer
+	"programme": String
 }
 ```
 
@@ -99,28 +99,27 @@ RETURN
 ```
 ### (admin) Assign User to account
 
+Attaches login credentials to an existing `:Person` by `idx`. Role labels are unchanged; use **Assign role** to add roles if needed.
+
 ```json
 {
 	"email": String,
 	"passwd": String,
-	"user_type": "Teacher" | "Student",
-	"assigned_id": String
+	"idx": String
 }
 ```
 
 ```json
 {
 	"email": String,
-	"owner_type": "Teacher" | "Student",
-	"owner_idx": String,
+	"idx": String,
+	"roles": ["Teacher" | "Student" | "Admin", ...],
 	"err": String?
 }
 ```
 
 ```cypher
-MATCH (owner)
-WHERE ($user_type = "Teacher" AND owner:Teacher {idx: $assigned_id})
-   OR ($user_type = "Student" AND owner:Student {idx: $assigned_id})
+MATCH (owner:Person {idx: $idx})
 
 SET
   owner:User,
@@ -129,62 +128,61 @@ SET
 
 RETURN
   owner.email AS email,
-  CASE
-    WHEN owner:Teacher THEN "Teacher"
-    WHEN owner:Student THEN "Student"
-  END AS owner_type,
-  owner.idx AS owner_idx
+  owner.idx AS idx,
+  owner:Admin AS admin,
+  owner:Teacher AS teacher,
+  owner:Student AS student
 ```
 
 ### (admin) Deactivate user account
 
 ```json
 {
-	"email": String
+	"idx": String
 }
 ```
 
 ```json
 {
-	"email": String,
+	"idx": String,
 	"err": String?
 }
 ```
 
 ```cypher
-MATCH (u:User {email: $email})
+MATCH (u:User {idx: $idx})
 SET u:Inactive, u.deactivated_at = datetime()
-RETURN u.email AS email
+RETURN u.idx AS idx
 ```
 
 ### (admin) Activate user account
 
 ```json
 {
-	"email": String
+	"idx": String
 }
 ```
 
 ```json
 {
-	"email": String,
+	"idx": String,
 	"err": String?
 }
 ```
 
 ```cypher
-MATCH (u:User {email: $email})
+MATCH (u:User {idx: $idx})
 REMOVE u:Inactive, u.deactivated_at
-RETURN u.email AS email
+RETURN u.idx AS idx
 ```
 
 ### (admin) Add role
 
-Adds `Admin`, `Teacher`, or `Student` to an existing account. `Teacher` requires `degree` and `working_since`. `Student` requires `joined`. `Admin` needs no extra fields. One account can hold all three.
+Adds `Admin`, `Teacher`, or `Student` on an existing `:Person` (login via **Assign User** is optional and can come later). `Teacher` requires `degree` and `working_since`. `Student` requires `joined`. `Admin` needs no extra fields. One person can hold all three.
 
 ```json
 {
-	"email": String,
+	"idx": String,
 	"role": "Admin" | "Teacher" | "Student",
 	"degree": String?,
 	"working_since": Date?,
@@ -194,25 +192,26 @@ Adds `Admin`, `Teacher`, or `Student` to an existing account. `Teacher` requires
 
 ```json
 {
-	"email": String,
+	"idx": String,
+	"email": String?,
 	"roles": List["Admin" | "Teacher" | "Student"],
 	"err": String?
 }
 ```
 
 ```cypher
-MATCH (u:User {email: $email})
-SET u:Admin
+MATCH (p:Person {idx: $idx})
+SET p:Admin
 ```
 
 ```cypher
-MATCH (u:User {email: $email})
-SET u:Teacher, u.degree = $degree, u.working_since = date($working_since)
+MATCH (p:Person {idx: $idx})
+SET p:Teacher, p.degree = $degree, p.working_since = date($working_since)
 ```
 
 ```cypher
-MATCH (u:User {email: $email})
-SET u:Student, u.joined = datetime($joined)
+MATCH (p:Person {idx: $idx})
+SET p:Student, p.joined = datetime($joined)
 ```
 
 ### (student | admin) Create Opinion
@@ -223,17 +222,17 @@ SET u:Student, u.joined = datetime($joined)
 	"grade": Float,
 	"content": String?,
 	"submit": ZonedDateTime,
-	"group_id": Integer
+	"group_id": String
 }
 ```
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"grade": Float,
 	"content": String?,
 	"submit": ZonedDateTime,
-	"group_id": Integer,
+	"group_id": String,
 	"err": String?
 }
 ```
@@ -270,7 +269,7 @@ RETURN
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"subject_code": String,
 	"g_type": String,
 	"weight": Float,
@@ -297,13 +296,13 @@ RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS w
 	"start_hr": ZonedTime,
 	"end_time": ZonedTime,
 	"subject_code": String,
-	"room_id": Integer
+	"room_id": String
 }
 ```
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"weekday": Integer,
 	"g_type": String,
 	"number": Integer,
@@ -312,7 +311,7 @@ RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS w
 	"start_hr": ZonedTime,
 	"end_time": ZonedTime,
 	"subject_code": String,
-	"room_id": Integer,
+	"room_id": String,
 	"err": String?
 }
 ```
@@ -344,6 +343,29 @@ RETURN
   su.code AS subject_code,
   r.id AS room_id
 ```
+### (admin) Assign teacher to group
+
+```json
+{
+	"teacher_idx": String,
+	"group_id": String
+}
+```
+
+```json
+{
+	"teacher_idx": String,
+	"group_id": String,
+	"err": String?
+}
+```
+
+```cypher
+MATCH (t:Teacher {idx: $teacher_idx})
+MATCH (g:Group {id: $group_id})
+MERGE (t)-[:TEACHES]->(g)
+RETURN t.idx AS teacher_idx, g.id AS group_id
+```
 ### (admin) Create room
 
 ```json
@@ -355,7 +377,7 @@ RETURN
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"building": String,
 	"room_num": String,
 	"err": String?
@@ -385,7 +407,7 @@ RETURN
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"year": String,
 	"season": String,
 	"err": String?
@@ -442,17 +464,17 @@ RETURN
 ```json
 {
 	"sem": Integer,
-	"curriculum_id": Integer,
-	"cycle_id": Integer
+	"curriculum_id": String,
+	"cycle_id": String
 }
 ```
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"sem": Integer,
-	"curriculum_id": Integer,
-	"cycle_id": Integer,
+	"curriculum_id": String,
+	"cycle_id": String,
 	"err": String?
 }
 ```
@@ -475,15 +497,15 @@ RETURN
 
 ```json
 {
-	"programme_id": Integer,
+	"programme_id": String,
 	"intake_year": String
 }
 ```
 
 ```json
 {
-	"id": Integer,
-	"programme_id": Integer,
+	"id": String,
+	"programme_id": String,
 	"intake_year": String,
 	"err": String?
 }
@@ -511,7 +533,7 @@ RETURN
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"name": String,
 	"full_name": String,
 	"err": String?
@@ -547,7 +569,7 @@ RETURN
 	"photo": String?,
 	"joined": ZonedDateTime,
 	"avg_grade": Float?,
-	"term_ids": List[Integer],
+	"term_ids": List[String],
 	"err": String?
 }
 ```
@@ -588,11 +610,11 @@ RETURN
 ```json
 {
 	"name": String,
-	"cycle_id": Integer,
-	"faculty_id": Integer,
+	"cycle_id": String,
+	"faculty_id": String,
 	"reg_type": "zapisowa",
 	"turns": List[RegistrationTurn],
-	"group_ids": List[Integer]
+	"group_ids": List[String]
 
 	RegistrationTurn = {
 		"turn_number": Integer,
@@ -605,11 +627,11 @@ RETURN
 
 ```json
 {
-	"id": Integer,
+	"id": String,
 	"name": String,
 	"reg_type": "zapisowa",
 	"turns": List[RegistrationTurn],
-	"group_ids": List[Integer],
+	"group_ids": List[String],
 	"err": String?
 }
 ```
@@ -657,7 +679,7 @@ MERGE (reg)-[:OPENS]->(g)
 	"faculties": List[Faculty]
 	
 	Faculty = {
-		"id": Integer,
+		"id": String,
 		"name": String,
 		"full_name": String
 	}
@@ -680,9 +702,9 @@ ORDER BY fa.name
 	"programmes": List[Programme]
 	
 	Programme = {
-		"id": Integer,
+		"id": String,
 		"name": String,
-		"faculty_id": Integer
+		"faculty_id": String
 	}
 }
 ```
@@ -703,7 +725,7 @@ ORDER BY p.name
 	"rooms": List[Room]
 	
 	Room = {
-		"id": Integer,
+		"id": String,
 		"building": String,
 		"room_num": String
 	}
@@ -726,7 +748,7 @@ ORDER BY r.building, r.room_num
 	"cycles": List[AcademicCycle]
 	
 	AcademicCycle = {
-		"id": Integer,
+		"id": String,
 		"year": String,
 		"season": String
 	}

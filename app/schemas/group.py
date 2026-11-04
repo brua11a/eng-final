@@ -12,7 +12,7 @@ class GroupTypeCreateRequest(BaseModel):
 
 
 class GroupTypeCreateResponse(BaseModel):
-    id: int
+    id: str
     subject_code: str
     g_type: str
     weight: float
@@ -28,11 +28,11 @@ class GroupCreateRequest(BaseModel):
     start_hr: time
     end_time: time
     subject_code: str
-    room_id: int
+    room_id: str
 
 
 class GroupCreateResponse(BaseModel):
-    id: int
+    id: str
     weekday: int
     g_type: str
     number: int
@@ -41,23 +41,23 @@ class GroupCreateResponse(BaseModel):
     start_hr: time
     end_time: time
     subject_code: str
-    room_id: int
+    room_id: str
     err: Optional[str] = None
 
 
 class TeacherAssignRequest(BaseModel):
     teacher_idx: str
-    group_id: int
+    group_id: str
 
 
 class TeacherAssignResponse(BaseModel):
     teacher_idx: str
-    group_id: int
+    group_id: str
     err: Optional[str] = None
 
 
 class GroupNested(BaseModel):
-    id: int
+    id: str
     weekday: int
     g_type: str
     number: int
@@ -74,9 +74,7 @@ class GroupTracked(GroupNested):
 
 
 class GroupDetailRequest(BaseModel):
-    code: str
-    group_num: int
-    g_type: str
+    group_id: str
 
 
 class ClassOccurrence(BaseModel):

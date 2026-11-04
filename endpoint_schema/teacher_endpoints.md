@@ -15,7 +15,7 @@
 	"photo": String?,
 	"joined": ZonedDateTime,
 	"avg_grade": Float?,
-	"term_ids": List[Integer],
+	"term_ids": List[String],
 	"err": String?
 }
 ```
@@ -56,7 +56,7 @@ RETURN
 
 ```json
 {
-	"group_id": Integer
+	"group_id": String
 }
 ```
 
@@ -96,7 +96,7 @@ ORDER BY st.surname, st.name
 
 ```json
 {
-	"group_id": Integer,
+	"group_id": String,
 	"student_idx": String,
 	"grade": Float
 }
@@ -104,7 +104,7 @@ ORDER BY st.surname, st.name
 
 ```json
 {
-	"group_id": Integer,
+	"group_id": String,
 	"student_idx": String,
 	"grade": Float,
 	"err": String?

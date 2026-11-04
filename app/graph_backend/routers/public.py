@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
+from neo4j.exceptions import Neo4jError
 
 from app.database import get_session
 from app.graph_backend.auth import create_token, roles_from_flags, verify_password
 from app.graph_backend.auth.deps import Caller
+from app.graph_backend.errors import db_err
 from app.graph_backend.query import one
 from app.schemas.auth import LoginRequest, LoginResponse
 
@@ -24,7 +26,10 @@ RETURN
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)) -> LoginResponse:
-    row = await one(session, _LOGIN, email=body.email)
+    try:
+        row = await one(session, _LOGIN, email=body.email)
+    except Neo4jError as exc:
+        return LoginResponse(ok=False, err=db_err(exc))
     if row is None or not verify_password(body.password, row["passwd_hash"]):
         return LoginResponse(ok=False, err="Invalid email or password")
     if row["inactive"]:

@@ -8,13 +8,13 @@ class AcademicCycleCreateRequest(BaseModel):
 
 
 class AcademicCycleCreateResponse(BaseModel):
-    id: int
+    id: str
     year: str
     season: str
     err: Optional[str] = None
 
 class MyAcademicCycleItem(BaseModel):
-    id: int
+    id: str
     year: str
     season: str
 
@@ -28,11 +28,11 @@ class AcademicCycleListResponse(BaseModel):
 
 
 class MyAcademicCycleDetailRequest(BaseModel):
-    cycle_id: int
+    cycle_id: str
 
 
 class MyAcademicCycleDetailResponse(BaseModel):
-    id: int
+    id: str
     year: str
     season: str
     # TODO: subjects/groups?
