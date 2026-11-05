@@ -47,6 +47,18 @@ class AddRoleResponse(BaseModel):
     err: Optional[str] = None
 
 
+class RemoveRoleRequest(BaseModel):
+    idx: str
+    role: UserType
+
+
+class RemoveRoleResponse(BaseModel):
+    idx: str
+    email: Optional[str] = None
+    roles: List[UserType] = []
+    err: Optional[str] = None
+
+
 class UserIdxRequest(BaseModel):
     idx: str
 

@@ -35,6 +35,10 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/subjects.csv" AS surow
 MERGE (su:Subject {code: surow.code})
 SET su.name = surow.name, su.ects = toInteger(nullif(surow.ects, ""));
 
+LOAD CSV WITH HEADERS FROM "file:///nodes/subject_instances.csv" AS sirow
+MERGE (si:SubjectInstance {id: sirow.id})
+SET si.catalogue_code = nullif(sirow.catalogue_code, "");
+
 LOAD CSV WITH HEADERS FROM "file:///nodes/terms.csv" AS ctrow
 MERGE (ct:CurriculumTerm {id: ctrow.id})
 SET ct.sem = toInteger(ctrow.sem);

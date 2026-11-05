@@ -45,9 +45,12 @@ class TeacherDetailRequest(BaseModel):
 
 
 class GroupAndCourse(BaseModel):
+    group_id: str
     course_code: str
+    course_name: str = ""
     g_type: str
     group_num: int
+    academic_cycle: str = ""
 
 
 class TeacherDetailResponse(BaseModel):

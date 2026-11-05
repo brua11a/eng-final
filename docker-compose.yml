@@ -39,6 +39,17 @@ services:
       init:
         condition: service_completed_successfully
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ""
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    ports:
+      - "5173:80"
+    depends_on:
+      - app
+
 
 volumes:
   neo4j_data:

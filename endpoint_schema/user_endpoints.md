@@ -72,61 +72,45 @@ ORDER BY t.surname, t.name
 
 ### (user) Subject catalogue
 
-`GET /subjects` — query: `name`, `code` (optional String), substring match.
+`GET /subjects` — query: `name`, `code` (optional String), substring match on **template** subject code/name.
 
 ```json
 {
-	subject_and_groups: List[SubjectAndGroup]
-	
-	SubjectAndGroup = {
+	"cycle_columns": List[String],
+	"subjects": List[SubjectCatalogueItem]
+
+	SubjectCatalogueItem = {
 		"code": String,
 		"name": String,
 		"ects": Integer?,
-		"groups": List[Group]
+		"faculty": String,
+		"catalogue_code": String,
+		"cycles": List[SubjectCycleCell]
 	}
-	
-	Group = {
-		"id": String,
-		"weekday": Integer,
-		"g_type": String,
-		"number": Integer,
-		"pnp": String,
-		"capacity": Integer,
-		"start_hr": ZonedTime,
-		"end_time": ZonedTime,
-		"cycle": String,
-		"room": String
+
+	SubjectCycleCell = {
+		"instance_id": String?,
+		"group_count": Integer,
+		"registration_open": Boolean
 	}
 }
 ```
+
+Rows are **one per template subject**; `cycles` aligns with `cycle_columns` (e.g. `2025/26-Z`) and describes **SubjectInstance** offerings.
 
 ```cypher
 MATCH (su:Subject)
 WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
   AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))
-OPTIONAL MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su)
-OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
-OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
-
-RETURN
-  su.code AS subject_code,
-  su.name AS subject_name,
-  su.ects AS ects,
-  g.id AS group_id,
-  g.weekday AS weekday,
-  gt.g_type AS g_type,
-  g.number AS number,
-  g.pnp AS pnp,
-  g.capacity AS capacity,
-  g.start_hr AS start_hr,
-  g.end_time AS end_time,
-  r.building AS building,
-  r.room_num AS room_num,
-  ac.year AS cycle_year,
-  ac.season AS cycle_season
-
-ORDER BY su.name, gt.g_type, g.number
+OPTIONAL MATCH (su)<-[:INCLUDES]-(:CurriculumTerm)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
+WITH su, collect(DISTINCT fa.name) AS faculty_names
+OPTIONAL MATCH (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle)
+OPTIONAL MATCH (si)-[:HAS_GROUP]->(g:Group)
+OPTIONAL MATCH (reg:Registration)-[:FOR_CYCLE]->(ac)
+OPTIONAL MATCH (reg)-[:OPENS]->(g)
+RETURN su.code, su.name, su.ects, faculty_names, si.id, si.catalogue_code,
+  ac.id, ac.year, ac.season, count(DISTINCT g), count(DISTINCT reg) > 0
+ORDER BY su.name, ac.year, ac.season
 ```
 ### (user) Curriculum catalogue
 
@@ -157,6 +141,30 @@ RETURN
 
 ORDER BY p.name, c.intake_year DESC
 ```
+### (user) Organizational units catalogue
+
+`GET /organizational-units` — query: `name` (optional String), substring match on short or full name.
+
+```json
+{
+	"faculties": List[Faculty]
+
+	Faculty = {
+		"id": String,
+		"name": String,
+		"full_name": String
+	}
+}
+```
+
+```cypher
+MATCH (fa:Faculty)
+WHERE $name IS NULL
+   OR toLower(fa.name) CONTAINS toLower($name)
+   OR toLower(fa.full_name) CONTAINS toLower($name)
+RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name
+ORDER BY fa.name
+```
 ### (user) Subject detail
 
 ```json
@@ -167,81 +175,38 @@ ORDER BY p.name, c.intake_year DESC
 
 ```json
 {
+	"code": String,
 	"name": String,
 	"ects": Integer?,
-	"taught_by": List[TeacherName]
-	
-	TeacherName = {
+	"taught_by": List[TeacherName],
+	"instances": List[SubjectInstanceItem]
+
+	SubjectInstanceItem = {
 		"id": String,
-		"name": String
+		"cycle": String,
+		"catalogue_code": String,
+		"group_count": Integer
 	}
 }
-```
-
-```cypher
-MATCH (s:Subject {code: $code})
-OPTIONAL MATCH (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
-
-RETURN
-  s.name AS name,
-  s.ects AS ects,
-  t.idx AS teacher_idx,
-  t.name AS teacher_name,
-  t.surname AS teacher_surname
 ```
 ### (user) List Subject groups
 
-```json
-{
-	"code": String
-}
-```
+`POST /subjects/groups` — body: `{ "instance_id": String }` (SubjectInstance id).
 
 ```json
 {
 	"name": String,
-	"groups": List[Group]
-	
-	GroupTracked = {
-		"id": String,
-		"weekday": Integer,
-		"g_type": String,
-		"number": Integer,
-		"pnp": String,
-		"capacity": Integer,
-		"start_hr": ZonedTime,
-		"end_time": ZonedTime,
-		"cycle": String,
-		"room": String,
-		"filled": Integer
-	}
+	"instance_id": String,
+	"cycle": String,
+	"groups": List[GroupTracked]
 }
 ```
 
 ```cypher
-MATCH (su:Subject {code: $code})-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
-OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
-OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
-OPTIONAL MATCH (st:Student)-[:REGISTERED_IN]->(g)
-
-RETURN
-  su.name AS subject_name,
-  g.id AS id,
-  g.weekday AS weekday,
-  gt.g_type AS g_type,
-  g.number AS number,
-  g.pnp AS pnp,
-  g.capacity AS capacity,
-  g.start_hr AS start_hr,
-  g.end_time AS end_time,
-  r.building AS building,
-  r.room_num AS room_num,
-  ac.year AS cycle_year,
-  ac.season AS cycle_season,
-  count(st) AS filled
-
-ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
+MATCH (si:SubjectInstance {id: $instance_id})-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+MATCH (si)-[:HAS_GROUP]->(g:Group)-[:OF_TYPE]->(gt:GroupType)
+...
 ```
 ### (user) Group detail
 

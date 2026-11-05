@@ -99,8 +99,11 @@ async def show_courses(
         session,
         """
         MATCH (reg:Registration {id: $registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
-        MATCH (reg)-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        MATCH (reg)-[:OPENS]->(g:Group)<-[:HAS_GROUP]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
+        MATCH (si)-[:OFFERED_IN]->(ac)
+        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su)
         RETURN
+          si.id AS instance_id,
           su.code AS subject_code,
           su.name AS subject_name,
           gt.g_type AS g_type,
@@ -112,18 +115,18 @@ async def show_courses(
     grouped: dict[str, CourseInRegistration] = {}
     counts: dict[str, dict[str, int]] = {}
     for row in rows:
-        code = row["subject_code"]
-        if code not in grouped:
-            grouped[code] = CourseInRegistration(
-                id=code,
+        iid = row["instance_id"]
+        if iid not in grouped:
+            grouped[iid] = CourseInRegistration(
+                id=iid,
                 name=row["subject_name"],
                 classes=[],
                 academic_cycle=f"{row['cycle_year']} {row['cycle_season']}",
             )
-            counts[code] = {}
-        counts[code][row["g_type"]] = counts[code].get(row["g_type"], 0) + 1
-    for code, course in grouped.items():
-        course.classes = [ClassInfo(g_type=kind, count=count) for kind, count in counts[code].items()]
+            counts[iid] = {}
+        counts[iid][row["g_type"]] = counts[iid].get(row["g_type"], 0) + 1
+    for iid, course in grouped.items():
+        course.classes = [ClassInfo(g_type=kind, count=count) for kind, count in counts[iid].items()]
     return ShowCoursesInRegistrationResponse(courses=list(grouped.values()))
 
 
@@ -138,7 +141,8 @@ async def show_groups(
         session,
         """
         MATCH (st:Student {idx: $student_idx})
-        MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $course_id})
+        MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)<-[:HAS_GROUP]-(si:SubjectInstance {id: $course_id})
+        MATCH (g)-[:OF_TYPE]->(gt:GroupType)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
         OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)
@@ -172,7 +176,7 @@ async def register_to_group(
     row = await one(
         session,
         """
-        MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:Subject {code: $course_id})
+        MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})<-[:HAS_GROUP]-(si:SubjectInstance {id: $course_id})
         MERGE (st)-[r:REGISTERED_IN]->(g)
           ON CREATE SET r.registered_at = datetime()
         RETURN g.id AS group_id

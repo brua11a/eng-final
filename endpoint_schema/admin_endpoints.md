@@ -178,8 +178,6 @@ RETURN u.idx AS idx
 
 ### (admin) Add role
 
-Adds `Admin`, `Teacher`, or `Student` on an existing `:Person` (login via **Assign User** is optional and can come later). `Teacher` requires `degree` and `working_since`. `Student` requires `joined`. `Admin` needs no extra fields. One person can hold all three.
-
 ```json
 {
 	"idx": String,
@@ -212,6 +210,39 @@ SET p:Teacher, p.degree = $degree, p.working_since = date($working_since)
 ```cypher
 MATCH (p:Person {idx: $idx})
 SET p:Student, p.joined = datetime($joined)
+```
+
+### (admin) Remove role
+
+```json
+{
+	"idx": String,
+	"role": "Admin" | "Teacher" | "Student"
+}
+```
+
+```json
+{
+	"idx": String,
+	"email": String?,
+	"roles": List["Admin" | "Teacher" | "Student"],
+	"err": String?
+}
+```
+
+```cypher
+MATCH (p:Person {idx: $idx})
+REMOVE p:Admin
+```
+
+```cypher
+MATCH (p:Person {idx: $idx})
+REMOVE p:Teacher
+```
+
+```cypher
+MATCH (p:Person {idx: $idx})
+REMOVE p:Student
 ```
 
 ### (student | admin) Create Opinion
@@ -667,29 +698,6 @@ MATCH (reg:Registration {id: $registration_id})
 MATCH (g:Group {id: $group_id})
 
 MERGE (reg)-[:OPENS]->(g)
-```
-### (admin) List Faculties
-
-```json
-{}
-```
-
-```json
-{
-	"faculties": List[Faculty]
-	
-	Faculty = {
-		"id": String,
-		"name": String,
-		"full_name": String
-	}
-}
-```
-
-```cypher
-MATCH (fa:Faculty)
-RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name
-ORDER BY fa.name
 ```
 ### (admin) List Programmes
 

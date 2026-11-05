@@ -27,7 +27,7 @@ class GroupCreateRequest(BaseModel):
     capacity: int
     start_hr: time
     end_time: time
-    subject_code: str
+    instance_id: str
     room_id: str
 
 
@@ -40,6 +40,7 @@ class GroupCreateResponse(BaseModel):
     capacity: int
     start_hr: time
     end_time: time
+    instance_id: str
     subject_code: str
     room_id: str
     err: Optional[str] = None
@@ -85,10 +86,16 @@ class ClassOccurrence(BaseModel):
 
 
 class GroupDetailResponse(BaseModel):
+    subject_code: str = ""
     course_name: str
     g_type: str
     academic_cycle: str
     group_num: int
+    weekday: Optional[int] = None
+    pnp: str = ""
+    start_hr: Optional[time] = None
+    end_time: Optional[time] = None
+    room: str = ""
     building: str
     nearest_classes: List[ClassOccurrence]
     filled: int

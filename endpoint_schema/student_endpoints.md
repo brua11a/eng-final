@@ -97,13 +97,14 @@ RETURN
 
 ```cypher
 MATCH (reg:Registration {id: $registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
-MATCH (reg)-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (reg)-[:OPENS]->(g:Group)<-[:HAS_GROUP]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac)
 
 RETURN
+  si.id AS instance_id,
   su.code AS subject_code,
   su.name AS subject_name,
   gt.g_type AS g_type,
-  g.id AS group_id,
   ac.year AS cycle_year,
   ac.season AS cycle_season
 ```

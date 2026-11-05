@@ -1,4 +1,5 @@
 from datetime import datetime, time
+import uuid
 
 from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
@@ -18,6 +19,8 @@ from app.schemas.auth import (
     AddRoleResponse,
     AssignUserRequest,
     AssignUserResponse,
+    RemoveRoleRequest,
+    RemoveRoleResponse,
     UserAccountResponse,
     UserIdxRequest,
 )
@@ -28,7 +31,7 @@ from app.schemas.curriculum import (
     ProgrammeListResponse,
 )
 from app.schemas.curriculum_term import CurriculumTermCreateRequest, CurriculumTermCreateResponse
-from app.schemas.faculty import FacultyCreateRequest, FacultyCreateResponse, FacultyItem, FacultyListResponse
+from app.schemas.faculty import FacultyCreateRequest, FacultyCreateResponse
 from app.schemas.group import (
     GroupCreateRequest,
     GroupCreateResponse,
@@ -41,6 +44,10 @@ from app.schemas.registration import StartRegistrationsRequest, StartRegistratio
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomItem, RoomListResponse
 from app.schemas.student import StudentCreateRequest, StudentCreateResponse
 from app.schemas.subject import SubjectCreateRequest, SubjectCreateResponse
+from app.schemas.subject_instance import (
+    SubjectInstanceCreateRequest,
+    SubjectInstanceCreateResponse,
+)
 from app.schemas.teacher import TeacherCreateRequest, TeacherCreateResponse
 
 from app.graph_backend.errors import db_err
@@ -271,6 +278,25 @@ _ADD_ROLE = {
 }
 
 
+_REMOVE_ROLE = {
+    "Admin": """
+        MATCH (p:Person {idx: $idx})
+        REMOVE p:Admin
+        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
+    """,
+    "Teacher": """
+        MATCH (p:Person {idx: $idx})
+        REMOVE p:Teacher
+        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
+    """,
+    "Student": """
+        MATCH (p:Person {idx: $idx})
+        REMOVE p:Student
+        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
+    """,
+}
+
+
 @router.post("/users/roles", response_model=AddRoleResponse)
 async def add_role(
     body: AddRoleRequest,
@@ -306,6 +332,48 @@ async def add_role(
     if row is None:
         return AddRoleResponse(idx=body.idx, err="Person not found")
     return AddRoleResponse(
+        idx=row["idx"],
+        email=row["email"],
+        roles=list(roles_from_flags(row["admin"], row["teacher"], row["student"])),
+    )
+
+
+@router.post("/users/roles/remove", response_model=RemoveRoleResponse)
+async def remove_role(
+    body: RemoveRoleRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> RemoveRoleResponse:
+    try:
+        current = await one(session, _ROLE_STATE, idx=body.idx)
+    except Neo4jError as exc:
+        return RemoveRoleResponse(idx=body.idx, err=db_err(exc))
+    if current is None:
+        return RemoveRoleResponse(idx=body.idx, err="Person not found")
+    if not current[body.role.lower()]:
+        return RemoveRoleResponse(
+            idx=body.idx,
+            roles=list(roles_from_flags(current["admin"], current["teacher"], current["student"])),
+            err="Role not assigned",
+        )
+    remaining = sum(
+        1
+        for key in ("admin", "teacher", "student")
+        if current[key] and key != body.role.lower()
+    )
+    if remaining == 0:
+        return RemoveRoleResponse(
+            idx=body.idx,
+            roles=list(roles_from_flags(current["admin"], current["teacher"], current["student"])),
+            err="Cannot remove last role",
+        )
+    try:
+        row = await one(session, _REMOVE_ROLE[body.role], idx=body.idx)
+    except Neo4jError as exc:
+        return RemoveRoleResponse(idx=body.idx, err=db_err(exc))
+    if row is None:
+        return RemoveRoleResponse(idx=body.idx, err="Person not found")
+    return RemoveRoleResponse(
         idx=row["idx"],
         email=row["email"],
         roles=list(roles_from_flags(row["admin"], row["teacher"], row["student"])),
@@ -371,18 +439,21 @@ async def create_group(
         row = await one(
             session,
             """
-            MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+            MATCH (si:SubjectInstance {id: $instance_id})-[:INSTANCE_OF]->(su:Subject)
+            MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+            MATCH (su)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
             MATCH (r:Room {id: $room_id})
             CREATE (g:Group {
               id: $id, weekday: $weekday, number: $number, pnp: $pnp,
               capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
             })-[:OF_TYPE]->(gt),
-            (g)-[:IN_ROOM]->(r)
+            (g)-[:IN_ROOM]->(r),
+            (si)-[:HAS_GROUP]->(g)
             RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
                    g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
-                   su.code AS subject_code, r.id AS room_id
+                   si.id AS instance_id, su.code AS subject_code, r.id AS room_id
             """,
-            subject_code=body.subject_code,
+            instance_id=body.instance_id,
             room_id=body.room_id,
             id=group_id,
             weekday=body.weekday,
@@ -397,13 +468,14 @@ async def create_group(
         return GroupCreateResponse(
             id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
             pnp=body.pnp, capacity=body.capacity, start_hr=body.start_hr, end_time=body.end_time,
-            subject_code=body.subject_code, room_id=body.room_id, err=db_err(exc),
+            instance_id=body.instance_id, subject_code="", room_id=body.room_id, err=db_err(exc),
         )
     if row is None:
         return GroupCreateResponse(
             id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
             pnp=body.pnp, capacity=body.capacity, start_hr=body.start_hr, end_time=body.end_time,
-            subject_code=body.subject_code, room_id=body.room_id, err="Group type or room not found",
+            instance_id=body.instance_id, subject_code="", room_id=body.room_id,
+            err="Group type, instance, or room not found",
         )
     return GroupCreateResponse(**row)
 
@@ -513,6 +585,54 @@ async def create_subject(
     except Neo4jError as exc:
         return SubjectCreateResponse(code=body.code, name=body.name, ects=body.ects, err=db_err(exc))
     return SubjectCreateResponse(**row)
+
+
+@router.post("/subject-instances", response_model=SubjectInstanceCreateResponse)
+async def create_subject_instance(
+    body: SubjectInstanceCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> SubjectInstanceCreateResponse:
+    instance_key = str(
+        uuid.uuid5(
+            uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+            f"{body.subject_code}:{body.cycle_id}",
+        )
+    )
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (su:Subject {code: $subject_code})
+            MATCH (ac:AcademicCycle {id: $cycle_id})
+            MERGE (si:SubjectInstance {id: $id})
+            SET si.catalogue_code = $catalogue_code
+            MERGE (si)-[:INSTANCE_OF]->(su)
+            MERGE (si)-[:OFFERED_IN]->(ac)
+            RETURN si.id AS id, su.code AS subject_code, ac.id AS cycle_id, si.catalogue_code AS catalogue_code
+            """,
+            subject_code=body.subject_code,
+            cycle_id=body.cycle_id,
+            id=instance_key,
+            catalogue_code=body.catalogue_code or "",
+        )
+    except Neo4jError as exc:
+        return SubjectInstanceCreateResponse(
+            id=instance_key,
+            subject_code=body.subject_code,
+            cycle_id=body.cycle_id,
+            catalogue_code=body.catalogue_code,
+            err=db_err(exc),
+        )
+    if row is None:
+        return SubjectInstanceCreateResponse(
+            id=instance_key,
+            subject_code=body.subject_code,
+            cycle_id=body.cycle_id,
+            catalogue_code=body.catalogue_code,
+            err="Subject or academic cycle not found",
+        )
+    return SubjectInstanceCreateResponse(**row)
 
 
 @router.post("/curriculum-terms", response_model=CurriculumTermCreateResponse)
@@ -696,18 +816,6 @@ async def start_registrations(
         turns=body.turns,
         group_ids=body.group_ids,
     )
-
-
-@router.get("/faculties", response_model=FacultyListResponse)
-async def list_faculties(
-    session: AsyncSession = Depends(get_session),
-    caller=Depends(_admin),
-) -> FacultyListResponse:
-    rows = await run(
-        session,
-        "MATCH (fa:Faculty) RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name ORDER BY fa.name",
-    )
-    return FacultyListResponse(faculties=[FacultyItem(**row) for row in rows])
 
 
 @router.get("/programmes", response_model=ProgrammeListResponse)
