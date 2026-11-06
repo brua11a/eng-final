@@ -4,27 +4,28 @@ import { useRoute, RouterLink } from 'vue-router'
 import { catalogue } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
 import ApiMessages from '../../components/ApiMessages.vue'
+import { scheduleLine } from '../../utils/format'
 
 const route = useRoute()
 const detailApi = useApiCall()
 const groupsApi = useApiCall()
-const selectedInstanceId = ref('')
+const selectedCycleId = ref('')
 
 async function load() {
   const code = route.params.code
   const data = await detailApi.run(() => catalogue.subjectDetail(code))
-  const first = data?.instances?.[0]
-  selectedInstanceId.value = first?.id ?? ''
+  const first = data?.offerings?.[0]
+  selectedCycleId.value = first?.cycle_id ?? ''
 }
 
 function loadGroups() {
-  if (!selectedInstanceId.value) return
-  groupsApi.run(() => catalogue.subjectGroups(selectedInstanceId.value))
+  if (!selectedCycleId.value) return
+  groupsApi.run(() => catalogue.subjectGroups(route.params.code, selectedCycleId.value))
 }
 
 onMounted(load)
 watch(() => route.params.code, load)
-watch(selectedInstanceId, loadGroups)
+watch(selectedCycleId, loadGroups)
 </script>
 
 <template>
@@ -45,20 +46,18 @@ watch(selectedInstanceId, loadGroups)
       </p>
     </div>
 
-    <h2 class="catalogue-subsection-title">Instances</h2>
-    <div v-if="detailApi.result?.instances?.length" class="catalogue-filter-panel">
+    <h2 class="catalogue-subsection-title">Offered in</h2>
+    <div v-if="detailApi.result?.offerings?.length" class="catalogue-filter-panel">
       <label>
         Cycle
-        <select v-model="selectedInstanceId">
-          <option v-for="inst in detailApi.result.instances" :key="inst.id" :value="inst.id">
-            {{ inst.cycle }}
-            <template v-if="inst.catalogue_code"> · {{ inst.catalogue_code }}</template>
-            ({{ inst.group_count }} groups)
+        <select v-model="selectedCycleId">
+          <option v-for="o in detailApi.result.offerings" :key="o.cycle_id" :value="o.cycle_id">
+            {{ o.cycle }} ({{ o.group_count }} groups)
           </option>
         </select>
       </label>
     </div>
-    <p v-else class="catalogue-hint">No instances.</p>
+    <p v-else class="catalogue-hint">Not offered in any cycle.</p>
 
     <h2 class="catalogue-subsection-title">Groups</h2>
     <ApiMessages :error="groupsApi.error" :api-message="groupsApi.apiMessage" />
@@ -68,16 +67,23 @@ watch(selectedInstanceId, loadGroups)
           <tr>
             <th>Type</th>
             <th>No.</th>
-            <th>Day</th>
+            <th>When</th>
             <th>Room / cycle</th>
             <th>Places</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="g in groupsApi.result.groups" :key="g.id">
-            <td>{{ g.g_type }}</td>
+            <td>
+              <RouterLink
+                :to="{ name: 'catalogue-group-detail', params: { groupId: g.id } }"
+                class="catalogue-link-arrow"
+              >
+                {{ g.g_type }}
+              </RouterLink>
+            </td>
             <td>{{ g.number }}</td>
-            <td>{{ g.weekday }}</td>
+            <td>{{ scheduleLine(g.weekday, g.start_hr, g.end_time) }} {{ g.pnp }}</td>
             <td>{{ g.room }} · {{ g.cycle }}</td>
             <td>{{ g.filled }} / {{ g.capacity }}</td>
           </tr>

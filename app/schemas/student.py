@@ -10,6 +10,7 @@ class StudentCreateRequest(BaseModel):
     photo: Optional[str] = None
     joined: datetime
     programme: str
+    term_id: Optional[str] = None
 
 
 class StudentCreateResponse(BaseModel):

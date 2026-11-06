@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class RegisteredGroup(BaseModel):
+    group_id: str
     course_code: str
     course_name: str
     g_type: str
@@ -11,6 +12,7 @@ class RegisteredGroup(BaseModel):
     weekday: int
     start: time
     end: time
+    pnp: str = ""
     room: Optional[str] = None
     cycle: Optional[str] = None
 

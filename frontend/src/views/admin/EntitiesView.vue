@@ -2,8 +2,29 @@
 import { ref } from 'vue'
 import { admin } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
+import { useAdminReferenceData } from '../../composables/useAdminReferenceData'
 import ApiMessages from '../../components/ApiMessages.vue'
-import JsonPreview from '../../components/JsonPreview.vue'
+
+const {
+  programmes,
+  rooms,
+  cycles,
+  subjects,
+  curricula,
+  teachers,
+  groups,
+  programmeLabel,
+  roomLabel,
+  cycleLabel,
+  teacherLabel,
+  error: refsError,
+  load: reloadRefs,
+} = useAdminReferenceData()
+
+async function create(api, fn) {
+  const data = await api.run(fn)
+  if (data && !api.apiMessage) reloadRefs()
+}
 
 const facultyApi = useApiCall()
 const roomApi = useApiCall()
@@ -30,7 +51,8 @@ const group = ref({
   capacity: 30,
   start_hr: '08:00:00',
   end_time: '09:30:00',
-  instance_id: '',
+  subject_code: '',
+  cycle_id: '',
   room_id: '',
 })
 const assign = ref({ teacher_idx: '', group_id: '' })
@@ -38,50 +60,48 @@ const assign = ref({ teacher_idx: '', group_id: '' })
 
 <template>
   <div>
-    <h1>Create entities</h1>
+    <h1 class="teacher-page-title">Entities</h1>
+    <ApiMessages v-if="refsError" :error="refsError" />
 
-    <section class="block">
-      <h2>POST /admin/faculties</h2>
-      <form
-        class="form"
-        @submit.prevent="facultyApi.run(() => admin.createFaculty(faculty))"
-      >
-        <input v-model="faculty.name" placeholder="name" required />
-        <input v-model="faculty.full_name" placeholder="full_name" required />
-        <button type="submit" :disabled="facultyApi.loading">Create</button>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Faculty</h2>
+      <form class="admin-form" @submit.prevent="create(facultyApi, () => admin.createFaculty(faculty))">
+        <label>Short name (e.g. W4N) <input v-model="faculty.name" required /></label>
+        <label>Full name <input v-model="faculty.full_name" required /></label>
+        <button type="submit" class="teacher-btn-save" :disabled="facultyApi.loading">Create</button>
       </form>
       <ApiMessages :error="facultyApi.error" :api-message="facultyApi.apiMessage" />
-      <JsonPreview :data="facultyApi.result" />
+      <p v-if="facultyApi.result?.id && !facultyApi.apiMessage" class="admin-ok">Id {{ facultyApi.result.id }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/rooms</h2>
-      <form class="form" @submit.prevent="roomApi.run(() => admin.createRoom(room))">
-        <input v-model="room.building" placeholder="building" required />
-        <input v-model="room.room_num" placeholder="room_num" required />
-        <button type="submit" :disabled="roomApi.loading">Create</button>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Room</h2>
+      <form class="admin-form" @submit.prevent="create(roomApi, () => admin.createRoom(room))">
+        <label>Building <input v-model="room.building" required /></label>
+        <label>Room number <input v-model="room.room_num" required /></label>
+        <button type="submit" class="teacher-btn-save" :disabled="roomApi.loading">Create</button>
       </form>
       <ApiMessages :error="roomApi.error" :api-message="roomApi.apiMessage" />
-      <JsonPreview :data="roomApi.result" />
+      <p v-if="roomApi.result?.id && !roomApi.apiMessage" class="admin-ok">Id {{ roomApi.result.id }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/academic-cycles</h2>
-      <form class="form" @submit.prevent="cycleApi.run(() => admin.createAcademicCycle(cycle))">
-        <input v-model="cycle.year" placeholder="year" required />
-        <input v-model="cycle.season" placeholder="season" required />
-        <button type="submit" :disabled="cycleApi.loading">Create</button>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Academic cycle</h2>
+      <form class="admin-form" @submit.prevent="create(cycleApi, () => admin.createAcademicCycle(cycle))">
+        <label>Year <input v-model="cycle.year" required /></label>
+        <label>Season <input v-model="cycle.season" required /></label>
+        <button type="submit" class="teacher-btn-save" :disabled="cycleApi.loading">Create</button>
       </form>
       <ApiMessages :error="cycleApi.error" :api-message="cycleApi.apiMessage" />
-      <JsonPreview :data="cycleApi.result" />
+      <p v-if="cycleApi.result?.id && !cycleApi.apiMessage" class="admin-ok">Id {{ cycleApi.result.id }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/subjects</h2>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Subject</h2>
       <form
-        class="form"
+        class="admin-form"
         @submit.prevent="
-          subjectApi.run(() =>
+          create(subjectApi, () =>
             admin.createSubject({
               code: subject.code,
               name: subject.name,
@@ -90,32 +110,40 @@ const assign = ref({ teacher_idx: '', group_id: '' })
           )
         "
       >
-        <input v-model="subject.code" placeholder="code" required />
-        <input v-model="subject.name" placeholder="name" required />
-        <input v-model="subject.ects" placeholder="ects (optional)" type="number" />
-        <button type="submit" :disabled="subjectApi.loading">Create</button>
+        <label>Code <input v-model="subject.code" required /></label>
+        <label>Name <input v-model="subject.name" required /></label>
+        <label>ECTS <input v-model="subject.ects" type="number" /></label>
+        <button type="submit" class="teacher-btn-save" :disabled="subjectApi.loading">Create</button>
       </form>
       <ApiMessages :error="subjectApi.error" :api-message="subjectApi.apiMessage" />
-      <JsonPreview :data="subjectApi.result" />
+      <p v-if="subjectApi.result?.code && !subjectApi.apiMessage" class="admin-ok">Code {{ subjectApi.result.code }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/curricula</h2>
-      <form class="form" @submit.prevent="curriculumApi.run(() => admin.createCurriculum(curriculum))">
-        <input v-model="curriculum.programme_id" placeholder="programme_id" required />
-        <input v-model="curriculum.intake_year" placeholder="intake_year" required />
-        <button type="submit" :disabled="curriculumApi.loading">Create</button>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Curriculum</h2>
+      <form class="admin-form" @submit.prevent="create(curriculumApi, () => admin.createCurriculum(curriculum))">
+        <label>
+          Programme
+          <select v-model="curriculum.programme_id" required>
+            <option value="" disabled>Select programme</option>
+            <option v-for="p in programmes" :key="p.id" :value="p.id">
+              {{ programmeLabel(p) }}
+            </option>
+          </select>
+        </label>
+        <label>Intake year <input v-model="curriculum.intake_year" required /></label>
+        <button type="submit" class="teacher-btn-save" :disabled="curriculumApi.loading">Create</button>
       </form>
       <ApiMessages :error="curriculumApi.error" :api-message="curriculumApi.apiMessage" />
-      <JsonPreview :data="curriculumApi.result" />
+      <p v-if="curriculumApi.result?.id && !curriculumApi.apiMessage" class="admin-ok">Id {{ curriculumApi.result.id }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/curriculum-terms</h2>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Curriculum term</h2>
       <form
-        class="form"
+        class="admin-form"
         @submit.prevent="
-          termApi.run(() =>
+          create(termApi, () =>
             admin.createCurriculumTerm({
               sem: Number(term.sem),
               curriculum_id: term.curriculum_id,
@@ -124,21 +152,37 @@ const assign = ref({ teacher_idx: '', group_id: '' })
           )
         "
       >
-        <input v-model="term.sem" type="number" placeholder="sem" required />
-        <input v-model="term.curriculum_id" placeholder="curriculum_id" required />
-        <input v-model="term.cycle_id" placeholder="cycle_id" required />
-        <button type="submit" :disabled="termApi.loading">Create</button>
+        <label>Semester <input v-model="term.sem" type="number" required /></label>
+        <label>
+          Curriculum
+          <select v-model="term.curriculum_id" required>
+            <option value="" disabled>Select curriculum</option>
+            <option v-for="c in curricula" :key="c.id" :value="c.id">
+              {{ c.programme_name }} {{ c.intake_year }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Cycle
+          <select v-model="term.cycle_id" required>
+            <option value="" disabled>Select cycle</option>
+            <option v-for="c in cycles" :key="c.id" :value="c.id">
+              {{ cycleLabel(c) }}
+            </option>
+          </select>
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="termApi.loading">Create</button>
       </form>
       <ApiMessages :error="termApi.error" :api-message="termApi.apiMessage" />
-      <JsonPreview :data="termApi.result" />
+      <p v-if="termApi.result?.id && !termApi.apiMessage" class="admin-ok">Id {{ termApi.result.id }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/group-types</h2>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Group type</h2>
       <form
-        class="form"
+        class="admin-form"
         @submit.prevent="
-          groupTypeApi.run(() =>
+          create(groupTypeApi, () =>
             admin.createGroupType({
               ...groupType,
               weight: Number(groupType.weight),
@@ -146,21 +190,29 @@ const assign = ref({ teacher_idx: '', group_id: '' })
           )
         "
       >
-        <input v-model="groupType.subject_code" placeholder="subject_code" required />
-        <input v-model="groupType.g_type" placeholder="g_type" required />
-        <input v-model="groupType.weight" type="number" step="0.1" placeholder="weight" required />
-        <button type="submit" :disabled="groupTypeApi.loading">Create</button>
+        <label>
+          Subject
+          <select v-model="groupType.subject_code" required>
+            <option value="" disabled>Select subject</option>
+            <option v-for="su in subjects" :key="su.code" :value="su.code">
+              {{ su.code }}
+            </option>
+          </select>
+        </label>
+        <label>Type name <input v-model="groupType.g_type" required /></label>
+        <label>Weight <input v-model="groupType.weight" type="number" step="0.1" required /></label>
+        <button type="submit" class="teacher-btn-save" :disabled="groupTypeApi.loading">Create</button>
       </form>
       <ApiMessages :error="groupTypeApi.error" :api-message="groupTypeApi.apiMessage" />
-      <JsonPreview :data="groupTypeApi.result" />
+      <p v-if="groupTypeApi.result?.id && !groupTypeApi.apiMessage" class="admin-ok">Id {{ groupTypeApi.result.id }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/groups</h2>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Group</h2>
       <form
-        class="form"
+        class="admin-form"
         @submit.prevent="
-          groupApi.run(() =>
+          create(groupApi, () =>
             admin.createGroup({
               ...group,
               weekday: Number(group.weekday),
@@ -170,40 +222,73 @@ const assign = ref({ teacher_idx: '', group_id: '' })
           )
         "
       >
-        <input v-for="(_, key) in group" :key="key" v-model="group[key]" :placeholder="key" />
-        <button type="submit" :disabled="groupApi.loading">Create</button>
+        <label>Weekday <input v-model="group.weekday" type="number" required /></label>
+        <label>Group type <input v-model="group.g_type" required /></label>
+        <label>Number <input v-model="group.number" type="number" required /></label>
+        <label>P/NP/ALL <input v-model="group.pnp" required /></label>
+        <label>Capacity <input v-model="group.capacity" type="number" required /></label>
+        <label>Start <input v-model="group.start_hr" required /></label>
+        <label>End <input v-model="group.end_time" required /></label>
+        <label>
+          Subject
+          <select v-model="group.subject_code" required>
+            <option value="" disabled>Select subject</option>
+            <option v-for="su in subjects" :key="su.code" :value="su.code">
+              {{ su.code }} {{ su.name }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Cycle
+          <select v-model="group.cycle_id" required>
+            <option value="" disabled>Select cycle</option>
+            <option v-for="c in cycles" :key="c.id" :value="c.id">
+              {{ cycleLabel(c) }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Room
+          <select v-model="group.room_id" required>
+            <option value="" disabled>Select room</option>
+            <option v-for="r in rooms" :key="r.id" :value="r.id">
+              {{ roomLabel(r) }}
+            </option>
+          </select>
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="groupApi.loading">Create</button>
       </form>
       <ApiMessages :error="groupApi.error" :api-message="groupApi.apiMessage" />
-      <JsonPreview :data="groupApi.result" />
+      <p v-if="groupApi.result?.id && !groupApi.apiMessage" class="admin-ok">Id {{ groupApi.result.id }}</p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/groups/teachers</h2>
-      <form
-        class="form"
-        @submit.prevent="assignTeacherApi.run(() => admin.assignTeacherToGroup(assign))"
-      >
-        <input v-model="assign.teacher_idx" placeholder="teacher_idx" required />
-        <input v-model="assign.group_id" placeholder="group_id" required />
-        <button type="submit" :disabled="assignTeacherApi.loading">Assign</button>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Assign teacher to group</h2>
+      <form class="admin-form" @submit.prevent="create(assignTeacherApi, () => admin.assignTeacherToGroup(assign))">
+        <label>
+          Teacher
+          <select v-model="assign.teacher_idx" required>
+            <option value="" disabled>Select teacher</option>
+            <option v-for="t in teachers" :key="t.idx" :value="t.idx">
+              {{ teacherLabel(t) }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Group
+          <select v-model="assign.group_id" required>
+            <option value="" disabled>Select group</option>
+            <option v-for="g in groups" :key="g.id" :value="g.id">
+              {{ g.label }}
+            </option>
+          </select>
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="assignTeacherApi.loading">Assign</button>
       </form>
       <ApiMessages :error="assignTeacherApi.error" :api-message="assignTeacherApi.apiMessage" />
-      <JsonPreview :data="assignTeacherApi.result" />
+      <p v-if="assignTeacherApi.result && !assignTeacherApi.apiMessage && !assignTeacherApi.error" class="admin-ok">
+        {{ assignTeacherApi.result.teacher_idx }} teaches {{ assignTeacherApi.result.group_id }}
+      </p>
     </section>
   </div>
 </template>
-
-<style scoped>
-.block {
-  margin-bottom: 2rem;
-}
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-width: 24rem;
-}
-.block h2 {
-  font-size: 1rem;
-}
-</style>

@@ -1,10 +1,22 @@
-### (admin | teacher) Student detail
+# Teacher endpoints
+
+See `user_endpoints.md` for conventions. Admins can use every endpoint here without restrictions. Teachers are limited to their own groups and the students in them. `$teacher_idx` is the caller's own idx, taken from the token.
+
+---
+
+## POST /students/detail
+
+**Allowed:** Admin; Teacher, only for students registered in one of their groups (403 otherwise)
+
+**Request**
 
 ```json
 {
 	"student_idx": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -13,32 +25,30 @@
 	"surname": String,
 	"phone": String,
 	"photo": String?,
-	"joined": ZonedDateTime,
+	"joined": DateTime,
 	"avg_grade": Float?,
 	"term_ids": List[String],
 	"err": String?
 }
 ```
 
-```cypher
-MATCH (st:Student {idx: $student_idx})
-OPTIONAL MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm)
-OPTIONAL CALL (st) {
-  MATCH (st)-[:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
-  WITH DISTINCT st, su
-  MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
-  OPTIONAL MATCH (st)-[rg:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(gt)
-  WHERE rg.grade IS NOT NULL
-  WITH su, gt, avg(rg.grade) AS type_grade
-  WITH su, collect({weight: gt.weight, grade: type_grade}) AS parts
-  WHERE size(parts) > 0 AND all(part IN parts WHERE part.grade IS NOT NULL)
-  WITH su.ects AS ects,
-    reduce(total = 0.0, part IN parts | total + part.grade * part.weight)
-      / reduce(total = 0.0, part IN parts | total + part.weight) AS subject_grade
-  WITH sum(subject_grade * ects) AS weighted, sum(ects) AS ects_total
-  RETURN CASE WHEN ects_total = 0 THEN null ELSE weighted / ects_total END AS avg_grade
-}
+`avg_grade` is computed by the server (`average_grade` in `app/graph_backend/grades.py`) from the rows of query 3:
 
+- An attempt is one subject in one cycle the student had groups in.
+- An attempt is complete when every group type of the subject has a grade. Several graded groups of the same type are averaged.
+- The attempt grade is the weighted average of its group-type grades, using the group-type weights.
+- Each subject uses its latest complete attempt, so a passed retake replaces the earlier failed attempt.
+- `avg_grade` is the ECTS-weighted average of those subject grades. It is null when no subject has a complete attempt.
+
+**Query**
+
+```cypher
+// 1. Access check (teachers only)
+MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(:Group)<-[:REGISTERED_IN]-(st:Student {idx: $student_idx})
+RETURN st.idx AS idx
+
+// 2. Profile and terms
+MATCH (st:Student {idx: $student_idx})
 RETURN
   st.idx AS idx,
   st.name AS name,
@@ -46,13 +56,95 @@ RETURN
   st.phone AS phone,
   st.photo AS photo,
   st.joined AS joined,
-  avg_grade,
-  collect(DISTINCT ct.id) AS term_ids
+  COLLECT { MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm) RETURN ct.id } AS term_ids
+
+// 3. Grade rows: every group type of every subject attempt, with the grade if any
+MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(attended:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (attended)-[:IN_CYCLE]->(ac:AcademicCycle)
+WITH DISTINCT st, su, ac
+MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
+OPTIONAL MATCH (st)-[r:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt)
+WHERE (g)-[:IN_CYCLE]->(ac)
+RETURN
+  su.code AS subject,
+  su.ects AS ects,
+  ac.year AS year,
+  ac.season AS season,
+  gt.id AS type,
+  gt.weight AS weight,
+  r.grade AS grade
 ```
 
-`REGISTERED_IN.grade` is the mark for that group. `avg_grade` is the ECTS-weighted mean of completed subject grades. A subject grade weights each group-type mark by `GroupType.weight`.
+---
 
-### (admin | teacher) List Students in Group
+## GET /me/groups
+
+**Allowed:** Teacher (own groups); Admin (any teacher's groups, `teacher_idx` required)
+
+**Request**
+
+Query string:
+
+```json
+{
+	"teacher_idx": String?
+}
+```
+
+`teacher_idx` is only used for admins. Teachers always get their own groups.
+
+**Response**
+
+```json
+{
+	"groups": List[TeachingGroup]
+
+	TeachingGroup = {
+		"group_id": String,
+		"course_code": String,
+		"course_name": String,
+		"g_type": String,
+		"group_num": Integer,
+		"academic_cycle": String,
+		"room": String,
+		"weekday": Integer,
+		"start": Time?,
+		"end": Time?,
+		"pnp": String
+	}
+}
+```
+
+**Query**
+
+```cypher
+MATCH (t:Teacher {idx: $idx})-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+OPTIONAL MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
+OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+RETURN
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type AS g_type,
+  g.number AS group_num,
+  g.weekday AS weekday,
+  g.start_hr AS start,
+  g.end_time AS end,
+  g.pnp AS pnp,
+  ac.year AS cycle_year,
+  ac.season AS cycle_season,
+  r.building AS building,
+  r.room_num AS room_num
+ORDER BY ac.year DESC, ac.season, su.name, gt.g_type, g.number
+```
+
+---
+
+## POST /groups/students
+
+**Allowed:** Admin; Teacher, only for groups they teach (403 otherwise)
+
+**Request**
 
 ```json
 {
@@ -60,26 +152,34 @@ RETURN
 }
 ```
 
-```json 
+**Response**
+
+```json
 {
-	students: List[Student]
-	
-	Student = {
+	"students": List[StudentInGroup]
+
+	StudentInGroup = {
 		"idx": String,
 		"name": String,
 		"surname": String,
 		"phone": String,
 		"photo": String?,
-		"joined": ZonedDateTime,
+		"joined": DateTime,
 		"grade": Float?
 	}
 }
 ```
 
+**Query**
+
 ```cypher
+// 1. Access check (teachers only)
+MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g:Group {id: $group_id})
+RETURN g.id AS id
+
+// 2. Students in the group
 MATCH (g:Group {id: $group_id})
 MATCH (st:Student)-[r:REGISTERED_IN]->(g)
-
 RETURN
   st.idx AS idx,
   st.name AS name,
@@ -88,11 +188,16 @@ RETURN
   st.photo AS photo,
   st.joined AS joined,
   r.grade AS grade
-
 ORDER BY st.surname, st.name
 ```
 
-### (admin | teacher) Set group grade
+---
+
+## POST /groups/students/grade
+
+**Allowed:** Admin; Teacher, only for groups they teach (403 otherwise)
+
+**Request**
 
 ```json
 {
@@ -101,6 +206,8 @@ ORDER BY st.surname, st.name
 	"grade": Float
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -111,10 +218,15 @@ ORDER BY st.surname, st.name
 }
 ```
 
+**Query**
+
 ```cypher
+// 1. Access check (teachers only)
+MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g:Group {id: $group_id})
+RETURN g.id AS id
+
+// 2. Set the grade
 MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
 SET r.grade = $grade
 RETURN g.id AS group_id, st.idx AS student_idx, r.grade AS grade
 ```
-
-Teacher callers must teach the group; admin may grade any group. This writes `REGISTERED_IN.grade` for that student in that group. The subject grade multiplies it by the weight of the group's `GroupType`.

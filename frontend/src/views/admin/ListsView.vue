@@ -1,74 +1,84 @@
 <script setup>
+import { onMounted } from 'vue'
 import { admin } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
 import ApiMessages from '../../components/ApiMessages.vue'
-import JsonPreview from '../../components/JsonPreview.vue'
 
-const faculties = useApiCall()
-const programmes = useApiCall()
-const rooms = useApiCall()
-const cycles = useApiCall()
+const lists = [
+  {
+    title: 'Faculties',
+    key: 'faculties',
+    load: admin.listFaculties,
+    columns: [
+      ['Id', 'id'],
+      ['Name', 'name'],
+      ['Full name', 'full_name'],
+    ],
+  },
+  {
+    title: 'Programmes',
+    key: 'programmes',
+    load: admin.listProgrammes,
+    columns: [
+      ['Id', 'id'],
+      ['Name', 'name'],
+      ['Faculty', 'faculty_id'],
+    ],
+  },
+  {
+    title: 'Rooms',
+    key: 'rooms',
+    load: admin.listRooms,
+    columns: [
+      ['Id', 'id'],
+      ['Building', 'building'],
+      ['Room', 'room_num'],
+    ],
+  },
+  {
+    title: 'Academic cycles',
+    key: 'cycles',
+    load: admin.listAcademicCycles,
+    columns: [
+      ['Id', 'id'],
+      ['Year', 'year'],
+      ['Season', 'season'],
+    ],
+  },
+].map((list) => ({ ...list, api: useApiCall() }))
 
 function loadAll() {
-  faculties.run(() => admin.listFaculties())
-  programmes.run(() => admin.listProgrammes())
-  rooms.run(() => admin.listRooms())
-  cycles.run(() => admin.listAcademicCycles())
+  for (const list of lists) list.api.run(list.load)
 }
+
+onMounted(loadAll)
 </script>
 
 <template>
   <div>
-    <h1>Admin lists</h1>
-    <button type="button" @click="loadAll">Load all GET lists</button>
+    <div class="page-toolbar">
+      <h1 class="teacher-page-title">Reference lists</h1>
+      <button type="button" class="teacher-btn-secondary" @click="loadAll">Refresh</button>
+    </div>
 
-    <section class="block">
-      <h2>GET /organizational-units</h2>
-      <button type="button" :disabled="faculties.loading" @click="faculties.run(() => admin.listFaculties())">
-        Load
-      </button>
-      <ApiMessages :error="faculties.error" :api-message="faculties.apiMessage" />
-      <JsonPreview :data="faculties.result" />
-    </section>
-
-    <section class="block">
-      <h2>GET /admin/programmes</h2>
-      <button type="button" :disabled="programmes.loading" @click="programmes.run(() => admin.listProgrammes())">
-        Load
-      </button>
-      <ApiMessages :error="programmes.error" :api-message="programmes.apiMessage" />
-      <JsonPreview :data="programmes.result" />
-    </section>
-
-    <section class="block">
-      <h2>GET /admin/rooms</h2>
-      <button type="button" :disabled="rooms.loading" @click="rooms.run(() => admin.listRooms())">
-        Load
-      </button>
-      <ApiMessages :error="rooms.error" :api-message="rooms.apiMessage" />
-      <JsonPreview :data="rooms.result" />
-    </section>
-
-    <section class="block">
-      <h2>GET /admin/academic-cycles</h2>
-      <button
-        type="button"
-        :disabled="cycles.loading"
-        @click="cycles.run(() => admin.listAcademicCycles())"
-      >
-        Load
-      </button>
-      <ApiMessages :error="cycles.error" :api-message="cycles.apiMessage" />
-      <JsonPreview :data="cycles.result" />
+    <section v-for="list in lists" :key="list.key" class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">{{ list.title }}</h2>
+      <ApiMessages :error="list.api.error" :api-message="list.api.apiMessage" />
+      <table v-if="list.api.result?.[list.key]?.length" class="teacher-groups-table">
+        <thead>
+          <tr>
+            <th v-for="[label] in list.columns" :key="label">{{ label }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in list.api.result[list.key]" :key="row.id">
+            <td v-for="[label, field] in list.columns" :key="label">{{ row[field] }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else-if="list.api.result && !list.api.loading" class="admin-ok">
+        No {{ list.title.toLowerCase() }}.
+      </p>
     </section>
   </div>
 </template>
-
-<style scoped>
-.block {
-  margin-top: 1.5rem;
-}
-.block h2 {
-  font-size: 1rem;
-}
-</style>

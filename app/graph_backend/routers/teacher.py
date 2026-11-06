@@ -3,6 +3,7 @@ from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
+from app.graph_backend.grades import average_grade
 from app.graph_backend.query import one, run
 from app.schemas.student import (
     SetGroupGradeRequest,
@@ -13,28 +14,24 @@ from app.schemas.student import (
     StudentsInGroupRequest,
     StudentsInGroupResponse,
 )
+from app.graph_backend.teaching import teacher_groups
+from app.schemas.teacher import MyTeachingGroupsResponse
 
 router = APIRouter(tags=["teacher"])
 _staff = require("Teacher", "Admin")
 
+
+def _resolve_teacher_idx(caller: Caller, teacher_idx: str | None) -> str:
+    if "Admin" in caller.roles and teacher_idx:
+        return teacher_idx
+    if "Teacher" in caller.roles and caller.idx:
+        return caller.idx
+    if "Admin" in caller.roles:
+        raise HTTPException(status_code=400, detail="teacher_idx is required")
+    raise HTTPException(status_code=403, detail="Forbidden")
+
 _STUDENT = """
 MATCH (st:Student {idx: $student_idx})
-OPTIONAL MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm)
-OPTIONAL CALL (st) {
-  MATCH (st)-[:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
-  WITH DISTINCT st, su
-  MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
-  OPTIONAL MATCH (st)-[rg:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(gt)
-  WHERE rg.grade IS NOT NULL
-  WITH su, gt, avg(rg.grade) AS type_grade
-  WITH su, collect({weight: gt.weight, grade: type_grade}) AS parts
-  WHERE size(parts) > 0 AND all(part IN parts WHERE part.grade IS NOT NULL)
-  WITH su.ects AS ects,
-    reduce(total = 0.0, part IN parts | total + part.grade * part.weight)
-      / reduce(total = 0.0, part IN parts | total + part.weight) AS subject_grade
-  WITH sum(subject_grade * ects) AS weighted, sum(ects) AS ects_total
-  RETURN CASE WHEN ects_total = 0 THEN null ELSE weighted / ects_total END AS avg_grade
-}
 RETURN
   st.idx AS idx,
   st.name AS name,
@@ -42,8 +39,24 @@ RETURN
   st.phone AS phone,
   st.photo AS photo,
   st.joined AS joined,
-  avg_grade,
-  collect(DISTINCT ct.id) AS term_ids
+  COLLECT { MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm) RETURN ct.id } AS term_ids
+"""
+
+_STUDENT_GRADES = """
+MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(attended:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (attended)-[:IN_CYCLE]->(ac:AcademicCycle)
+WITH DISTINCT st, su, ac
+MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
+OPTIONAL MATCH (st)-[r:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt)
+WHERE (g)-[:IN_CYCLE]->(ac)
+RETURN
+  su.code AS subject,
+  su.ects AS ects,
+  ac.year AS year,
+  ac.season AS season,
+  gt.id AS type,
+  gt.weight AS weight,
+  r.grade AS grade
 """
 
 
@@ -75,8 +88,18 @@ async def student_detail(
             joined="1970-01-01T00:00:00+00:00",
             err="Student not found",
         )
-    row["term_ids"] = [item for item in row["term_ids"] if item is not None]
-    return StudentDetailResponse(**row)
+    grade_rows = await run(session, _STUDENT_GRADES, student_idx=body.student_idx)
+    return StudentDetailResponse(**row, avg_grade=average_grade(grade_rows))
+
+
+@router.get("/me/groups", response_model=MyTeachingGroupsResponse)
+async def my_teaching_groups(
+    teacher_idx: str | None = None,
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_staff),
+) -> MyTeachingGroupsResponse:
+    idx = _resolve_teacher_idx(caller, teacher_idx)
+    return MyTeachingGroupsResponse(groups=await teacher_groups(session, idx))
 
 
 @router.post("/groups/students", response_model=StudentsInGroupResponse)

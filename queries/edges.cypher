@@ -14,13 +14,6 @@ MATCH (c:Curriculum {id: csrow.curriculum_id})-[:HAS_TERM]->(ct:CurriculumTerm {
 MATCH (su:Subject {code: csrow.subject_code})
 MERGE (ct)-[:INCLUDES]->(su);
 
-LOAD CSV WITH HEADERS FROM "file:///nodes/subject_instances.csv" AS sirow
-MATCH (si:SubjectInstance {id: sirow.id})
-MATCH (su:Subject {code: sirow.subject_code})
-MATCH (ac:AcademicCycle {id: sirow.cycle_id})
-MERGE (si)-[:INSTANCE_OF]->(su)
-MERGE (si)-[:OFFERED_IN]->(ac);
-
 LOAD CSV WITH HEADERS FROM "file:///nodes/curriculums.csv" AS curow
 MATCH (p:Programme {id: curow.programme_id})
 MATCH (c:Curriculum {id: curow.id})
@@ -46,10 +39,10 @@ MATCH (g:Group {id: grow.id})
 MATCH (gt:GroupType {id: grow.group_type_id})
 MERGE (g)-[:OF_TYPE]->(gt);
 
-LOAD CSV WITH HEADERS FROM "file:///edges/instance_groups.csv" AS igrow
-MATCH (si:SubjectInstance {id: igrow.instance_id})
-MATCH (g:Group {id: igrow.group_id})
-MERGE (si)-[:HAS_GROUP]->(g);
+LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS grow
+MATCH (g:Group {id: grow.id})
+MATCH (ac:AcademicCycle {id: grow.cycle_id})
+MERGE (g)-[:IN_CYCLE]->(ac);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/teacher_group.csv" AS row
 MATCH (t:Teacher {idx: row.teacher_idx})
@@ -94,9 +87,8 @@ MERGE (reg)-[:HAS_TURN]->(rt);
 LOAD CSV WITH HEADERS FROM "file:///edges/registration_groups.csv" AS rgrow
 MATCH (reg:Registration {id: rgrow.registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
 MATCH (reg)-[:FOR_FACULTY]->(fa:Faculty)
-MATCH (g:Group {id: rgrow.group_id})<-[:HAS_GROUP]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
-MATCH (si)-[:INSTANCE_OF]->(su:Subject)
-MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su)
+MATCH (g:Group {id: rgrow.group_id})-[:IN_CYCLE]->(ac)
+MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
 MATCH (ct:CurriculumTerm)-[:INCLUDES]->(su)
 MATCH (ct)-[:TAUGHT_IN]->(ac)
 MATCH (ct)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa)

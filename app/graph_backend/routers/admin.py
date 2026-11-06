@@ -1,5 +1,4 @@
 from datetime import datetime, time
-import uuid
 
 from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
@@ -13,6 +12,16 @@ from app.schemas.academic_cycle import (
     AcademicCycleCreateResponse,
     AcademicCycleListResponse,
     MyAcademicCycleItem,
+)
+from app.schemas.admin_lists import (
+    AdminCurriculumItem,
+    AdminCurriculumListResponse,
+    AdminGroupItem,
+    AdminGroupListResponse,
+    AdminTeacherItem,
+    AdminTeacherListResponse,
+    SubjectListItem,
+    SubjectListResponse,
 )
 from app.schemas.auth import (
     AddRoleRequest,
@@ -44,10 +53,6 @@ from app.schemas.registration import StartRegistrationsRequest, StartRegistratio
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomItem, RoomListResponse
 from app.schemas.student import StudentCreateRequest, StudentCreateResponse
 from app.schemas.subject import SubjectCreateRequest, SubjectCreateResponse
-from app.schemas.subject_instance import (
-    SubjectInstanceCreateRequest,
-    SubjectInstanceCreateResponse,
-)
 from app.schemas.teacher import TeacherCreateRequest, TeacherCreateResponse
 
 from app.graph_backend.errors import db_err
@@ -140,12 +145,41 @@ async def create_student(
     caller=Depends(_admin),
 ) -> StudentCreateResponse:
     idx = await _student_idx(session)
+
+    def failed(err: str) -> StudentCreateResponse:
+        return StudentCreateResponse(
+            idx=idx, name=body.name, surname=body.surname, phone=body.phone,
+            photo=body.photo, joined=body.joined, err=err,
+        )
+
     try:
+        programme = await one(
+            session,
+            """
+            MATCH (p:Programme {id: $programme})
+            RETURN
+              COUNT { (p)-[:HAS_CURRICULUM]->(:Curriculum) } AS curricula,
+              COLLECT {
+                MATCH (p)-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm)
+                WHERE ($term_id IS NULL AND ct.sem = 1) OR ct.id = $term_id
+                RETURN ct.id ORDER BY c.intake_year DESC
+              } AS terms
+            """,
+            programme=body.programme,
+            term_id=body.term_id,
+        )
+        if programme is None:
+            return failed("Programme not found")
+        if programme["curricula"] == 0:
+            return failed("Programme has no curriculum")
+        if not programme["terms"]:
+            if body.term_id:
+                return failed("Term does not belong to this programme")
+            return failed("Programme has no first semester")
         row = await one(
             session,
             """
-            MATCH (p:Programme {id: $programme})-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm {sem: 1})
-            WITH ct, c ORDER BY c.intake_year DESC LIMIT 1
+            MATCH (ct:CurriculumTerm {id: $term_id})
             CREATE (st:Student:Person {
               idx: $idx, name: $name, surname: $surname, phone: $phone,
               joined: datetime($joined), photo: $photo
@@ -154,7 +188,7 @@ async def create_student(
             RETURN st.idx AS idx, st.name AS name, st.surname AS surname,
                    st.phone AS phone, st.photo AS photo, st.joined AS joined
             """,
-            programme=body.programme,
+            term_id=programme["terms"][0],
             idx=idx,
             name=body.name,
             surname=body.surname,
@@ -163,15 +197,9 @@ async def create_student(
             photo=body.photo,
         )
     except Neo4jError as exc:
-        return StudentCreateResponse(
-            idx=idx, name=body.name, surname=body.surname, phone=body.phone,
-            photo=body.photo, joined=body.joined, err=db_err(exc),
-        )
+        return failed(db_err(exc))
     if row is None:
-        return StudentCreateResponse(
-            idx=idx, name=body.name, surname=body.surname, phone=body.phone,
-            photo=body.photo, joined=body.joined, err="Programme has no first semester",
-        )
+        return failed("Term not found")
     return StudentCreateResponse(**row)
 
 
@@ -439,21 +467,22 @@ async def create_group(
         row = await one(
             session,
             """
-            MATCH (si:SubjectInstance {id: $instance_id})-[:INSTANCE_OF]->(su:Subject)
-            MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
-            MATCH (su)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+            MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+            MATCH (ac:AcademicCycle {id: $cycle_id})
+            WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
             MATCH (r:Room {id: $room_id})
             CREATE (g:Group {
               id: $id, weekday: $weekday, number: $number, pnp: $pnp,
               capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
             })-[:OF_TYPE]->(gt),
             (g)-[:IN_ROOM]->(r),
-            (si)-[:HAS_GROUP]->(g)
+            (g)-[:IN_CYCLE]->(ac)
             RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
                    g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
-                   si.id AS instance_id, su.code AS subject_code, r.id AS room_id
+                   su.code AS subject_code, ac.id AS cycle_id, r.id AS room_id
             """,
-            instance_id=body.instance_id,
+            subject_code=body.subject_code,
+            cycle_id=body.cycle_id,
             room_id=body.room_id,
             id=group_id,
             weekday=body.weekday,
@@ -468,14 +497,15 @@ async def create_group(
         return GroupCreateResponse(
             id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
             pnp=body.pnp, capacity=body.capacity, start_hr=body.start_hr, end_time=body.end_time,
-            instance_id=body.instance_id, subject_code="", room_id=body.room_id, err=db_err(exc),
+            subject_code=body.subject_code, cycle_id=body.cycle_id, room_id=body.room_id,
+            err=db_err(exc),
         )
     if row is None:
         return GroupCreateResponse(
             id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
             pnp=body.pnp, capacity=body.capacity, start_hr=body.start_hr, end_time=body.end_time,
-            instance_id=body.instance_id, subject_code="", room_id=body.room_id,
-            err="Group type, instance, or room not found",
+            subject_code=body.subject_code, cycle_id=body.cycle_id, room_id=body.room_id,
+            err="Group type, cycle, or room not found, or subject is not taught in this cycle",
         )
     return GroupCreateResponse(**row)
 
@@ -585,54 +615,6 @@ async def create_subject(
     except Neo4jError as exc:
         return SubjectCreateResponse(code=body.code, name=body.name, ects=body.ects, err=db_err(exc))
     return SubjectCreateResponse(**row)
-
-
-@router.post("/subject-instances", response_model=SubjectInstanceCreateResponse)
-async def create_subject_instance(
-    body: SubjectInstanceCreateRequest,
-    session: AsyncSession = Depends(get_session),
-    caller=Depends(_admin),
-) -> SubjectInstanceCreateResponse:
-    instance_key = str(
-        uuid.uuid5(
-            uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
-            f"{body.subject_code}:{body.cycle_id}",
-        )
-    )
-    try:
-        row = await one(
-            session,
-            """
-            MATCH (su:Subject {code: $subject_code})
-            MATCH (ac:AcademicCycle {id: $cycle_id})
-            MERGE (si:SubjectInstance {id: $id})
-            SET si.catalogue_code = $catalogue_code
-            MERGE (si)-[:INSTANCE_OF]->(su)
-            MERGE (si)-[:OFFERED_IN]->(ac)
-            RETURN si.id AS id, su.code AS subject_code, ac.id AS cycle_id, si.catalogue_code AS catalogue_code
-            """,
-            subject_code=body.subject_code,
-            cycle_id=body.cycle_id,
-            id=instance_key,
-            catalogue_code=body.catalogue_code or "",
-        )
-    except Neo4jError as exc:
-        return SubjectInstanceCreateResponse(
-            id=instance_key,
-            subject_code=body.subject_code,
-            cycle_id=body.cycle_id,
-            catalogue_code=body.catalogue_code,
-            err=db_err(exc),
-        )
-    if row is None:
-        return SubjectInstanceCreateResponse(
-            id=instance_key,
-            subject_code=body.subject_code,
-            cycle_id=body.cycle_id,
-            catalogue_code=body.catalogue_code,
-            err="Subject or academic cycle not found",
-        )
-    return SubjectInstanceCreateResponse(**row)
 
 
 @router.post("/curriculum-terms", response_model=CurriculumTermCreateResponse)
@@ -762,44 +744,51 @@ async def start_registrations(
         if created is None:
             await tx.rollback()
             return StartRegistrationsResponse(err="Cycle or faculty not found")
-        for turn in body.turns:
-            turn_id = await next_id(session, "RegistrationTurn")
-            written = await tx_one(
-                tx,
-                """
-                MATCH (reg:Registration {id: $registration_id})
-                CREATE (rt:RegistrationTurn {
-                  id: $turn_id, turn_number: $turn_number, date: date($date),
-                  start_hr: time($start), end_time: time($end)
-                })
-                CREATE (reg)-[:HAS_TURN]->(rt)
-                RETURN rt.id AS id
-                """,
-                registration_id=registration_id,
-                turn_id=turn_id,
-                turn_number=turn.turn_number,
-                date=turn.date.isoformat(),
-                start=_zoned_time(turn.start),
-                end=_zoned_time(turn.end),
-            )
-            if written is None:
-                await tx.rollback()
-                return StartRegistrationsResponse(err="Could not create a registration turn")
-        for group_id in body.group_ids:
-            opened = await tx_one(
-                tx,
-                """
-                MATCH (reg:Registration {id: $registration_id})
-                MATCH (g:Group {id: $group_id})
-                MERGE (reg)-[:OPENS]->(g)
-                RETURN g.id AS id
-                """,
-                registration_id=registration_id,
-                group_id=group_id,
-            )
-            if opened is None:
-                await tx.rollback()
-                return StartRegistrationsResponse(err=f"Group {group_id} not found")
+        turns = [
+            {
+                "id": await next_id(session, "RegistrationTurn"),
+                "turn_number": turn.turn_number,
+                "date": turn.date.isoformat(),
+                "start": _zoned_time(turn.start),
+                "end": _zoned_time(turn.end),
+            }
+            for turn in body.turns
+        ]
+        written = await tx_one(
+            tx,
+            """
+            MATCH (reg:Registration {id: $registration_id})
+            UNWIND $turns AS turn
+            CREATE (rt:RegistrationTurn {
+              id: turn.id, turn_number: turn.turn_number, date: date(turn.date),
+              start_hr: time(turn.start), end_time: time(turn.end)
+            })
+            CREATE (reg)-[:HAS_TURN]->(rt)
+            RETURN count(rt) AS created
+            """,
+            registration_id=registration_id,
+            turns=turns,
+        )
+        if written["created"] != len(turns):
+            await tx.rollback()
+            return StartRegistrationsResponse(err="Could not create the registration turns")
+        opened = await tx_one(
+            tx,
+            """
+            MATCH (reg:Registration {id: $registration_id})
+            UNWIND $group_ids AS group_id
+            MATCH (g:Group {id: group_id})
+            MERGE (reg)-[:OPENS]->(g)
+            RETURN collect(g.id) AS found
+            """,
+            registration_id=registration_id,
+            group_ids=body.group_ids,
+        )
+        found = set(opened["found"])
+        missing = [gid for gid in body.group_ids if gid not in found]
+        if missing:
+            await tx.rollback()
+            return StartRegistrationsResponse(err=f"Groups not found: {', '.join(missing)}")
         await tx.commit()
     except Neo4jError as exc:
         await tx.rollback()
@@ -856,3 +845,72 @@ async def list_cycles(
         "MATCH (ac:AcademicCycle) RETURN ac.id AS id, ac.year AS year, ac.season AS season ORDER BY ac.year, ac.season",
     )
     return AcademicCycleListResponse(cycles=[MyAcademicCycleItem(**row) for row in rows])
+
+
+@router.get("/subjects", response_model=SubjectListResponse)
+async def list_subjects(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> SubjectListResponse:
+    rows = await run(
+        session,
+        "MATCH (su:Subject) RETURN su.code AS code, su.name AS name ORDER BY su.code",
+    )
+    return SubjectListResponse(subjects=[SubjectListItem(**row) for row in rows])
+
+
+@router.get("/curricula", response_model=AdminCurriculumListResponse)
+async def list_curricula(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AdminCurriculumListResponse:
+    rows = await run(
+        session,
+        """
+        MATCH (c:Curriculum)<-[:HAS_CURRICULUM]-(p:Programme)
+        RETURN c.id AS id, p.name AS programme_name, c.intake_year AS intake_year
+        ORDER BY p.name, c.intake_year DESC
+        """,
+    )
+    return AdminCurriculumListResponse(curricula=[AdminCurriculumItem(**row) for row in rows])
+
+
+@router.get("/teachers", response_model=AdminTeacherListResponse)
+async def list_teachers(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AdminTeacherListResponse:
+    rows = await run(
+        session,
+        """
+        MATCH (t:Teacher)
+        RETURN t.idx AS idx, t.name AS name, t.surname AS surname
+        ORDER BY t.surname, t.name
+        """,
+    )
+    return AdminTeacherListResponse(teachers=[AdminTeacherItem(**row) for row in rows])
+
+
+@router.get("/groups", response_model=AdminGroupListResponse)
+async def list_groups(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AdminGroupListResponse:
+    rows = await run(
+        session,
+        """
+        MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        RETURN
+          g.id AS id,
+          su.code AS course_code,
+          gt.g_type AS g_type,
+          g.number AS number,
+          g.weekday AS weekday
+        ORDER BY su.code, gt.g_type, g.number
+        """,
+    )
+    groups = []
+    for row in rows:
+        label = f"{row['course_code']} {row['g_type']} #{row['number']} (day {row['weekday']})"
+        groups.append(AdminGroupItem(id=row["id"], label=label))
+    return AdminGroupListResponse(groups=groups)

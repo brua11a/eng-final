@@ -18,7 +18,13 @@ function isActive(tab) {
   return route.path.startsWith(tab.path)
 }
 
-const wideLayout = computed(() => route.path.startsWith('/catalogue'))
+const wideLayout = computed(
+  () =>
+    route.path.startsWith('/catalogue') ||
+    route.path.startsWith('/teacher') ||
+    route.path.startsWith('/student') ||
+    route.path.startsWith('/admin'),
+)
 </script>
 
 <template>
@@ -26,7 +32,7 @@ const wideLayout = computed(() => route.path.startsWith('/catalogue'))
     <header class="header">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true" />
-        Politechnika — catalogue
+        miniusos
       </div>
       <nav v-if="auth.isLoggedIn" class="tabs">
         <RouterLink

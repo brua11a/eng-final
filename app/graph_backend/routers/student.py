@@ -9,6 +9,8 @@ from app.graph_backend.auth import Caller, require
 from app.graph_backend.errors import db_err
 from app.graph_backend.query import next_id, one, run
 from app.schemas.academic_cycle import (
+    CycleSubject,
+    CycleSubjectGroup,
     MyAcademicCycleDetailRequest,
     MyAcademicCycleDetailResponse,
     MyAcademicCycleItem,
@@ -19,6 +21,8 @@ from app.schemas.opinion import OpinionCreateRequest, OpinionCreateResponse
 from app.schemas.registration import (
     ClassInfo,
     CourseInRegistration,
+    DeregisterFromGroupRequest,
+    DeregisterFromGroupResponse,
     Enrolment,
     MyEnrolmentsResponse,
     OpenGroup,
@@ -46,6 +50,35 @@ _opinion_roles = require("Student", "Admin")
 _CAN_USE_REGISTRATION = """
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
 RETURN reg.id AS id
+"""
+
+
+# Rewriting capacity takes a write lock on the group, so concurrent registrations
+# for the same group see each other's writes before the capacity check.
+_REGISTER = """
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
+MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
+WITH DISTINCT st, g, gt, ac
+SET g.capacity = g.capacity
+WITH st, g,
+  EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
+  EXISTS {
+    MATCH (st)-[:REGISTERED_IN]->(other:Group)-[:OF_TYPE]->(gt)
+    WHERE other <> g AND (other)-[:IN_CYCLE]->(ac)
+  } AS conflict,
+  COUNT { (g)<-[:REGISTERED_IN]-(:Student) } >= g.capacity AS full
+WITH st, g, CASE
+  WHEN already THEN "ok"
+  WHEN conflict THEN "conflict"
+  WHEN full THEN "full"
+  ELSE "ok"
+END AS status
+FOREACH (_ IN CASE WHEN status = "ok" THEN [1] ELSE [] END |
+  MERGE (st)-[r:REGISTERED_IN]->(g)
+    ON CREATE SET r.registered_at = datetime()
+)
+RETURN status
 """
 
 
@@ -99,11 +132,9 @@ async def show_courses(
         session,
         """
         MATCH (reg:Registration {id: $registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
-        MATCH (reg)-[:OPENS]->(g:Group)<-[:HAS_GROUP]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
-        MATCH (si)-[:OFFERED_IN]->(ac)
-        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su)
+        MATCH (reg)-[:OPENS]->(g:Group)-[:IN_CYCLE]->(ac)
+        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
         RETURN
-          si.id AS instance_id,
           su.code AS subject_code,
           su.name AS subject_name,
           gt.g_type AS g_type,
@@ -115,7 +146,7 @@ async def show_courses(
     grouped: dict[str, CourseInRegistration] = {}
     counts: dict[str, dict[str, int]] = {}
     for row in rows:
-        iid = row["instance_id"]
+        iid = row["subject_code"]
         if iid not in grouped:
             grouped[iid] = CourseInRegistration(
                 id=iid,
@@ -141,8 +172,8 @@ async def show_groups(
         session,
         """
         MATCH (st:Student {idx: $student_idx})
-        MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)<-[:HAS_GROUP]-(si:SubjectInstance {id: $course_id})
-        MATCH (g)-[:OF_TYPE]->(gt:GroupType)
+        MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)
+        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
         OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)
@@ -162,7 +193,7 @@ async def show_groups(
         """,
         student_idx=caller.idx,
         registration_id=body.registration_id,
-        course_id=body.course_id,
+        subject_code=body.subject_code,
     )
     return OpenGroupsResponse(groups=[OpenGroup(**row) for row in rows])
 
@@ -173,21 +204,41 @@ async def register_to_group(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
 ) -> RegisterToGroupResponse:
+    row = await one(session, _REGISTER, student_idx=caller.idx, group_id=body.group_id, subject_code=body.subject_code)
+    if row is None:
+        return RegisterToGroupResponse(ok=False, err="Forbidden")
+    if row["status"] == "conflict":
+        return RegisterToGroupResponse(
+            ok=False,
+            err="You are already registered in another group of this type for this subject",
+        )
+    if row["status"] == "full":
+        return RegisterToGroupResponse(ok=False, err="Group is full")
+    return RegisterToGroupResponse(ok=True)
+
+
+@router.post("/me/registrations/deregister", response_model=DeregisterFromGroupResponse)
+async def deregister_from_group(
+    body: DeregisterFromGroupRequest,
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_student),
+) -> DeregisterFromGroupResponse:
     row = await one(
         session,
         """
-        MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})<-[:HAS_GROUP]-(si:SubjectInstance {id: $course_id})
-        MERGE (st)-[r:REGISTERED_IN]->(g)
-          ON CREATE SET r.registered_at = datetime()
+        MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
+        MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
+        MATCH (st)-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+        DELETE r
         RETURN g.id AS group_id
         """,
         student_idx=caller.idx,
         group_id=body.group_id,
-        course_id=body.course_id,
+        subject_code=body.subject_code,
     )
     if row is None:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return RegisterToGroupResponse(ok=True)
+        return DeregisterFromGroupResponse(ok=False, err="Not registered or registration closed")
+    return DeregisterFromGroupResponse(ok=True)
 
 
 @router.get("/me/enrolments", response_model=MyEnrolmentsResponse)
@@ -250,7 +301,68 @@ async def my_cycle_detail(
     )
     if row is None:
         raise HTTPException(status_code=403, detail="Forbidden")
-    return MyAcademicCycleDetailResponse(**row)
+
+    subject_rows = await run(
+        session,
+        """
+        MATCH (:Student {idx: $student_idx})-[:ENROLLED]->(ct:CurriculumTerm)-[:TAUGHT_IN]->(:AcademicCycle {id: $cycle_id})
+        MATCH (ct)-[:INCLUDES]->(su:Subject)
+        RETURN DISTINCT su.code AS code, su.name AS name, su.ects AS ects
+        """,
+        student_idx=caller.idx,
+        cycle_id=body.cycle_id,
+    )
+    group_rows = await run(
+        session,
+        """
+        MATCH (st:Student {idx: $student_idx})-[reg:REGISTERED_IN]->(g:Group)-[:IN_CYCLE]->(:AcademicCycle {id: $cycle_id})
+        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+        OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
+        RETURN
+          su.code AS code,
+          su.name AS name,
+          su.ects AS ects,
+          g.id AS id,
+          gt.g_type AS g_type,
+          g.number AS number,
+          g.weekday AS weekday,
+          g.start_hr AS start,
+          g.end_time AS end,
+          r.building + " " + r.room_num AS room,
+          t.name + " " + t.surname AS teacher,
+          reg.grade AS grade
+        ORDER BY su.name, gt.g_type, g.number
+        """,
+        student_idx=caller.idx,
+        cycle_id=body.cycle_id,
+    )
+
+    subjects: dict[str, CycleSubject] = {}
+    for s in subject_rows:
+        subjects[s["code"]] = CycleSubject(code=s["code"], name=s["name"], ects=s["ects"])
+    for g in group_rows:
+        subject = subjects.setdefault(
+            g["code"], CycleSubject(code=g["code"], name=g["name"], ects=g["ects"])
+        )
+        subject.groups.append(
+            CycleSubjectGroup(
+                id=g["id"],
+                g_type=g["g_type"],
+                number=g["number"],
+                weekday=g["weekday"],
+                start=g["start"],
+                end=g["end"],
+                room=g["room"],
+                teacher=g["teacher"],
+                grade=g["grade"],
+            )
+        )
+
+    return MyAcademicCycleDetailResponse(
+        **row,
+        subjects=sorted(subjects.values(), key=lambda s: s.name),
+    )
 
 
 @router.get("/me/dashboard", response_model=DashboardResponse)
@@ -263,9 +375,9 @@ async def dashboard(
         """
         MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-        OPTIONAL MATCH (reg:Registration)-[:OPENS]->(g)
-        OPTIONAL MATCH (reg)-[:FOR_CYCLE]->(ac:AcademicCycle)
+        OPTIONAL MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
         RETURN
+          g.id AS group_id,
           su.code AS course_code,
           su.name AS course_name,
           gt.g_type AS g_type,
@@ -273,6 +385,7 @@ async def dashboard(
           g.weekday AS weekday,
           g.start_hr AS start,
           g.end_time AS end,
+          g.pnp AS pnp,
           r.building + " " + r.room_num AS room,
           ac.year + " " + ac.season AS cycle
         """,

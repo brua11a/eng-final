@@ -43,7 +43,7 @@ class ShowCoursesInRegistrationResponse(BaseModel):
 
 
 class RegisterToGroupRequest(BaseModel):
-    course_id: str
+    subject_code: str
     group_id: str
 
 
@@ -51,9 +51,18 @@ class RegisterToGroupResponse(OkResponse):
     pass
 
 
+class DeregisterFromGroupRequest(BaseModel):
+    subject_code: str
+    group_id: str
+
+
+class DeregisterFromGroupResponse(OkResponse):
+    pass
+
+
 class OpenGroupsRequest(BaseModel):
     registration_id: str
-    course_id: str
+    subject_code: str
 
 
 class OpenGroup(BaseModel):

@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import { admin } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
 import ApiMessages from '../../components/ApiMessages.vue'
-import JsonPreview from '../../components/JsonPreview.vue'
 
 const assignApi = useApiCall()
 const deactivateApi = useApiCall()
@@ -18,7 +17,7 @@ const roleIdx = ref('')
 const role = ref('Student')
 const degree = ref('')
 const workingSince = ref('')
-const joined = ref(new Date().toISOString())
+const joined = ref(new Date().toISOString().slice(0, 10))
 
 function assignUser() {
   assignApi.run(() => admin.assignUser({ email: email.value, passwd: passwd.value, idx: idx.value }))
@@ -38,96 +37,118 @@ function addRole() {
     body.degree = degree.value
     body.working_since = workingSince.value
   }
-  if (role.value === 'Student') body.joined = joined.value
+  if (role.value === 'Student') body.joined = `${joined.value}T00:00:00`
   roleApi.run(() => admin.addRole(body))
 }
 
 function removeRole() {
   removeRoleApi.run(() => admin.removeRole({ idx: roleIdx.value, role: role.value }))
 }
+
+function rolesText(res) {
+  if (!res?.roles?.length) return ''
+  return res.roles.join(', ')
+}
 </script>
 
 <template>
   <div>
-    <h1>User accounts</h1>
+    <h1 class="teacher-page-title">User accounts</h1>
 
-    <section class="block">
-      <h2>POST /admin/users</h2>
-      <form class="form" @submit.prevent="assignUser">
-        <input v-model="email" placeholder="email" required />
-        <input v-model="passwd" placeholder="passwd" type="password" required />
-        <input v-model="idx" placeholder="idx (person)" required />
-        <button type="submit" :disabled="assignApi.loading">Assign user</button>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Assign login</h2>
+      <form class="admin-form" @submit.prevent="assignUser">
+        <label>
+          Email
+          <input v-model="email" type="email" required />
+        </label>
+        <label>
+          Password
+          <input v-model="passwd" type="password" required />
+        </label>
+        <label>
+          Person idx
+          <input v-model="idx" required />
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="assignApi.loading">Save</button>
       </form>
       <ApiMessages :error="assignApi.error" :api-message="assignApi.apiMessage" />
-      <JsonPreview :data="assignApi.result" />
+      <p v-if="assignApi.result && !assignApi.apiMessage" class="admin-ok">
+        {{ assignApi.result.email }}, roles: {{ rolesText(assignApi.result) || 'none' }}
+      </p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/users/deactivate & activate</h2>
-      <input v-model="idx" placeholder="idx" />
-      <div class="row">
-        <button type="button" :disabled="deactivateApi.loading" @click="deactivate">Deactivate</button>
-        <button type="button" :disabled="activateApi.loading" @click="activate">Activate</button>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Activate / deactivate</h2>
+      <div class="admin-form">
+        <label>
+          Person idx
+          <input v-model="idx" />
+        </label>
+        <div class="admin-form-row">
+          <button type="button" class="teacher-btn-secondary" :disabled="deactivateApi.loading" @click="deactivate">
+            Deactivate
+          </button>
+          <button type="button" class="teacher-btn-secondary" :disabled="activateApi.loading" @click="activate">
+            Activate
+          </button>
+        </div>
       </div>
       <ApiMessages :error="deactivateApi.error" :api-message="deactivateApi.apiMessage" />
-      <JsonPreview :data="deactivateApi.result" />
       <ApiMessages :error="activateApi.error" :api-message="activateApi.apiMessage" />
-      <JsonPreview :data="activateApi.result" />
+      <p v-if="deactivateApi.result && !deactivateApi.apiMessage" class="admin-ok">
+        Deactivated {{ deactivateApi.result.idx }}
+      </p>
+      <p v-if="activateApi.result && !activateApi.apiMessage" class="admin-ok">
+        Activated {{ activateApi.result.idx }}
+      </p>
     </section>
 
-    <section class="block">
-      <h2>POST /admin/users/roles</h2>
-      <form class="form" @submit.prevent="addRole">
-        <input v-model="roleIdx" placeholder="idx" required />
-        <select v-model="role">
-          <option>Admin</option>
-          <option>Teacher</option>
-          <option>Student</option>
-        </select>
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Roles</h2>
+      <form class="admin-form" @submit.prevent="addRole">
+        <label>
+          Person idx
+          <input v-model="roleIdx" required />
+        </label>
+        <label>
+          Role
+          <select v-model="role">
+            <option>Admin</option>
+            <option>Teacher</option>
+            <option>Student</option>
+          </select>
+        </label>
         <template v-if="role === 'Teacher'">
-          <input v-model="degree" placeholder="degree" required />
-          <input v-model="workingSince" placeholder="working_since YYYY-MM-DD" required />
+          <label>
+            Degree
+            <input v-model="degree" required />
+          </label>
+          <label>
+            Working since
+            <input v-model="workingSince" type="date" required />
+          </label>
         </template>
         <template v-if="role === 'Student'">
-          <input v-model="joined" placeholder="joined ISO datetime" required />
+          <label>
+            Joined
+            <input v-model="joined" type="date" required />
+          </label>
         </template>
-        <button type="submit" :disabled="roleApi.loading">Add role</button>
+        <button type="submit" class="teacher-btn-save" :disabled="roleApi.loading">Add role</button>
       </form>
       <ApiMessages :error="roleApi.error" :api-message="roleApi.apiMessage" />
-      <JsonPreview :data="roleApi.result" />
-    </section>
+      <p v-if="roleApi.result && !roleApi.apiMessage" class="admin-ok">
+        Roles: {{ rolesText(roleApi.result) }}
+      </p>
 
-    <section class="block">
-      <h2>POST /admin/users/roles/remove</h2>
-      <form class="form" @submit.prevent="removeRole">
-        <input v-model="roleIdx" placeholder="idx" required />
-        <select v-model="role">
-          <option>Admin</option>
-          <option>Teacher</option>
-          <option>Student</option>
-        </select>
-        <button type="submit" :disabled="removeRoleApi.loading">Remove role</button>
+      <form class="admin-form admin-form--divided" @submit.prevent="removeRole">
+        <button type="submit" class="teacher-btn-secondary" :disabled="removeRoleApi.loading">Remove selected role</button>
       </form>
       <ApiMessages :error="removeRoleApi.error" :api-message="removeRoleApi.apiMessage" />
-      <JsonPreview :data="removeRoleApi.result" />
+      <p v-if="removeRoleApi.result && !removeRoleApi.apiMessage" class="admin-ok">
+        Roles: {{ rolesText(removeRoleApi.result) }}
+      </p>
     </section>
   </div>
 </template>
-
-<style scoped>
-.block {
-  margin-bottom: 2rem;
-}
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-width: 24rem;
-}
-.row {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-</style>

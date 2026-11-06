@@ -3,7 +3,9 @@ from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
-from app.graph_backend.query import run
+from app.graph_backend.cycles import cycle_sort_key
+from app.graph_backend.query import one, run
+from app.graph_backend.teaching import teacher_groups
 from app.schemas.curriculum import (
     CurriculumCatalogueItem,
     CurriculumCatalogueResponse,
@@ -18,8 +20,8 @@ from app.schemas.subject import (
     SubjectDetailResponse,
     SubjectGroupsRequest,
     SubjectGroupsResponse,
+    SubjectOfferingItem,
 )
-from app.schemas.subject_instance import SubjectInstanceItem
 from app.schemas.teacher import (
     TeacherCatalogueItem,
     TeacherCatalogueResponse,
@@ -27,7 +29,6 @@ from app.schemas.teacher import (
     TeacherDetailResponse,
 )
 from app.schemas.faculty import FacultyItem, FacultyListResponse
-from app.schemas.teacher import GroupAndCourse
 
 router = APIRouter(tags=["catalogue"])
 _logged_in = require("Student", "Teacher", "Admin")
@@ -65,32 +66,37 @@ ORDER BY t.surname, t.name
 _ACADEMIC_CYCLES = """
 MATCH (ac:AcademicCycle)
 RETURN ac.id AS id, ac.year AS year, ac.season AS season
-ORDER BY ac.year, ac.season
 """
 
 _SUBJECTS = """
 MATCH (su:Subject)
 WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
   AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))
-OPTIONAL MATCH (su)<-[:INCLUDES]-(:CurriculumTerm)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
-WITH su, collect(DISTINCT fa.name) AS faculty_names
-OPTIONAL MATCH (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle)
-OPTIONAL MATCH (si)-[:HAS_GROUP]->(g:Group)
-OPTIONAL MATCH (reg:Registration)-[:FOR_CYCLE]->(ac)
-OPTIONAL MATCH (reg)-[:OPENS]->(g)
 RETURN
-  su.code AS subject_code,
-  su.name AS subject_name,
+  su.code AS code,
+  su.name AS name,
   su.ects AS ects,
-  faculty_names,
-  si.id AS instance_id,
-  si.catalogue_code AS catalogue_code,
-  ac.id AS cycle_id,
-  ac.year AS cycle_year,
-  ac.season AS cycle_season,
-  count(DISTINCT g) AS group_count,
-  count(DISTINCT reg) > 0 AS registration_open
-ORDER BY su.name, ac.year, ac.season
+  COLLECT {
+    MATCH (su)<-[:INCLUDES]-(:CurriculumTerm)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
+    RETURN DISTINCT fa.name
+  } AS faculties
+ORDER BY su.name
+"""
+
+_SUBJECT_OFFERINGS = """
+MATCH (su:Subject)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac:AcademicCycle)
+WHERE su.code IN $codes
+RETURN DISTINCT su.code AS subject, ac.id AS cycle
+"""
+
+_SUBJECT_GROUP_COUNTS = """
+MATCH (su:Subject)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(g:Group)-[:IN_CYCLE]->(ac:AcademicCycle)
+WHERE su.code IN $codes
+RETURN
+  su.code AS subject,
+  ac.id AS cycle,
+  count(g) AS group_count,
+  sum(CASE WHEN EXISTS { (:Registration)-[:OPENS]->(g) } THEN 1 ELSE 0 END) > 0 AS registration_open
 """
 
 _ORGANIZATIONAL_UNITS = """
@@ -128,37 +134,36 @@ def _faculty_label(names: list | None) -> str:
 
 
 def _subject_catalogue(
-    cycle_columns: list[str],
     cycle_ids: list[str],
-    rows: list[dict],
+    subjects: list[dict],
+    offerings: list[dict],
+    group_counts: list[dict],
 ) -> list[SubjectCatalogueItem]:
-    grouped: dict[str, SubjectCatalogueItem] = {}
-    cycle_index = {cid: idx for idx, cid in enumerate(cycle_ids)}
-    for row in rows:
-        code = row["subject_code"]
-        item = grouped.get(code)
-        if item is None:
-            item = SubjectCatalogueItem(
-                code=code,
-                name=row["subject_name"],
-                ects=row["ects"],
-                faculty=_faculty_label(row.get("faculty_names")),
-                catalogue_code=row.get("catalogue_code") or "",
-                cycles=[SubjectCycleCell() for _ in cycle_columns],
+    offered = {(row["subject"], row["cycle"]) for row in offerings}
+    counts = {(row["subject"], row["cycle"]): row for row in group_counts}
+    items = []
+    for subject in subjects:
+        cells = []
+        for cycle_id in cycle_ids:
+            key = (subject["code"], cycle_id)
+            count = counts.get(key, {})
+            cells.append(
+                SubjectCycleCell(
+                    offered=key in offered,
+                    group_count=count.get("group_count", 0),
+                    registration_open=bool(count.get("registration_open")),
+                )
             )
-            grouped[code] = item
-        cycle_id = row.get("cycle_id")
-        instance_id = row.get("instance_id")
-        if cycle_id and instance_id and cycle_id in cycle_index:
-            idx = cycle_index[cycle_id]
-            if row.get("catalogue_code") and not item.catalogue_code:
-                item.catalogue_code = row["catalogue_code"]
-            item.cycles[idx] = SubjectCycleCell(
-                instance_id=instance_id,
-                group_count=row.get("group_count") or 0,
-                registration_open=bool(row.get("registration_open")),
+        items.append(
+            SubjectCatalogueItem(
+                code=subject["code"],
+                name=subject["name"],
+                ects=subject["ects"],
+                faculty=_faculty_label(subject["faculties"]),
+                cycles=cells,
             )
-    return list(grouped.values())
+        )
+    return items
 
 
 @router.get("/teachers", response_model=TeacherCatalogueResponse)
@@ -182,15 +187,19 @@ async def subject_catalogue(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> SubjectCatalogueResponse:
-    cycle_rows = await run(session, _ACADEMIC_CYCLES)
-    cycle_columns = [
-        _cycle_column(row["year"], row["season"]) for row in cycle_rows
-    ]
-    cycle_ids = [row["id"] for row in cycle_rows]
-    rows = await run(session, _SUBJECTS, name=name, code=code)
+    cycle_rows = sorted(
+        await run(session, _ACADEMIC_CYCLES),
+        key=lambda row: cycle_sort_key(row["year"], row["season"]),
+    )
+    subjects = await run(session, _SUBJECTS, name=name, code=code)
+    codes = [row["code"] for row in subjects]
+    offerings = await run(session, _SUBJECT_OFFERINGS, codes=codes)
+    group_counts = await run(session, _SUBJECT_GROUP_COUNTS, codes=codes)
     return SubjectCatalogueResponse(
-        cycle_columns=cycle_columns,
-        subjects=_subject_catalogue(cycle_columns, cycle_ids, rows),
+        cycle_columns=[_cycle_column(row["year"], row["season"]) for row in cycle_rows],
+        subjects=_subject_catalogue(
+            [row["id"] for row in cycle_rows], subjects, offerings, group_counts
+        ),
     )
 
 
@@ -222,66 +231,50 @@ async def subject_detail(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> SubjectDetailResponse:
-    base_rows = await run(
+    subject = await one(
         session,
         """
         MATCH (s:Subject {code: $code})
-        OPTIONAL MATCH (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
         RETURN
           s.code AS code,
           s.name AS name,
           s.ects AS ects,
-          t.idx AS teacher_idx,
-          t.name AS teacher_name,
-          t.surname AS teacher_surname
+          COLLECT {
+            MATCH (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
+            RETURN DISTINCT {id: t.idx, name: t.name + " " + t.surname}
+          } AS taught_by
         """,
         code=body.code,
     )
-    if not base_rows:
+    if subject is None:
         raise HTTPException(status_code=404, detail="Subject not found")
-    taught = []
-    seen = set()
-    for row in base_rows:
-        if row["teacher_idx"] and row["teacher_idx"] not in seen:
-            seen.add(row["teacher_idx"])
-            taught.append(
-                TeacherNameRef(
-                    id=row["teacher_idx"],
-                    name=f"{row['teacher_name']} {row['teacher_surname']}",
-                )
-            )
-    instance_rows = await run(
+    offering_rows = await run(
         session,
         """
-        MATCH (s:Subject {code: $code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle)
-        OPTIONAL MATCH (si)-[:HAS_GROUP]->(g:Group)
+        MATCH (s:Subject {code: $code})<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac:AcademicCycle)
+        WITH DISTINCT s, ac
         RETURN
-          si.id AS instance_id,
-          si.catalogue_code AS catalogue_code,
+          ac.id AS cycle_id,
           ac.year AS cycle_year,
           ac.season AS cycle_season,
-          count(g) AS group_count
-        ORDER BY ac.year, ac.season
+          COUNT { (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)-[:IN_CYCLE]->(ac) } AS group_count
         """,
         code=body.code,
     )
-    instances = [
-        SubjectInstanceItem(
-            id=row["instance_id"],
-            cycle=_cycle(row["cycle_year"], row["cycle_season"]),
-            catalogue_code=row.get("catalogue_code") or "",
-            group_count=row.get("group_count") or 0,
-        )
-        for row in instance_rows
-        if row.get("instance_id")
-    ]
-    first = base_rows[0]
+    offering_rows.sort(key=lambda row: cycle_sort_key(row["cycle_year"], row["cycle_season"]))
     return SubjectDetailResponse(
-        code=first["code"],
-        name=first["name"],
-        ects=first["ects"],
-        taught_by=taught,
-        instances=instances,
+        code=subject["code"],
+        name=subject["name"],
+        ects=subject["ects"],
+        taught_by=[TeacherNameRef(**t) for t in subject["taught_by"]],
+        offerings=[
+            SubjectOfferingItem(
+                cycle_id=row["cycle_id"],
+                cycle=_cycle(row["cycle_year"], row["cycle_season"]),
+                group_count=row["group_count"],
+            )
+            for row in offering_rows
+        ],
     )
 
 
@@ -294,14 +287,13 @@ async def subject_groups(
     rows = await run(
         session,
         """
-        MATCH (si:SubjectInstance {id: $instance_id})-[:INSTANCE_OF]->(su:Subject)
-        MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
-        MATCH (si)-[:HAS_GROUP]->(g:Group)-[:OF_TYPE]->(gt:GroupType)
+        MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
+        MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle {id: $cycle_id})
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-        OPTIONAL MATCH (st:Student)-[:REGISTERED_IN]->(g)
         RETURN
           su.name AS subject_name,
-          si.id AS instance_id,
+          su.code AS subject_code,
+          ac.id AS cycle_id,
           ac.year AS cycle_year,
           ac.season AS cycle_season,
           g.id AS id,
@@ -314,37 +306,34 @@ async def subject_groups(
           g.end_time AS end_time,
           r.building AS building,
           r.room_num AS room_num,
-          count(st) AS filled
+          COUNT { (g)<-[:REGISTERED_IN]-(:Student) } AS filled
         ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
         """,
-        instance_id=body.instance_id,
+        subject_code=body.subject_code,
+        cycle_id=body.cycle_id,
     )
     if not rows:
-        raise HTTPException(status_code=404, detail="Subject instance not found")
-    groups = []
-    seen = set()
-    for row in rows:
-        if row["id"] in seen:
-            continue
-        seen.add(row["id"])
-        groups.append(
-            GroupTracked(
-                id=row["id"],
-                weekday=row["weekday"],
-                g_type=row["g_type"],
-                number=row["number"],
-                pnp=row["pnp"],
-                capacity=row["capacity"],
-                start_hr=row["start_hr"],
-                end_time=row["end_time"],
-                cycle=_cycle(row["cycle_year"], row["cycle_season"]),
-                room=_room(row["building"], row["room_num"]),
-                filled=row["filled"],
-            )
+        raise HTTPException(status_code=404, detail="No groups for this subject in this cycle")
+    groups = [
+        GroupTracked(
+            id=row["id"],
+            weekday=row["weekday"],
+            g_type=row["g_type"],
+            number=row["number"],
+            pnp=row["pnp"],
+            capacity=row["capacity"],
+            start_hr=row["start_hr"],
+            end_time=row["end_time"],
+            cycle=_cycle(row["cycle_year"], row["cycle_season"]),
+            room=_room(row["building"], row["room_num"]),
+            filled=row["filled"],
         )
+        for row in rows
+    ]
     return SubjectGroupsResponse(
         name=rows[0]["subject_name"],
-        instance_id=rows[0]["instance_id"],
+        subject_code=rows[0]["subject_code"],
+        cycle_id=rows[0]["cycle_id"],
         cycle=_cycle(rows[0]["cycle_year"], rows[0]["cycle_season"]),
         groups=groups,
     )
@@ -356,15 +345,12 @@ async def group_detail(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> GroupDetailResponse:
-    rows = await run(
+    row = await one(
         session,
         """
-        MATCH (g:Group {id: $group_id})<-[:HAS_GROUP]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
-        MATCH (g)-[:OF_TYPE]->(gt:GroupType)
-        MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+        MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-        OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
-        OPTIONAL MATCH (st:Student)-[:REGISTERED_IN]->(g)
         RETURN
           su.code AS subject_code,
           su.name AS course_name,
@@ -379,22 +365,16 @@ async def group_detail(
           r.room_num AS room_num,
           ac.year AS cycle_year,
           ac.season AS cycle_season,
-          t.idx AS teacher_idx,
-          t.name AS teacher_name,
-          t.surname AS teacher_surname,
-          count(st) AS filled
+          COUNT { (g)<-[:REGISTERED_IN]-(:Student) } AS filled,
+          COLLECT {
+            MATCH (t:Teacher)-[:TEACHES]->(g)
+            RETURN {id: t.idx, name: t.name + " " + t.surname}
+          } AS teachers
         """,
         group_id=body.group_id,
     )
-    if not rows:
+    if row is None:
         raise HTTPException(status_code=404, detail="Group not found")
-    row = rows[0]
-    teacher = TeacherNameRef(id="", name="")
-    if row["teacher_idx"]:
-        teacher = TeacherNameRef(
-            id=row["teacher_idx"],
-            name=f"{row['teacher_name']} {row['teacher_surname']}",
-        )
     return GroupDetailResponse(
         subject_code=row["subject_code"] or "",
         course_name=row["course_name"],
@@ -410,7 +390,7 @@ async def group_detail(
         nearest_classes=[],
         filled=row["filled"],
         capacity=row["capacity"],
-        teacher=teacher,
+        teachers=[TeacherNameRef(**t) for t in row["teachers"]],
     )
 
 
@@ -420,49 +400,20 @@ async def teacher_detail(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> TeacherDetailResponse:
-    rows = await run(
+    profile = await one(
         session,
         """
         MATCH (t:Teacher {idx: $idx})
-        OPTIONAL MATCH (t)-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
-        OPTIONAL MATCH (g)<-[:HAS_GROUP]-(:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle)
-        RETURN
-          t.degree AS degree,
-          t.name AS name,
-          t.surname AS surname,
-          t.email AS email,
-          t.phone AS phone,
-          g.id AS group_id,
-          su.code AS course_code,
-          su.name AS course_name,
-          gt.g_type AS g_type,
-          g.number AS group_num,
-          ac.year AS cycle_year,
-          ac.season AS cycle_season
+        RETURN t.degree AS degree, t.name AS name, t.surname AS surname, t.email AS email, t.phone AS phone
         """,
         idx=body.idx,
     )
-    if not rows:
+    if profile is None:
         raise HTTPException(status_code=404, detail="Teacher not found")
-    groups = []
-    for row in rows:
-        if row["group_id"] is None:
-            continue
-        groups.append(
-            GroupAndCourse(
-                group_id=row["group_id"],
-                course_code=row["course_code"] or "",
-                course_name=row["course_name"] or "",
-                g_type=row["g_type"],
-                group_num=row["group_num"],
-                academic_cycle=_cycle(row.get("cycle_year"), row.get("cycle_season")),
-            )
-        )
-    first = rows[0]
     return TeacherDetailResponse(
-        degree=first["degree"],
-        name=f"{first['name']} {first['surname']}",
-        phone=first["phone"],
-        email=first["email"],
-        groups=groups,
+        degree=profile["degree"],
+        name=f"{profile['name']} {profile['surname']}",
+        phone=profile["phone"],
+        email=profile["email"],
+        groups=await teacher_groups(session, body.idx),
     )

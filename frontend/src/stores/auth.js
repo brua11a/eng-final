@@ -52,8 +52,13 @@ export const useAuthStore = defineStore('auth', {
       return tabs
     },
     defaultRoute() {
-      const tabs = this.visibleTabs
-      return tabs[0]?.path ?? '/login'
+      if (this.hasStudent && !this.roles.includes('Teacher') && !this.hasAdmin) {
+        return '/student/schedule'
+      }
+      if (this.roles.includes('Teacher') && !this.hasStudent) {
+        return '/teacher/schedule'
+      }
+      return this.visibleTabs[0]?.path ?? '/login'
     },
   },
   actions: {

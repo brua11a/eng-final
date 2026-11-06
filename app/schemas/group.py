@@ -27,7 +27,8 @@ class GroupCreateRequest(BaseModel):
     capacity: int
     start_hr: time
     end_time: time
-    instance_id: str
+    subject_code: str
+    cycle_id: str
     room_id: str
 
 
@@ -40,8 +41,8 @@ class GroupCreateResponse(BaseModel):
     capacity: int
     start_hr: time
     end_time: time
-    instance_id: str
     subject_code: str
+    cycle_id: str
     room_id: str
     err: Optional[str] = None
 
@@ -100,4 +101,4 @@ class GroupDetailResponse(BaseModel):
     nearest_classes: List[ClassOccurrence]
     filled: int
     capacity: int
-    teacher: TeacherNameRef
+    teachers: List[TeacherNameRef]

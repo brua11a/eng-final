@@ -60,10 +60,6 @@ async function parseJsonResponse(res) {
   }
 }
 
-/**
- * @param {string} path
- * @param {{ method?: string, body?: unknown, auth?: boolean, query?: Record<string, string | undefined> }} opts
- */
 export async function apiRequest(path, opts = {}) {
   const { method = 'GET', body, auth = true, query } = opts
   let url = `${BASE}${path}`
@@ -139,8 +135,8 @@ export const catalogue = {
   curricula: (name) => apiRequest('/curricula', { query: { name } }),
   organizationalUnits: (name) => apiRequest('/organizational-units', { query: { name } }),
   subjectDetail: (code) => apiRequest('/subjects/detail', { method: 'POST', body: { code } }),
-  subjectGroups: (instance_id) =>
-    apiRequest('/subjects/groups', { method: 'POST', body: { instance_id } }),
+  subjectGroups: (subject_code, cycle_id) =>
+    apiRequest('/subjects/groups', { method: 'POST', body: { subject_code, cycle_id } }),
   groupDetail: (group_id) => apiRequest('/groups/detail', { method: 'POST', body: { group_id } }),
   teacherDetail: (idx) => apiRequest('/teachers/detail', { method: 'POST', body: { idx } }),
 }
@@ -149,13 +145,15 @@ export const student = {
   registrations: () => apiRequest('/me/registrations'),
   registrationCourses: (registration_id) =>
     apiRequest('/me/registrations/courses', { method: 'POST', body: { registration_id } }),
-  registrationGroups: (registration_id, course_id) =>
+  registrationGroups: (registration_id, subject_code) =>
     apiRequest('/me/registrations/groups', {
       method: 'POST',
-      body: { registration_id, course_id },
+      body: { registration_id, subject_code },
     }),
-  register: (course_id, group_id) =>
-    apiRequest('/me/registrations/register', { method: 'POST', body: { course_id, group_id } }),
+  register: (subject_code, group_id) =>
+    apiRequest('/me/registrations/register', { method: 'POST', body: { subject_code, group_id } }),
+  deregister: (subject_code, group_id) =>
+    apiRequest('/me/registrations/deregister', { method: 'POST', body: { subject_code, group_id } }),
   enrolments: () => apiRequest('/me/enrolments'),
   academicCycles: () => apiRequest('/me/academic-cycles'),
   academicCycleDetail: (cycle_id) =>
@@ -165,6 +163,7 @@ export const student = {
 }
 
 export const teacher = {
+  myGroups: (query) => apiRequest('/me/groups', { query }),
   studentDetail: (student_idx) =>
     apiRequest('/students/detail', { method: 'POST', body: { student_idx } }),
   groupStudents: (group_id) =>
@@ -191,11 +190,13 @@ export const admin = {
   listProgrammes: () => apiRequest('/admin/programmes'),
   listRooms: () => apiRequest('/admin/rooms'),
   listAcademicCycles: () => apiRequest('/admin/academic-cycles'),
+  listSubjects: () => apiRequest('/admin/subjects'),
+  listCurricula: () => apiRequest('/admin/curricula'),
+  listTeachers: () => apiRequest('/admin/teachers'),
+  listGroups: () => apiRequest('/admin/groups'),
   createRoom: (body) => apiRequest('/admin/rooms', { method: 'POST', body }),
   createAcademicCycle: (body) => apiRequest('/admin/academic-cycles', { method: 'POST', body }),
   createSubject: (body) => apiRequest('/admin/subjects', { method: 'POST', body }),
-  createSubjectInstance: (body) =>
-    apiRequest('/admin/subject-instances', { method: 'POST', body }),
   createCurriculumTerm: (body) => apiRequest('/admin/curriculum-terms', { method: 'POST', body }),
   createCurriculum: (body) => apiRequest('/admin/curricula', { method: 'POST', body }),
   createGroupType: (body) => apiRequest('/admin/group-types', { method: 'POST', body }),

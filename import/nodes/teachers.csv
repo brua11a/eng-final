@@ -1,5 +1,5 @@
 idx,name,surname,phone,degree,working_since,email,passwd_hash
-T001,Tomasz,Szandała,696449030,dr inż.,2019-09-01,tomasz.szandala@pwr.edu.pl,$2b$12$8rIhDGCHMeIyiCdsyCCHq.T79DEB4V9A2HKHJuBDIOIlzXdopbct6
+T001,Tomasz,Szandała,696449030,dr inż.,2019-09-01,tomasz.szandala@pwr.edu.pl,$2b$12$TeKFUtdJ7rjZgfr0tr9LEe7BgICst/Ddb..am9DsRvW49X8c8ow.e
 T002,Tadeusz,Więckowski,501000001,prof. dr hab. inż.,1800-10-01,,
 T003,Paweł,Zyblewski,501000002,dr inż.,2025-04-01,,
 T006,Mariusz,Fraś,501000003,dr inż.,1990-10-01,,

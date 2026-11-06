@@ -1,10 +1,6 @@
 import { reactive } from 'vue'
-import { ApiError } from '../api/client'
+import { errorMessage } from '../utils/format'
 
-/**
- * Reactive API call state for templates (`state.loading`, `@click="state.run(...)"`).
- * Returned as a reactive object so :disabled bindings unwrap correctly (plain Ref bags do not).
- */
 export function useApiCall() {
   return reactive({
     loading: false,
@@ -15,21 +11,14 @@ export function useApiCall() {
       this.loading = true
       this.error = ''
       this.apiMessage = ''
-      this.result = null
       try {
         const data = await fn()
         this.result = data
-        if (data?._apiMessage) this.apiMessage = data._apiMessage
-        if (data?.err) this.apiMessage = data.err
-        if (data?.ok === false && data?.err) this.apiMessage = data.err
+        this.apiMessage = data?._apiMessage || ''
         return data
       } catch (e) {
-        if (e instanceof ApiError) {
-          this.error = e.detail || e.message
-        } else {
-          this.error = e?.message || String(e)
-        }
-        throw e
+        this.error = errorMessage(e)
+        return null
       } finally {
         this.loading = false
       }

@@ -3,7 +3,6 @@ from pydantic import BaseModel
 
 from .generic import TeacherNameRef
 from .group import GroupTracked
-from .subject_instance import SubjectInstanceItem
 
 
 class SubjectCreateRequest(BaseModel):
@@ -20,7 +19,7 @@ class SubjectCreateResponse(BaseModel):
 
 
 class SubjectCycleCell(BaseModel):
-    instance_id: Optional[str] = None
+    offered: bool = False
     group_count: int = 0
     registration_open: bool = False
 
@@ -30,7 +29,6 @@ class SubjectCatalogueItem(BaseModel):
     name: str
     ects: Optional[int] = None
     faculty: str = ""
-    catalogue_code: str = ""
     cycles: List[SubjectCycleCell]
 
 
@@ -43,20 +41,28 @@ class SubjectDetailRequest(BaseModel):
     code: str
 
 
+class SubjectOfferingItem(BaseModel):
+    cycle_id: str
+    cycle: str
+    group_count: int = 0
+
+
 class SubjectDetailResponse(BaseModel):
     code: str
     name: str
     ects: Optional[int] = None
     taught_by: List[TeacherNameRef]
-    instances: List[SubjectInstanceItem]
+    offerings: List[SubjectOfferingItem]
 
 
 class SubjectGroupsRequest(BaseModel):
-    instance_id: str
+    subject_code: str
+    cycle_id: str
 
 
 class SubjectGroupsResponse(BaseModel):
     name: str
-    instance_id: str
+    subject_code: str
+    cycle_id: str
     cycle: str
     groups: List[GroupTracked]

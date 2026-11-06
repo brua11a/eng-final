@@ -32,7 +32,7 @@ function searchAgain({ name }) {
 
 <template>
   <div class="catalogue-results-page">
-    <h1 class="catalogue-page-title">People — results</h1>
+    <h1 class="catalogue-page-title">People - results</h1>
 
     <CatalogueResultsQueryBar
       :initial-name="queryName"

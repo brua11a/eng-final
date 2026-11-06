@@ -1,4 +1,16 @@
-### (admin) Create Teacher
+# Admin endpoints
+
+See `user_endpoints.md` for conventions. Every endpoint here is allowed for Admin only. Admins can also use the teacher endpoints and `POST /opinions` (see the other files).
+
+Time and DateTime inputs without a UTC offset are stored as `+01:00`.
+
+---
+
+## POST /admin/teachers
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -11,6 +23,8 @@
 	"faculty_id": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -26,9 +40,15 @@
 }
 ```
 
-```cypher
-MATCH (f:Faculty {id: $faculty_id})
+**Query**
 
+```cypher
+// 1. Next teacher idx ("T" + number)
+OPTIONAL MATCH (t:Teacher)
+RETURN coalesce(max(toInteger(substring(t.idx, 1))), 0) + 1 AS n
+
+// 2. Create
+MATCH (f:Faculty {id: $faculty_id})
 CREATE (t:Teacher:Person {
   idx: $idx,
   name: $name,
@@ -39,18 +59,19 @@ CREATE (t:Teacher:Person {
   photo: $photo
 })
 CREATE (t)-[:WORKS_AT]->(f)
-
 RETURN
-  t.idx AS idx,
-  t.name AS name,
-  t.surname AS surname,
-  t.phone AS phone,
-  t.degree AS degree,
-  t.photo AS photo,
-  t.working_since AS working_since,
+  t.idx AS idx, t.name AS name, t.surname AS surname, t.phone AS phone,
+  t.degree AS degree, t.photo AS photo, t.working_since AS working_since,
   f.id AS faculty_id
 ```
-### (admin) Create Student
+
+---
+
+## POST /admin/students
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -58,10 +79,15 @@ RETURN
 	"surname": String,
 	"phone": String,
 	"photo": String?,
-	"joined": ZonedDateTime,
-	"programme": String
+	"joined": DateTime,
+	"programme": String,
+	"term_id": String?
 }
 ```
+
+`programme` is a programme id. Without `term_id`, the student is enrolled in semester 1 of that programme's newest curriculum. With `term_id`, they are enrolled in that term, which must belong to one of the programme's curricula (for students joining partway through).
+
+**Response**
 
 ```json
 {
@@ -70,36 +96,50 @@ RETURN
 	"surname": String,
 	"phone": String,
 	"photo": String?,
-	"joined": ZonedDateTime,
+	"joined": DateTime,
 	"err": String?
 }
 ```
 
-```cypher
-MATCH (p:Programme {id: $programme})-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm {sem: 1})
-WITH ct, c ORDER BY c.intake_year DESC LIMIT 1
+**Query**
 
+```cypher
+// 1. Next student idx (number)
+OPTIONAL MATCH (st:Student)
+RETURN coalesce(max(toInteger(st.idx)), 0) + 1 AS n
+
+// 2. Resolve the term. The server takes the first entry of `terms`, and reports
+//    "Programme not found", "Programme has no curriculum", "Programme has no first semester"
+//    or "Term does not belong to this programme" when it cannot.
+MATCH (p:Programme {id: $programme})
+RETURN
+  COUNT { (p)-[:HAS_CURRICULUM]->(:Curriculum) } AS curricula,
+  COLLECT {
+    MATCH (p)-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm)
+    WHERE ($term_id IS NULL AND ct.sem = 1) OR ct.id = $term_id
+    RETURN ct.id ORDER BY c.intake_year DESC
+  } AS terms
+
+// 3. Create and enrol
+MATCH (ct:CurriculumTerm {id: $term_id})
 CREATE (st:Student:Person {
-  idx: $idx,
-  name: $name,
-  surname: $surname,
-  phone: $phone,
-  joined: $joined,
-  photo: $photo
+  idx: $idx, name: $name, surname: $surname, phone: $phone,
+  joined: datetime($joined), photo: $photo
 })
 CREATE (st)-[:ENROLLED]->(ct)
-
-RETURN
-  st.idx AS idx,
-  st.name AS name,
-  st.surname AS surname,
-  st.phone AS phone,
-  st.photo AS photo,
-  st.joined AS joined
+RETURN st.idx AS idx, st.name AS name, st.surname AS surname,
+       st.phone AS phone, st.photo AS photo, st.joined AS joined
 ```
-### (admin) Assign User to account
 
-Attaches login credentials to an existing `:Person` by `idx`. Role labels are unchanged; use **Assign role** to add roles if needed.
+---
+
+## POST /admin/users
+
+**Allowed:** Admin
+
+Gives an existing person a login.
+
+**Request**
 
 ```json
 {
@@ -109,32 +149,36 @@ Attaches login credentials to an existing `:Person` by `idx`. Role labels are un
 }
 ```
 
+**Response**
+
 ```json
 {
 	"email": String,
 	"idx": String,
-	"roles": ["Teacher" | "Student" | "Admin", ...],
+	"roles": List["Admin" | "Teacher" | "Student"],
 	"err": String?
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (owner:Person {idx: $idx})
-
-SET
-  owner:User,
-  owner.email = $email,
-  owner.passwd_hash = $passwd_hash
-
-RETURN
-  owner.email AS email,
+SET owner:User, owner.email = $email, owner.passwd_hash = $passwd_hash
+RETURN owner.email AS email,
   owner.idx AS idx,
   owner:Admin AS admin,
   owner:Teacher AS teacher,
   owner:Student AS student
 ```
 
-### (admin) Deactivate user account
+---
+
+## POST /admin/users/deactivate
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -142,12 +186,16 @@ RETURN
 }
 ```
 
+**Response**
+
 ```json
 {
 	"idx": String,
 	"err": String?
 }
 ```
+
+**Query**
 
 ```cypher
 MATCH (u:User {idx: $idx})
@@ -155,13 +203,21 @@ SET u:Inactive, u.deactivated_at = datetime()
 RETURN u.idx AS idx
 ```
 
-### (admin) Activate user account
+---
+
+## POST /admin/users/activate
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
 	"idx": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -170,13 +226,21 @@ RETURN u.idx AS idx
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (u:User {idx: $idx})
 REMOVE u:Inactive, u.deactivated_at
 RETURN u.idx AS idx
 ```
 
-### (admin) Add role
+---
+
+## POST /admin/users/roles
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -184,9 +248,13 @@ RETURN u.idx AS idx
 	"role": "Admin" | "Teacher" | "Student",
 	"degree": String?,
 	"working_since": Date?,
-	"joined": ZonedDateTime?
+	"joined": DateTime?
 }
 ```
+
+`degree` and `working_since` are required when adding Teacher. `joined` is required when adding Student.
+
+**Response**
 
 ```json
 {
@@ -197,22 +265,36 @@ RETURN u.idx AS idx
 }
 ```
 
+**Query**
+
 ```cypher
+// 1. Current roles
+MATCH (p:Person {idx: $idx})
+RETURN p:Admin AS admin, p:Teacher AS teacher, p:Student AS student, p.email AS email
+
+// 2a. Add Admin
 MATCH (p:Person {idx: $idx})
 SET p:Admin
-```
+RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
 
-```cypher
+// 2b. Add Teacher
 MATCH (p:Person {idx: $idx})
 SET p:Teacher, p.degree = $degree, p.working_since = date($working_since)
-```
+RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
 
-```cypher
+// 2c. Add Student
 MATCH (p:Person {idx: $idx})
 SET p:Student, p.joined = datetime($joined)
+RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
 ```
 
-### (admin) Remove role
+---
+
+## POST /admin/users/roles/remove
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -221,6 +303,8 @@ SET p:Student, p.joined = datetime($joined)
 }
 ```
 
+**Response**
+
 ```json
 {
 	"idx": String,
@@ -230,65 +314,28 @@ SET p:Student, p.joined = datetime($joined)
 }
 ```
 
+Fails if the person does not have the role, or if it is their last role.
+
+**Query**
+
 ```cypher
+// 1. Current roles
+MATCH (p:Person {idx: $idx})
+RETURN p:Admin AS admin, p:Teacher AS teacher, p:Student AS student, p.email AS email
+
+// 2. Remove one label (Admin, Teacher or Student)
 MATCH (p:Person {idx: $idx})
 REMOVE p:Admin
+RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
 ```
 
-```cypher
-MATCH (p:Person {idx: $idx})
-REMOVE p:Teacher
-```
+---
 
-```cypher
-MATCH (p:Person {idx: $idx})
-REMOVE p:Student
-```
+## POST /admin/group-types
 
-### (student | admin) Create Opinion
+**Allowed:** Admin
 
-```json
-{
-	"student_idx": String,
-	"grade": Float,
-	"content": String?,
-	"submit": ZonedDateTime,
-	"group_id": String
-}
-```
-
-```json
-{
-	"id": String,
-	"grade": Float,
-	"content": String?,
-	"submit": ZonedDateTime,
-	"group_id": String,
-	"err": String?
-}
-```
-
-```cypher
-MATCH (st:Student {idx: $student_idx})
-MATCH (g:Group {id: $group_id})
-
-CREATE (o:Opinion {
-  id: $id,
-  grade: $grade,
-  content: $content,
-  submit: $submit
-})
-CREATE (st)-[:WRITES]->(o)
-CREATE (o)-[:ABOUT]->(g)
-
-RETURN
-  o.id AS id,
-  o.grade AS grade,
-  o.content AS content,
-  o.submit AS submit,
-  g.id AS group_id
-```
-### (admin) Create Group Type
+**Request**
 
 ```json
 {
@@ -297,6 +344,8 @@ RETURN
 	"weight": Float
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -308,14 +357,29 @@ RETURN
 }
 ```
 
+Fails if the subject already has a group type with that name.
+
+**Query**
+
 ```cypher
+// 1. Duplicate check
+MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+RETURN gt.id AS id
+
+// 2. Create
 MATCH (su:Subject {code: $subject_code})
 CREATE (gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
 CREATE (su)-[:HAS_TYPE]->(gt)
 RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS weight
 ```
 
-### (admin) Create Group
+---
+
+## POST /admin/groups
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -324,12 +388,15 @@ RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS w
 	"number": Integer,
 	"pnp": String,
 	"capacity": Integer,
-	"start_hr": ZonedTime,
-	"end_time": ZonedTime,
+	"start_hr": Time,
+	"end_time": Time,
 	"subject_code": String,
+	"cycle_id": String,
 	"room_id": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -339,42 +406,42 @@ RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS w
 	"number": Integer,
 	"pnp": String,
 	"capacity": Integer,
-	"start_hr": ZonedTime,
-	"end_time": ZonedTime,
+	"start_hr": Time,
+	"end_time": Time,
 	"subject_code": String,
+	"cycle_id": String,
 	"room_id": String,
 	"err": String?
 }
 ```
 
+Fails if the subject has no group type named `g_type`, or if no curriculum term taught in the cycle includes the subject.
+
+**Query**
+
 ```cypher
 MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+MATCH (ac:AcademicCycle {id: $cycle_id})
+WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
 MATCH (r:Room {id: $room_id})
-
 CREATE (g:Group {
-  id: $id,
-  weekday: $weekday,
-  number: $number,
-  pnp: $pnp,
-  capacity: $capacity,
-  start_hr: $start_hr,
-  end_time: $end_time
+  id: $id, weekday: $weekday, number: $number, pnp: $pnp,
+  capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
 })-[:OF_TYPE]->(gt),
-(g)-[:IN_ROOM]->(r)
-
-RETURN
-  g.id AS id,
-  g.weekday AS weekday,
-  gt.g_type AS g_type,
-  g.number AS number,
-  g.pnp AS pnp,
-  g.capacity AS capacity,
-  g.start_hr AS start_hr,
-  g.end_time AS end_time,
-  su.code AS subject_code,
-  r.id AS room_id
+(g)-[:IN_ROOM]->(r),
+(g)-[:IN_CYCLE]->(ac)
+RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
+       g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
+       su.code AS subject_code, ac.id AS cycle_id, r.id AS room_id
 ```
-### (admin) Assign teacher to group
+
+---
+
+## POST /admin/groups/teachers
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -382,6 +449,8 @@ RETURN
 	"group_id": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -391,13 +460,22 @@ RETURN
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (t:Teacher {idx: $teacher_idx})
 MATCH (g:Group {id: $group_id})
 MERGE (t)-[:TEACHES]->(g)
 RETURN t.idx AS teacher_idx, g.id AS group_id
 ```
-### (admin) Create room
+
+---
+
+## POST /admin/rooms
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -405,6 +483,8 @@ RETURN t.idx AS teacher_idx, g.id AS group_id
 	"room_num": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -415,19 +495,20 @@ RETURN t.idx AS teacher_idx, g.id AS group_id
 }
 ```
 
-```cypher
-CREATE (r:Room {
-  id: $id,
-  building: $building,
-  room_num: $room_num
-})
+**Query**
 
-RETURN
-  r.id AS id,
-  r.building AS building,
-  r.room_num AS room_num
+```cypher
+CREATE (r:Room {id: $id, building: $building, room_num: $room_num})
+RETURN r.id AS id, r.building AS building, r.room_num AS room_num
 ```
-### (admin) Create AcademicCycle
+
+---
+
+## POST /admin/academic-cycles
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -435,6 +516,8 @@ RETURN
 	"season": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -445,19 +528,22 @@ RETURN
 }
 ```
 
-```cypher
-CREATE (ac:AcademicCycle {
-  id: $id,
-  year: $year,
-  season: $season
-})
+**Query**
 
-RETURN
-  ac.id AS id,
-  ac.year AS year,
-  ac.season AS season
+```cypher
+CREATE (ac:AcademicCycle {id: $id, year: $year, season: $season})
+RETURN ac.id AS id, ac.year AS year, ac.season AS season
 ```
-### (admin) Create Subject
+
+---
+
+## POST /admin/subjects
+
+**Allowed:** Admin
+
+Creates the subject, or updates its name and ECTS if the code already exists.
+
+**Request**
 
 ```json
 {
@@ -466,6 +552,8 @@ RETURN
 	"ects": Integer?
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -476,21 +564,21 @@ RETURN
 }
 ```
 
+**Query**
+
 ```cypher
 MERGE (su:Subject {code: $code})
-  ON CREATE SET
-    su.name = $name,
-    su.ects = $ects
-  ON MATCH SET
-    su.name = $name,
-    su.ects = $ects
-
-RETURN
-  su.code AS code,
-  su.name AS name,
-  su.ects AS ects
+SET su.name = $name, su.ects = $ects
+RETURN su.code AS code, su.name AS name, su.ects AS ects
 ```
-### (admin) Create CurriculumTerm
+
+---
+
+## POST /admin/curriculum-terms
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -500,31 +588,36 @@ RETURN
 }
 ```
 
+**Response**
+
 ```json
 {
 	"id": String,
 	"sem": Integer,
 	"curriculum_id": String,
-	"cycle_id": String,
+	"cycle_id": String?,
 	"err": String?
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (c:Curriculum {id: $curriculum_id})
 MATCH (ac:AcademicCycle {id: $cycle_id})
-
 CREATE (ct:CurriculumTerm {id: $id, sem: $sem})
 CREATE (c)-[:HAS_TERM]->(ct)
 CREATE (ct)-[:TAUGHT_IN]->(ac)
-
-RETURN
-  ct.id AS id,
-  ct.sem AS sem,
-  c.id AS curriculum_id,
-  ac.id AS cycle_id
+RETURN ct.id AS id, ct.sem AS sem, c.id AS curriculum_id, ac.id AS cycle_id
 ```
-### (admin) Create Curriculum
+
+---
+
+## POST /admin/curricula
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -532,6 +625,8 @@ RETURN
 	"intake_year": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -542,18 +637,22 @@ RETURN
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (p:Programme {id: $programme_id})
-
 CREATE (c:Curriculum {id: $id, intake_year: $intake_year})
 CREATE (p)-[:HAS_CURRICULUM]->(c)
-
-RETURN
-  c.id AS id,
-  p.id AS programme_id,
-  c.intake_year AS intake_year
+RETURN c.id AS id, p.id AS programme_id, c.intake_year AS intake_year
 ```
-### (admin) Create Faculty
+
+---
+
+## POST /admin/faculties
+
+**Allowed:** Admin
+
+**Request**
 
 ```json
 {
@@ -561,6 +660,8 @@ RETURN
 	"full_name": String
 }
 ```
+
+**Response**
 
 ```json
 {
@@ -571,72 +672,22 @@ RETURN
 }
 ```
 
-```cypher
-CREATE (fa:Faculty {
-  id: $id,
-  name: $name,
-  full_name: $full_name
-})
-
-RETURN
-  fa.id AS id,
-  fa.name AS name,
-  fa.full_name AS full_name
-```
-### (admin | teacher) Student detail
-
-```json
-{
-	"idx": String
-}
-```
-
-```json
-{
-	"idx": String,
-	"name": String,
-	"surname": String,
-	"phone": String,
-	"photo": String?,
-	"joined": ZonedDateTime,
-	"avg_grade": Float?,
-	"term_ids": List[String],
-	"err": String?
-}
-```
+**Query**
 
 ```cypher
-MATCH (st:Student {idx: $idx})
-OPTIONAL MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm)
-OPTIONAL CALL (st) {
-  MATCH (st)-[:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
-  WITH DISTINCT st, su
-  MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
-  OPTIONAL MATCH (st)-[rg:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(gt)
-  WHERE rg.grade IS NOT NULL
-  WITH su, gt, avg(rg.grade) AS type_grade
-  WITH su, collect({weight: gt.weight, grade: type_grade}) AS parts
-  WHERE size(parts) > 0 AND all(part IN parts WHERE part.grade IS NOT NULL)
-  WITH su.ects AS ects,
-    reduce(total = 0.0, part IN parts | total + part.grade * part.weight)
-      / reduce(total = 0.0, part IN parts | total + part.weight) AS subject_grade
-  WITH sum(subject_grade * ects) AS weighted, sum(ects) AS ects_total
-  RETURN CASE WHEN ects_total = 0 THEN null ELSE weighted / ects_total END AS avg_grade
-}
-
-RETURN
-  st.idx AS idx,
-  st.name AS name,
-  st.surname AS surname,
-  st.phone AS phone,
-  st.photo AS photo,
-  st.joined AS joined,
-  avg_grade,
-  collect(DISTINCT ct.id) AS term_ids
+CREATE (fa:Faculty {id: $id, name: $name, full_name: $full_name})
+RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name
 ```
 
-`REGISTERED_IN.grade` is the mark for that group. `avg_grade` is the ECTS-weighted mean of subject grades. A subject grade is the weighted mean of its group-type marks, using `GroupType.weight`, and it is included only when every group type of that subject has a mark.
-### (admin) Start registrations
+---
+
+## POST /admin/registrations
+
+**Allowed:** Admin
+
+Creates a registration with its turns and opened groups in one transaction. Nothing is saved if any step fails.
+
+**Request**
 
 ```json
 {
@@ -656,59 +707,65 @@ RETURN
 }
 ```
 
+**Response**
+
 ```json
 {
-	"id": String,
-	"name": String,
-	"reg_type": "zapisowa",
+	"id": String?,
+	"name": String?,
+	"reg_type": "zapisowa"?,
 	"turns": List[RegistrationTurn],
 	"group_ids": List[String],
 	"err": String?
 }
 ```
 
+**Query**
+
 ```cypher
+// 1. Registration
 MATCH (ac:AcademicCycle {id: $cycle_id})
 MATCH (fa:Faculty {id: $faculty_id})
-
 CREATE (reg:Registration {id: $id, name: $name, reg_type: $reg_type})
 CREATE (reg)-[:FOR_CYCLE]->(ac)
 CREATE (reg)-[:FOR_FACULTY]->(fa)
+RETURN reg.id AS id
 
-RETURN reg.id AS id, reg.name AS name, reg.reg_type AS reg_type
-```
-
-```cypher
+// 2. All turns at once ($turns: list of {id, turn_number, date, start, end})
 MATCH (reg:Registration {id: $registration_id})
-
+UNWIND $turns AS turn
 CREATE (rt:RegistrationTurn {
-  id: $turn_id,
-  turn_number: $turn_number,
-  date: date($date),
-  start_hr: $start,
-  end_time: $end
+  id: turn.id, turn_number: turn.turn_number, date: date(turn.date),
+  start_hr: time(turn.start), end_time: time(turn.end)
 })
 CREATE (reg)-[:HAS_TURN]->(rt)
+RETURN count(rt) AS created
 
-RETURN rt.id AS id, rt.turn_number AS turn_number
-```
-
-```cypher
+// 3. All groups at once. Any id missing from `found` rolls the transaction back
+//    with "Groups not found: <ids>".
 MATCH (reg:Registration {id: $registration_id})
-MATCH (g:Group {id: $group_id})
-
+UNWIND $group_ids AS group_id
+MATCH (g:Group {id: group_id})
 MERGE (reg)-[:OPENS]->(g)
+RETURN collect(g.id) AS found
 ```
-### (admin) List Programmes
 
-```json
-{}
-```
+---
+
+## GET /admin/programmes
+
+**Allowed:** Admin
+
+**Request**
+
+None.
+
+**Response**
 
 ```json
 {
 	"programmes": List[Programme]
-	
+
 	Programme = {
 		"id": String,
 		"name": String,
@@ -717,21 +774,30 @@ MERGE (reg)-[:OPENS]->(g)
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (p:Programme)-[:OFFERED_BY]->(fa:Faculty)
 RETURN p.id AS id, p.name AS name, fa.id AS faculty_id
 ORDER BY p.name
 ```
-### (admin) List Rooms
 
-```json
-{}
-```
+---
+
+## GET /admin/rooms
+
+**Allowed:** Admin
+
+**Request**
+
+None.
+
+**Response**
 
 ```json
 {
 	"rooms": List[Room]
-	
+
 	Room = {
 		"id": String,
 		"building": String,
@@ -740,21 +806,30 @@ ORDER BY p.name
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (r:Room)
 RETURN r.id AS id, r.building AS building, r.room_num AS room_num
 ORDER BY r.building, r.room_num
 ```
-### (admin) List Academic Cycles
 
-```json
-{}
-```
+---
+
+## GET /admin/academic-cycles
+
+**Allowed:** Admin
+
+**Request**
+
+None.
+
+**Response**
 
 ```json
 {
 	"cycles": List[AcademicCycle]
-	
+
 	AcademicCycle = {
 		"id": String,
 		"year": String,
@@ -763,9 +838,143 @@ ORDER BY r.building, r.room_num
 }
 ```
 
+**Query**
+
 ```cypher
 MATCH (ac:AcademicCycle)
 RETURN ac.id AS id, ac.year AS year, ac.season AS season
 ORDER BY ac.year, ac.season
 ```
 
+---
+
+## GET /admin/subjects
+
+**Allowed:** Admin
+
+**Request**
+
+None.
+
+**Response**
+
+```json
+{
+	"subjects": List[Subject]
+
+	Subject = {
+		"code": String,
+		"name": String
+	}
+}
+```
+
+**Query**
+
+```cypher
+MATCH (su:Subject)
+RETURN su.code AS code, su.name AS name
+ORDER BY su.code
+```
+
+---
+
+## GET /admin/curricula
+
+**Allowed:** Admin
+
+**Request**
+
+None.
+
+**Response**
+
+```json
+{
+	"curricula": List[Curriculum]
+
+	Curriculum = {
+		"id": String,
+		"programme_name": String,
+		"intake_year": String
+	}
+}
+```
+
+**Query**
+
+```cypher
+MATCH (c:Curriculum)<-[:HAS_CURRICULUM]-(p:Programme)
+RETURN c.id AS id, p.name AS programme_name, c.intake_year AS intake_year
+ORDER BY p.name, c.intake_year DESC
+```
+
+---
+
+## GET /admin/teachers
+
+**Allowed:** Admin
+
+**Request**
+
+None.
+
+**Response**
+
+```json
+{
+	"teachers": List[Teacher]
+
+	Teacher = {
+		"idx": String,
+		"name": String,
+		"surname": String
+	}
+}
+```
+
+**Query**
+
+```cypher
+MATCH (t:Teacher)
+RETURN t.idx AS idx, t.name AS name, t.surname AS surname
+ORDER BY t.surname, t.name
+```
+
+---
+
+## GET /admin/groups
+
+**Allowed:** Admin
+
+**Request**
+
+None.
+
+**Response**
+
+```json
+{
+	"groups": List[Group]
+
+	Group = {
+		"id": String,
+		"label": String
+	}
+}
+```
+
+`label` is built by the server as `"<subject code> <type> #<number> (day <weekday>)"`.
+
+**Query**
+
+```cypher
+MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+RETURN
+  g.id AS id,
+  su.code AS course_code,
+  gt.g_type AS g_type,
+  g.number AS number,
+  g.weekday AS weekday
+ORDER BY su.code, gt.g_type, g.number
+```

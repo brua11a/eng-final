@@ -1,0 +1,59 @@
+.admin-form {
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: 22rem;
+  font-size: 0.85rem;
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form textarea {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #c5cdd6;
+  font-size: 0.85rem;
+}
+
+.admin-form--divided {
+  border-top: 1px solid #e8ecf0;
+  max-width: none;
+}
+
+.admin-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-section-title {
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  background: #f0f3f7;
+  border-bottom: 1px solid #e8ecf0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1a3352;
+}
+
+.admin-ok {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.82rem;
+  color: #166534;
+}
+
+.admin-panel-spaced {
+  margin-bottom: 1rem;
+}
+
+.admin-group-pick legend {
+  font-size: 0.82rem;
+  padding: 0 0.25rem;
+}

@@ -45,7 +45,7 @@ const routes = [
         component: () => import('../views/student/StudentLayout.vue'),
         meta: { tab: 'student', roles: ['Student'] },
         children: [
-          { path: '', redirect: { name: 'student-registrations' } },
+          { path: '', redirect: { name: 'student-schedule' } },
           {
             path: 'registrations',
             name: 'student-registrations',
@@ -62,9 +62,9 @@ const routes = [
             component: () => import('../views/student/CyclesView.vue'),
           },
           {
-            path: 'dashboard',
-            name: 'student-dashboard',
-            component: () => import('../views/student/DashboardView.vue'),
+            path: 'schedule',
+            name: 'student-schedule',
+            component: () => import('../views/shared/WeeklyScheduleView.vue'),
           },
           {
             path: 'opinion',
@@ -78,21 +78,26 @@ const routes = [
         component: () => import('../views/teacher/TeacherLayout.vue'),
         meta: { tab: 'teacher', roles: ['Teacher', 'Admin'] },
         children: [
-          { path: '', redirect: { name: 'teacher-student' } },
+          { path: '', redirect: { name: 'teacher-schedule' } },
           {
-            path: 'student',
-            name: 'teacher-student',
-            component: () => import('../views/teacher/StudentDetailView.vue'),
+            path: 'schedule',
+            name: 'teacher-schedule',
+            component: () => import('../views/shared/WeeklyScheduleView.vue'),
           },
           {
-            path: 'group-students',
-            name: 'teacher-group-students',
-            component: () => import('../views/teacher/GroupStudentsView.vue'),
+            path: 'groups',
+            name: 'teacher-groups',
+            component: () => import('../views/teacher/TeacherGroupsView.vue'),
           },
           {
-            path: 'grade',
-            name: 'teacher-grade',
-            component: () => import('../views/teacher/GradeView.vue'),
+            path: 'groups/:groupId/grades',
+            name: 'teacher-group-grades',
+            component: () => import('../views/teacher/TeacherGroupGradesView.vue'),
+          },
+          {
+            path: 'students/:studentIdx',
+            name: 'teacher-student-detail',
+            component: () => import('../views/teacher/TeacherStudentDetailView.vue'),
           },
         ],
       },

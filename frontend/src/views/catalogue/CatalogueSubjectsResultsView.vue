@@ -1,9 +1,11 @@
 <script setup>
-import { onMounted, watch, computed, ref } from 'vue'
+import { onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { catalogue } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
+import { usePaged } from '../../composables/usePaged'
 import ApiMessages from '../../components/ApiMessages.vue'
+import CataloguePager from '../../components/catalogue/CataloguePager.vue'
 import CatalogueResultsQueryBar from '../../components/catalogue/CatalogueResultsQueryBar.vue'
 
 const route = useRoute()
@@ -13,16 +15,8 @@ const api = useApiCall()
 const queryName = computed(() => (route.query.name || '').toString())
 const queryCode = computed(() => (route.query.code || '').toString())
 
-const pageSize = 30
-const page = ref(1)
-
 const cycleColumns = computed(() => api.result?.cycle_columns ?? [])
-const rows = computed(() => api.result?.subjects ?? [])
-const total = computed(() => rows.value.length)
-const pageRows = computed(() => {
-  const start = (page.value - 1) * pageSize
-  return rows.value.slice(start, start + pageSize)
-})
+const { page, pageCount, pageRows } = usePaged(computed(() => api.result?.subjects ?? []))
 
 onMounted(load)
 watch(
@@ -45,16 +39,16 @@ function searchAgain({ name, code }) {
 }
 
 function cellLabel(cell) {
-  if (!cell?.instance_id) return '—'
+  if (!cell?.offered) return '-'
   if (cell.registration_open) return `${cell.group_count} groups`
   if (cell.group_count) return `${cell.group_count} groups (closed)`
-  return '—'
+  return '-'
 }
 </script>
 
 <template>
   <div class="catalogue-results-page catalogue-results-page--wide">
-    <h1 class="catalogue-page-title">Subjects — results</h1>
+    <h1 class="catalogue-page-title">Subjects - results</h1>
 
     <CatalogueResultsQueryBar
       :single="false"
@@ -89,7 +83,7 @@ function cellLabel(cell) {
                 {{ s.code }}
               </RouterLink>
             </td>
-            <td>{{ s.faculty || '—' }}</td>
+            <td>{{ s.faculty || '-' }}</td>
             <td>{{ s.name }}</td>
             <td v-for="(cell, idx) in s.cycles" :key="cycleColumns[idx] || idx">
               {{ cellLabel(cell) }}
@@ -108,24 +102,6 @@ function cellLabel(cell) {
     </div>
     <p v-else-if="api.result && !api.loading" class="catalogue-hint">No results.</p>
 
-    <div v-if="total > pageSize" class="catalogue-pager">
-      <button
-        type="button"
-        class="catalogue-btn-search catalogue-btn-search--sm"
-        :disabled="page <= 1"
-        @click="page--"
-      >
-        Previous
-      </button>
-      <span>Page {{ page }}</span>
-      <button
-        type="button"
-        class="catalogue-btn-search catalogue-btn-search--sm"
-        :disabled="page * pageSize >= total"
-        @click="page++"
-      >
-        Next
-      </button>
-    </div>
+    <CataloguePager v-model="page" :page-count="pageCount" />
   </div>
 </template>

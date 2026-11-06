@@ -1,13 +1,19 @@
 <script setup>
-import { onMounted, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { catalogue } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
+import { useAuthStore } from '../../stores/auth'
 import ApiMessages from '../../components/ApiMessages.vue'
 
 const route = useRoute()
+const auth = useAuthStore()
 const api = useApiCall()
 const idx = () => route.params.idx
+
+const isOwnProfile = computed(
+  () => auth.roles.includes('Teacher') && auth.idx && auth.idx === idx(),
+)
 
 onMounted(load)
 watch(() => route.params.idx, load)
@@ -42,6 +48,14 @@ function groupLabel(g) {
       <ul v-if="api.result.groups?.length" class="group-list">
         <li v-for="g in api.result.groups" :key="g.group_id">
           <RouterLink
+            v-if="isOwnProfile"
+            :to="{ name: 'teacher-group-grades', params: { groupId: g.group_id } }"
+            class="catalogue-link-arrow"
+          >
+            {{ groupLabel(g) }} - grades →
+          </RouterLink>
+          <RouterLink
+            v-else
             :to="{
               name: 'catalogue-group-detail',
               params: { groupId: g.group_id },

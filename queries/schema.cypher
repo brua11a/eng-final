@@ -74,11 +74,6 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		ects :: INTEGER
 	}) REQUIRE su.code IS KEY,
 
-	(si:SubjectInstance => {
-		id :: STRING,
-		catalogue_code :: STRING
-	}) REQUIRE si.id IS KEY,
-
 	(ct:CurriculumTerm => {
 		id :: STRING,
 		sem :: INTEGER NOT NULL
@@ -134,9 +129,7 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(c)-[:HAS_TERM => {}]->(ct),
 	(ct)-[:INCLUDES => {}]->(su),
 	(ct)-[:TAUGHT_IN => {}]->(ac),
-	(si)-[:INSTANCE_OF => {}]->(su),
-	(si)-[:OFFERED_IN => {}]->(ac),
-	(si)-[:HAS_GROUP => {}]->(g),
+	(g)-[:IN_CYCLE => {}]->(ac),
 	(su)-[:HAS_TYPE => {}]->(gt),
 	(g)-[:OF_TYPE => {}]->(gt),
 	(reg)-[:FOR_CYCLE => {}]->(ac),

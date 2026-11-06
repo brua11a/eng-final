@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -44,13 +44,22 @@ class TeacherDetailRequest(BaseModel):
     idx: str
 
 
-class GroupAndCourse(BaseModel):
+class TeachingGroupItem(BaseModel):
     group_id: str
     course_code: str
-    course_name: str = ""
+    course_name: str
     g_type: str
     group_num: int
-    academic_cycle: str = ""
+    academic_cycle: str
+    room: str = ""
+    weekday: int = 0
+    start: Optional[time] = None
+    end: Optional[time] = None
+    pnp: str = ""
+
+
+class MyTeachingGroupsResponse(BaseModel):
+    groups: List[TeachingGroupItem]
 
 
 class TeacherDetailResponse(BaseModel):
@@ -58,4 +67,4 @@ class TeacherDetailResponse(BaseModel):
     name: str
     phone: str
     email: Optional[str] = None
-    groups: List[GroupAndCourse]
+    groups: List[TeachingGroupItem]
