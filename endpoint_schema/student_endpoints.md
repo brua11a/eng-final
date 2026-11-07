@@ -22,7 +22,7 @@ None.
 		"id": String,
 		"name": String,
 		"reg_type": "zapisowa",
-		"curriculum_id": String,
+		"curriculum_id": String?,
 		"turn_number": Integer,
 		"date": Date,
 		"start": Time,
@@ -34,14 +34,16 @@ None.
 **Query**
 
 ```cypher
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(tu:TurnAssignment)-[:FOR_TURN]->(rt:RegistrationTurn)
-MATCH (tu)-[:FOR_CURRICULUM]->(c:Curriculum)
-MATCH (reg:Registration)-[:HAS_TURN]->(rt)
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration)
 RETURN
   reg.id AS id,
   reg.name AS name,
   reg.reg_type AS reg_type,
-  c.id AS curriculum_id,
+  head(COLLECT {
+    MATCH (reg)-[:FOR_FACULTY]->(:Faculty)<-[:OFFERED_BY]-(:Programme)-[:HAS_CURRICULUM]->(c:Curriculum)
+          -[:HAS_TERM]->(:CurriculumTerm)<-[:ENROLLED]-(st)
+    RETURN c.id
+  }) AS curriculum_id,
   rt.turn_number AS turn_number,
   rt.date AS date,
   rt.start_hr AS start,
@@ -88,13 +90,13 @@ RETURN
 
 ```cypher
 // 1. Access check
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
 RETURN reg.id AS id
 
 // 2. Groups opened by the registration, one row per group
 MATCH (reg:Registration {id: $registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
-MATCH (reg)-[:OPENS]->(g:Group)-[:IN_CYCLE]->(ac)
-MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (reg)-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
 RETURN
   su.code AS subject_code,
   su.name AS subject_name,
@@ -144,13 +146,13 @@ RETURN
 
 ```cypher
 // 1. Access check
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
 RETURN reg.id AS id
 
 // 2. Open groups of the subject
 MATCH (st:Student {idx: $student_idx})
 MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)
-MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
 OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)
@@ -200,16 +202,15 @@ Rejected when the student has no access to the group (`"Forbidden"`), already ha
 All checks and the write run in one query. Rewriting `g.capacity` takes a write lock on the group, so concurrent registrations for the same group run one at a time and cannot both take the last place. No row means no access. Otherwise `status` is `ok`, `conflict` or `full`.
 
 ```cypher
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
-MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
-MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
-WITH DISTINCT st, g, gt, ac
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
+WITH DISTINCT st, g, gt
 SET g.capacity = g.capacity
 WITH st, g,
   EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
   EXISTS {
     MATCH (st)-[:REGISTERED_IN]->(other:Group)-[:OF_TYPE]->(gt)
-    WHERE other <> g AND (other)-[:IN_CYCLE]->(ac)
+    WHERE other <> g
   } AS conflict,
   COUNT { (g)<-[:REGISTERED_IN]-(:Student) } >= g.capacity AS full
 WITH st, g, CASE
@@ -253,8 +254,8 @@ RETURN status
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
-MATCH (st)-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
+MATCH (st)-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
 DELETE r
 RETURN g.id AS group_id
 ```
@@ -397,8 +398,9 @@ MATCH (ct)-[:INCLUDES]->(su:Subject)
 RETURN DISTINCT su.code AS code, su.name AS name, su.ects AS ects
 
 // 3. The student's groups in the cycle
-MATCH (st:Student {idx: $student_idx})-[reg:REGISTERED_IN]->(g:Group)-[:IN_CYCLE]->(:AcademicCycle {id: $cycle_id})
-MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (st:Student {idx: $student_idx})-[reg:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+MATCH (si)-[:OFFERED_IN]->(:AcademicCycle {id: $cycle_id})
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
 RETURN
@@ -452,9 +454,10 @@ None.
 **Query**
 
 ```cypher
-MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-OPTIONAL MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
 RETURN
   g.id AS group_id,
   su.code AS course_code,

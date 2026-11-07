@@ -415,44 +415,51 @@ async def create_group_type(
     caller=Depends(_admin),
 ) -> GroupTypeCreateResponse:
     type_id = await next_id(session, "GroupType")
+    instance_id = await next_id(session, "SubjectInstance")
+
+    def failed(err: str, id: str = type_id) -> GroupTypeCreateResponse:
+        return GroupTypeCreateResponse(
+            id=id, subject_code=body.subject_code, cycle_id=body.cycle_id,
+            g_type=body.g_type, weight=body.weight, err=err,
+        )
+
     try:
         existing = await one(
             session,
             """
-            MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+            MATCH (:Subject {code: $subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: $cycle_id})
+            MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
             RETURN gt.id AS id
             """,
             subject_code=body.subject_code,
+            cycle_id=body.cycle_id,
             g_type=body.g_type,
         )
         if existing is not None:
-            return GroupTypeCreateResponse(
-                id=existing["id"], subject_code=body.subject_code, g_type=body.g_type,
-                weight=body.weight, err="Group type already exists",
-            )
+            return failed("Group type already exists", existing["id"])
         row = await one(
             session,
             """
             MATCH (su:Subject {code: $subject_code})
-            CREATE (gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
-            CREATE (su)-[:HAS_TYPE]->(gt)
-            RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS weight
+            MATCH (ac:AcademicCycle {id: $cycle_id})
+            WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
+            MERGE (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
+              ON CREATE SET si.id = $instance_id
+            CREATE (si)-[:HAS_TYPE]->(gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
+            RETURN gt.id AS id, su.code AS subject_code, ac.id AS cycle_id,
+                   gt.g_type AS g_type, gt.weight AS weight
             """,
             subject_code=body.subject_code,
+            cycle_id=body.cycle_id,
+            instance_id=instance_id,
             id=type_id,
             g_type=body.g_type,
             weight=body.weight,
         )
     except Neo4jError as exc:
-        return GroupTypeCreateResponse(
-            id=type_id, subject_code=body.subject_code, g_type=body.g_type,
-            weight=body.weight, err=db_err(exc),
-        )
+        return failed(db_err(exc))
     if row is None:
-        return GroupTypeCreateResponse(
-            id=type_id, subject_code=body.subject_code, g_type=body.g_type,
-            weight=body.weight, err="Subject not found",
-        )
+        return failed("Subject or cycle not found, or subject is not taught in this cycle")
     return GroupTypeCreateResponse(**row)
 
 
@@ -467,16 +474,14 @@ async def create_group(
         row = await one(
             session,
             """
-            MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
-            MATCH (ac:AcademicCycle {id: $cycle_id})
-            WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
+            MATCH (su:Subject {code: $subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle {id: $cycle_id})
+            MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
             MATCH (r:Room {id: $room_id})
             CREATE (g:Group {
               id: $id, weekday: $weekday, number: $number, pnp: $pnp,
               capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
             })-[:OF_TYPE]->(gt),
-            (g)-[:IN_ROOM]->(r),
-            (g)-[:IN_CYCLE]->(ac)
+            (g)-[:IN_ROOM]->(r)
             RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
                    g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
                    su.code AS subject_code, ac.id AS cycle_id, r.id AS room_id
@@ -505,7 +510,7 @@ async def create_group(
             id=group_id, weekday=body.weekday, g_type=body.g_type, number=body.number,
             pnp=body.pnp, capacity=body.capacity, start_hr=body.start_hr, end_time=body.end_time,
             subject_code=body.subject_code, cycle_id=body.cycle_id, room_id=body.room_id,
-            err="Group type, cycle, or room not found, or subject is not taught in this cycle",
+            err="Room not found, or this subject has no such group type in this cycle",
         )
     return GroupCreateResponse(**row)
 
@@ -899,18 +904,21 @@ async def list_groups(
     rows = await run(
         session,
         """
-        MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+        MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+        MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
         RETURN
           g.id AS id,
           su.code AS course_code,
+          ac.year + " " + ac.season AS cycle,
           gt.g_type AS g_type,
           g.number AS number,
           g.weekday AS weekday
-        ORDER BY su.code, gt.g_type, g.number
+        ORDER BY su.code, ac.year, ac.season, gt.g_type, g.number
         """,
     )
     groups = []
     for row in rows:
-        label = f"{row['course_code']} {row['g_type']} #{row['number']} (day {row['weekday']})"
+        label = f"{row['course_code']} {row['cycle']} {row['g_type']} #{row['number']} (day {row['weekday']})"
         groups.append(AdminGroupItem(id=row["id"], label=label))
     return AdminGroupListResponse(groups=groups)

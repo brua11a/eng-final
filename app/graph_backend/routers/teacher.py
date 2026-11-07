@@ -43,12 +43,12 @@ RETURN
 """
 
 _STUDENT_GRADES = """
-MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(attended:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
-MATCH (attended)-[:IN_CYCLE]->(ac:AcademicCycle)
-WITH DISTINCT st, su, ac
-MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
-OPTIONAL MATCH (st)-[r:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt)
-WHERE (g)-[:IN_CYCLE]->(ac)
+MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+WITH DISTINCT st, si
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+MATCH (si)-[:HAS_TYPE]->(gt:GroupType)
+OPTIONAL MATCH (st)-[r:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(gt)
 RETURN
   su.code AS subject,
   su.ects AS ects,

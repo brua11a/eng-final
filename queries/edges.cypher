@@ -29,20 +29,22 @@ MATCH (g:Group {id: grow.id})
 MATCH (r:Room {id: grow.room_id})
 MERGE (g)-[:IN_ROOM]->(r);
 
+LOAD CSV WITH HEADERS FROM "file:///nodes/subject_instances.csv" AS sirow
+MATCH (si:SubjectInstance {id: sirow.id})
+MATCH (su:Subject {code: sirow.subject_code})
+MATCH (ac:AcademicCycle {id: sirow.cycle_id})
+MERGE (si)-[:INSTANCE_OF]->(su)
+MERGE (si)-[:OFFERED_IN]->(ac);
+
 LOAD CSV WITH HEADERS FROM "file:///nodes/group_types.csv" AS gtrow
-MATCH (su:Subject {code: gtrow.subject_code})
+MATCH (si:SubjectInstance {id: gtrow.instance_id})
 MATCH (gt:GroupType {id: gtrow.id})
-MERGE (su)-[:HAS_TYPE]->(gt);
+MERGE (si)-[:HAS_TYPE]->(gt);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS grow
 MATCH (g:Group {id: grow.id})
 MATCH (gt:GroupType {id: grow.group_type_id})
 MERGE (g)-[:OF_TYPE]->(gt);
-
-LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS grow
-MATCH (g:Group {id: grow.id})
-MATCH (ac:AcademicCycle {id: grow.cycle_id})
-MERGE (g)-[:IN_CYCLE]->(ac);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/teacher_group.csv" AS row
 MATCH (t:Teacher {idx: row.teacher_idx})
@@ -87,24 +89,21 @@ MERGE (reg)-[:HAS_TURN]->(rt);
 LOAD CSV WITH HEADERS FROM "file:///edges/registration_groups.csv" AS rgrow
 MATCH (reg:Registration {id: rgrow.registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
 MATCH (reg)-[:FOR_FACULTY]->(fa:Faculty)
-MATCH (g:Group {id: rgrow.group_id})-[:IN_CYCLE]->(ac)
-MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (g:Group {id: rgrow.group_id})-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
 MATCH (ct:CurriculumTerm)-[:INCLUDES]->(su)
 MATCH (ct)-[:TAUGHT_IN]->(ac)
 MATCH (ct)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa)
 MERGE (reg)-[:OPENS]->(g);
 
-LOAD CSV WITH HEADERS FROM "file:///nodes/turn_assignments.csv" AS asgrow
-MATCH (asg:TurnAssignment {id: asgrow.id})
+LOAD CSV WITH HEADERS FROM "file:///edges/turn_assignments.csv" AS asgrow
 MATCH (st:Student {idx: asgrow.student_idx})
-MATCH (c:Curriculum {id: asgrow.curriculum_id})<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
+MATCH (:Curriculum {id: asgrow.curriculum_id})<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
 MATCH (ac:AcademicCycle {id: asgrow.cycle_id})
 MATCH (rt:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration)-[:FOR_CYCLE]->(ac)
 MATCH (reg)-[:FOR_FACULTY]->(fa)
 WHERE rt.turn_number = toInteger(asgrow.turn_number)
-WITH asg, st, c, rt, reg
+WITH asgrow, st, rt, reg
 ORDER BY reg.id
-WITH asg, st, c, head(collect(rt)) AS rt
-MERGE (st)-[:ASSIGNED]->(asg)
-MERGE (asg)-[:FOR_CURRICULUM]->(c)
-MERGE (asg)-[:FOR_TURN]->(rt)
+WITH asgrow, st, head(collect(rt)) AS rt
+MERGE (st)-[:ASSIGNED]->(rt)

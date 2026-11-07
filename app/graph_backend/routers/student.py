@@ -48,7 +48,7 @@ _student = require("Student")
 _opinion_roles = require("Student", "Admin")
 
 _CAN_USE_REGISTRATION = """
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
 RETURN reg.id AS id
 """
 
@@ -56,16 +56,15 @@ RETURN reg.id AS id
 # Rewriting capacity takes a write lock on the group, so concurrent registrations
 # for the same group see each other's writes before the capacity check.
 _REGISTER = """
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
-MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
-MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
-WITH DISTINCT st, g, gt, ac
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
+WITH DISTINCT st, g, gt
 SET g.capacity = g.capacity
 WITH st, g,
   EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
   EXISTS {
     MATCH (st)-[:REGISTERED_IN]->(other:Group)-[:OF_TYPE]->(gt)
-    WHERE other <> g AND (other)-[:IN_CYCLE]->(ac)
+    WHERE other <> g
   } AS conflict,
   COUNT { (g)<-[:REGISTERED_IN]-(:Student) } >= g.capacity AS full
 WITH st, g, CASE
@@ -101,14 +100,16 @@ async def show_registrations(
     rows = await run(
         session,
         """
-        MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(tu:TurnAssignment)-[:FOR_TURN]->(rt:RegistrationTurn)
-        MATCH (tu)-[:FOR_CURRICULUM]->(c:Curriculum)
-        MATCH (reg:Registration)-[:HAS_TURN]->(rt)
+        MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration)
         RETURN
           reg.id AS id,
           reg.name AS name,
           reg.reg_type AS reg_type,
-          c.id AS curriculum_id,
+          head(COLLECT {
+            MATCH (reg)-[:FOR_FACULTY]->(:Faculty)<-[:OFFERED_BY]-(:Programme)-[:HAS_CURRICULUM]->(c:Curriculum)
+                  -[:HAS_TERM]->(:CurriculumTerm)<-[:ENROLLED]-(st)
+            RETURN c.id
+          }) AS curriculum_id,
           rt.turn_number AS turn_number,
           rt.date AS date,
           rt.start_hr AS start,
@@ -132,8 +133,8 @@ async def show_courses(
         session,
         """
         MATCH (reg:Registration {id: $registration_id})-[:FOR_CYCLE]->(ac:AcademicCycle)
-        MATCH (reg)-[:OPENS]->(g:Group)-[:IN_CYCLE]->(ac)
-        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        MATCH (reg)-[:OPENS]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
+        MATCH (si)-[:INSTANCE_OF]->(su:Subject)
         RETURN
           su.code AS subject_code,
           su.name AS subject_name,
@@ -173,7 +174,7 @@ async def show_groups(
         """
         MATCH (st:Student {idx: $student_idx})
         MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)
-        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
+        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
         OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)
@@ -227,8 +228,8 @@ async def deregister_from_group(
         session,
         """
         MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-        MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:Subject {code: $subject_code})
-        MATCH (st)-[:ASSIGNED]->(:TurnAssignment)-[:FOR_TURN]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+        MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
+        MATCH (st)-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
         DELETE r
         RETURN g.id AS group_id
         """,
@@ -315,8 +316,9 @@ async def my_cycle_detail(
     group_rows = await run(
         session,
         """
-        MATCH (st:Student {idx: $student_idx})-[reg:REGISTERED_IN]->(g:Group)-[:IN_CYCLE]->(:AcademicCycle {id: $cycle_id})
-        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        MATCH (st:Student {idx: $student_idx})-[reg:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+        MATCH (si)-[:OFFERED_IN]->(:AcademicCycle {id: $cycle_id})
+        MATCH (si)-[:INSTANCE_OF]->(su:Subject)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
         RETURN
@@ -373,9 +375,10 @@ async def dashboard(
     rows = await run(
         session,
         """
-        MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+        MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+        MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+        MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
-        OPTIONAL MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
         RETURN
           g.id AS group_id,
           su.code AS course_code,

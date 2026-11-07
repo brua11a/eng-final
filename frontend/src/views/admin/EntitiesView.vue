@@ -42,7 +42,7 @@ const cycle = ref({ year: '2025', season: 'winter' })
 const subject = ref({ code: '', name: '', ects: '' })
 const curriculum = ref({ programme_id: '', intake_year: '2024' })
 const term = ref({ sem: 1, curriculum_id: '', cycle_id: '' })
-const groupType = ref({ subject_code: '', g_type: 'wykład', weight: 1 })
+const groupType = ref({ subject_code: '', cycle_id: '', g_type: 'wykład', weight: 1 })
 const group = ref({
   weekday: 1,
   g_type: 'wykład',
@@ -196,6 +196,15 @@ const assign = ref({ teacher_idx: '', group_id: '' })
             <option value="" disabled>Select subject</option>
             <option v-for="su in subjects" :key="su.code" :value="su.code">
               {{ su.code }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Cycle
+          <select v-model="groupType.cycle_id" required>
+            <option value="" disabled>Select cycle</option>
+            <option v-for="c in cycles" :key="c.id" :value="c.id">
+              {{ cycleLabel(c) }}
             </option>
           </select>
         </label>

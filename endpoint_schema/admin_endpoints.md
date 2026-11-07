@@ -340,6 +340,7 @@ RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p
 ```json
 {
 	"subject_code": String,
+	"cycle_id": String,
 	"g_type": String,
 	"weight": Float
 }
@@ -351,26 +352,32 @@ RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p
 {
 	"id": String,
 	"subject_code": String,
+	"cycle_id": String,
 	"g_type": String,
 	"weight": Float,
 	"err": String?
 }
 ```
 
-Fails if the subject already has a group type with that name.
+Group types belong to a subject in one cycle, so weights can change from cycle to cycle. The subject's instance for the cycle is created with its first group type. Fails if the subject already has a group type with that name in that cycle, or if no curriculum term taught in the cycle includes the subject.
 
 **Query**
 
 ```cypher
 // 1. Duplicate check
-MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
+MATCH (:Subject {code: $subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: $cycle_id})
+MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
 RETURN gt.id AS id
 
-// 2. Create
+// 2. Create, reusing the subject's instance for the cycle if it exists
 MATCH (su:Subject {code: $subject_code})
-CREATE (gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
-CREATE (su)-[:HAS_TYPE]->(gt)
-RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS weight
+MATCH (ac:AcademicCycle {id: $cycle_id})
+WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
+MERGE (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
+  ON CREATE SET si.id = $instance_id
+CREATE (si)-[:HAS_TYPE]->(gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
+RETURN gt.id AS id, su.code AS subject_code, ac.id AS cycle_id,
+       gt.g_type AS g_type, gt.weight AS weight
 ```
 
 ---
@@ -415,21 +422,19 @@ RETURN gt.id AS id, su.code AS subject_code, gt.g_type AS g_type, gt.weight AS w
 }
 ```
 
-Fails if the subject has no group type named `g_type`, or if no curriculum term taught in the cycle includes the subject.
+Fails if the room doesn't exist, or if the subject has no group type named `g_type` in that cycle (create it with `POST /admin/group-types` first).
 
 **Query**
 
 ```cypher
-MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
-MATCH (ac:AcademicCycle {id: $cycle_id})
-WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
+MATCH (su:Subject {code: $subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle {id: $cycle_id})
+MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
 MATCH (r:Room {id: $room_id})
 CREATE (g:Group {
   id: $id, weekday: $weekday, number: $number, pnp: $pnp,
   capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
 })-[:OF_TYPE]->(gt),
-(g)-[:IN_ROOM]->(r),
-(g)-[:IN_CYCLE]->(ac)
+(g)-[:IN_ROOM]->(r)
 RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
        g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
        su.code AS subject_code, ac.id AS cycle_id, r.id AS room_id
@@ -964,17 +969,20 @@ None.
 }
 ```
 
-`label` is built by the server as `"<subject code> <type> #<number> (day <weekday>)"`.
+`label` is built by the server as `"<subject code> <cycle> <type> #<number> (day <weekday>)"`.
 
 **Query**
 
 ```cypher
-MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
+MATCH (g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 RETURN
   g.id AS id,
   su.code AS course_code,
+  ac.year + " " + ac.season AS cycle,
   gt.g_type AS g_type,
   g.number AS number,
   g.weekday AS weekday
-ORDER BY su.code, gt.g_type, g.number
+ORDER BY su.code, ac.year, ac.season, gt.g_type, g.number
 ```

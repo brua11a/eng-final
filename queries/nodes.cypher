@@ -35,6 +35,9 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/subjects.csv" AS surow
 MERGE (su:Subject {code: surow.code})
 SET su.name = surow.name, su.ects = toInteger(nullif(surow.ects, ""));
 
+LOAD CSV WITH HEADERS FROM "file:///nodes/subject_instances.csv" AS sirow
+MERGE (si:SubjectInstance {id: sirow.id});
+
 LOAD CSV WITH HEADERS FROM "file:///nodes/terms.csv" AS ctrow
 MERGE (ct:CurriculumTerm {id: ctrow.id})
 SET ct.sem = toInteger(ctrow.sem);
@@ -71,9 +74,6 @@ SET rt.turn_number = toInteger(rtrow.turn_number),
     rt.date = date(rtrow.date),
     rt.start_hr = time(rtrow.start_hr),
     rt.end_time = time(rtrow.end_time);
-
-LOAD CSV WITH HEADERS FROM "file:///nodes/turn_assignments.csv" AS asgrow
-MERGE (asg:TurnAssignment {id: asgrow.id});
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/opinions.csv" AS orow
 MERGE (o:Opinion {id: orow.id})

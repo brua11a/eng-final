@@ -4,8 +4,9 @@ from app.graph_backend.query import run
 from app.schemas.teacher import TeachingGroupItem
 
 _TEACHER_GROUPS = """
-MATCH (t:Teacher {idx: $idx})-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
-OPTIONAL MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
+MATCH (t:Teacher {idx: $idx})-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 RETURN
   g.id AS group_id,

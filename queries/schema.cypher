@@ -74,6 +74,10 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		ects :: INTEGER
 	}) REQUIRE su.code IS KEY,
 
+	(si:SubjectInstance => {
+		id :: STRING
+	}) REQUIRE si.id IS KEY,
+
 	(ct:CurriculumTerm => {
 		id :: STRING,
 		sem :: INTEGER NOT NULL
@@ -110,27 +114,22 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		end_time :: ZONED TIME NOT NULL
 	}) REQUIRE rt.id IS KEY,
 
-	(asg:TurnAssignment => {
-		id :: STRING
-	}) REQUIRE asg.id IS KEY,
-
 	(st)-[:WRITES => {}]->(o),
 	(st)-[:ENROLLED => {}]->(ct),
 	(st)-[:REGISTERED_IN => {
 		registered_at :: ZONED DATETIME NOT NULL,
 		grade :: FLOAT
 	}]->(g),
-	(st)-[:ASSIGNED => {}]->(asg),
-	(asg)-[:FOR_TURN => {}]->(rt),
-	(asg)-[:FOR_CURRICULUM => {}]->(c),
+	(st)-[:ASSIGNED => {}]->(rt),
 	(o)-[:ABOUT => {}]->(g),
 	(p)-[:HAS_CURRICULUM => {}]->(c),
 	(p)-[:OFFERED_BY => {}]->(fa),
 	(c)-[:HAS_TERM => {}]->(ct),
 	(ct)-[:INCLUDES => {}]->(su),
 	(ct)-[:TAUGHT_IN => {}]->(ac),
-	(g)-[:IN_CYCLE => {}]->(ac),
-	(su)-[:HAS_TYPE => {}]->(gt),
+	(si)-[:INSTANCE_OF => {}]->(su),
+	(si)-[:OFFERED_IN => {}]->(ac),
+	(si)-[:HAS_TYPE => {}]->(gt),
 	(g)-[:OF_TYPE => {}]->(gt),
 	(reg)-[:FOR_CYCLE => {}]->(ac),
 	(reg)-[:FOR_FACULTY => {}]->(fa),

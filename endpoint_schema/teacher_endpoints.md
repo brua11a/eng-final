@@ -58,13 +58,14 @@ RETURN
   st.joined AS joined,
   COLLECT { MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm) RETURN ct.id } AS term_ids
 
-// 3. Grade rows: every group type of every subject attempt, with the grade if any
-MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(attended:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(su:Subject)
-MATCH (attended)-[:IN_CYCLE]->(ac:AcademicCycle)
-WITH DISTINCT st, su, ac
-MATCH (su)-[:HAS_TYPE]->(gt:GroupType)
-OPTIONAL MATCH (st)-[r:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(gt)
-WHERE (g)-[:IN_CYCLE]->(ac)
+// 3. Grade rows: every group type of every attempted subject instance, with the grade if any.
+//    Weights come from that instance's group types, so they are the weights of that cycle.
+MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+WITH DISTINCT st, si
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+MATCH (si)-[:HAS_TYPE]->(gt:GroupType)
+OPTIONAL MATCH (st)-[r:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(gt)
 RETURN
   su.code AS subject,
   su.ects AS ects,
@@ -118,8 +119,9 @@ Query string:
 **Query**
 
 ```cypher
-MATCH (t:Teacher {idx: $idx})-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
-OPTIONAL MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
+MATCH (t:Teacher {idx: $idx})-[:TEACHES]->(g:Group)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 RETURN
   g.id AS group_id,

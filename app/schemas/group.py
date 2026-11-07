@@ -7,6 +7,7 @@ from .generic import TeacherNameRef
 
 class GroupTypeCreateRequest(BaseModel):
     subject_code: str
+    cycle_id: str
     g_type: str
     weight: float
 
@@ -14,6 +15,7 @@ class GroupTypeCreateRequest(BaseModel):
 class GroupTypeCreateResponse(BaseModel):
     id: str
     subject_code: str
+    cycle_id: str
     g_type: str
     weight: float
     err: Optional[str] = None

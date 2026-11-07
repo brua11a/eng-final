@@ -177,7 +177,8 @@ WHERE su.code IN $codes
 RETURN DISTINCT su.code AS subject, ac.id AS cycle
 
 // 4. Groups per subject and cycle
-MATCH (su:Subject)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(g:Group)-[:IN_CYCLE]->(ac:AcademicCycle)
+MATCH (su:Subject)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle)
+MATCH (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(g:Group)
 WHERE su.code IN $codes
 RETURN
   su.code AS subject,
@@ -320,7 +321,7 @@ RETURN
   s.name AS name,
   s.ects AS ects,
   COLLECT {
-    MATCH (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
+    MATCH (s)<-[:INSTANCE_OF]-(:SubjectInstance)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
     RETURN DISTINCT {id: t.idx, name: t.name + " " + t.surname}
   } AS taught_by
 
@@ -331,7 +332,10 @@ RETURN
   ac.id AS cycle_id,
   ac.year AS cycle_year,
   ac.season AS cycle_season,
-  COUNT { (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)-[:IN_CYCLE]->(ac) } AS group_count
+  COUNT {
+    (s)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac),
+    (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
+  } AS group_count
 ```
 
 ---
@@ -380,8 +384,8 @@ Returns 404 if the subject has no groups in that cycle.
 **Query**
 
 ```cypher
-MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
-MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle {id: $cycle_id})
+MATCH (su:Subject {code: $subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle {id: $cycle_id})
+MATCH (si)-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 RETURN
   su.name AS subject_name,
@@ -456,8 +460,9 @@ Returns 404 if the group does not exist. `nearest_classes` is always empty for n
 **Query**
 
 ```cypher
-MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
-MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
+MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
 RETURN
   su.code AS subject_code,

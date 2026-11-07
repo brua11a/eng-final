@@ -11,7 +11,7 @@ class RegistrationItem(BaseModel):
     id: str
     name: str
     reg_type: RegType
-    curriculum_id: str
+    curriculum_id: Optional[str] = None
     turn_number: int
     date: date
     start: time

@@ -90,7 +90,8 @@ RETURN DISTINCT su.code AS subject, ac.id AS cycle
 """
 
 _SUBJECT_GROUP_COUNTS = """
-MATCH (su:Subject)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(g:Group)-[:IN_CYCLE]->(ac:AcademicCycle)
+MATCH (su:Subject)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle)
+MATCH (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(g:Group)
 WHERE su.code IN $codes
 RETURN
   su.code AS subject,
@@ -240,7 +241,7 @@ async def subject_detail(
           s.name AS name,
           s.ects AS ects,
           COLLECT {
-            MATCH (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
+            MATCH (s)<-[:INSTANCE_OF]-(:SubjectInstance)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:TEACHES]-(t:Teacher)
             RETURN DISTINCT {id: t.idx, name: t.name + " " + t.surname}
           } AS taught_by
         """,
@@ -257,7 +258,10 @@ async def subject_detail(
           ac.id AS cycle_id,
           ac.year AS cycle_year,
           ac.season AS cycle_season,
-          COUNT { (s)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)-[:IN_CYCLE]->(ac) } AS group_count
+          COUNT {
+            (s)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac),
+            (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
+          } AS group_count
         """,
         code=body.code,
     )
@@ -287,8 +291,8 @@ async def subject_groups(
     rows = await run(
         session,
         """
-        MATCH (su:Subject {code: $subject_code})-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
-        MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle {id: $cycle_id})
+        MATCH (su:Subject {code: $subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle {id: $cycle_id})
+        MATCH (si)-[:HAS_TYPE]->(gt:GroupType)<-[:OF_TYPE]-(g:Group)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         RETURN
           su.name AS subject_name,
@@ -348,8 +352,9 @@ async def group_detail(
     row = await one(
         session,
         """
-        MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(su:Subject)
-        MATCH (g)-[:IN_CYCLE]->(ac:AcademicCycle)
+        MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)
+        MATCH (si)-[:INSTANCE_OF]->(su:Subject)
+        MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
         RETURN
           su.code AS subject_code,
