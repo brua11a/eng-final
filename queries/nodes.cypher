@@ -1,3 +1,5 @@
+// Node properties only; relationships are loaded from import/edges/*.csv via edges.cypher
+
 LOAD CSV WITH HEADERS FROM "file:///nodes/teachers.csv" AS trow
 MERGE (t:Teacher:Person {idx: trow.idx})
 SET t.name = trow.name, t.surname = trow.surname,
