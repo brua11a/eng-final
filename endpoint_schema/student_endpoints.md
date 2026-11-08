@@ -446,7 +446,8 @@ None.
 		"end": Time,
 		"pnp": String,
 		"room": String?,
-		"cycle": String?
+		"cycle": String?,
+		"teachers": List[{ "idx": String, "name": String, "surname": String }]
 	}
 }
 ```
@@ -458,6 +459,8 @@ MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group)-[:OF_TYPE]->(
 MATCH (si)-[:INSTANCE_OF]->(su:Subject)
 MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+OPTIONAL MATCH (te:Teacher)-[:TEACHES]->(g)
+WITH g, su, gt, ac, r, collect(DISTINCT te) AS teacher_nodes
 RETURN
   g.id AS group_id,
   su.code AS course_code,
@@ -469,7 +472,8 @@ RETURN
   g.end_time AS end,
   g.pnp AS pnp,
   r.building + " " + r.room_num AS room,
-  ac.year + " " + ac.season AS cycle
+  ac.year + " " + ac.season AS cycle,
+  [x IN teacher_nodes WHERE x IS NOT NULL | {idx: x.idx, name: x.name, surname: x.surname}] AS teachers
 ```
 
 ---
@@ -486,11 +490,12 @@ RETURN
 	"content": String?,
 	"submit": DateTime,
 	"group_id": String,
+	"teacher_idx": String,
 	"student_idx": String?
 }
 ```
 
-`student_idx` is required for admins. For students it is ignored and taken from the token.
+`student_idx` is required for admins. For students it is ignored and taken from the token. `teacher_idx` must be a teacher who `TEACHES` the given group.
 
 **Response**
 
@@ -501,18 +506,23 @@ RETURN
 	"content": String?,
 	"submit": DateTime,
 	"group_id": String,
+	"teacher_idx": String,
 	"err": String?
 }
 ```
 
-Fails with `"Forbidden"` if the student is not registered in the group.
+Fails with `"Forbidden"` if the student is not registered in the group, `"Teacher does not teach this group"` if `teacher_idx` is invalid for the group, or `"Opinion already exists"` if the student already submitted for that group and teacher.
 
 **Query**
 
+Validation, then:
+
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
+MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
 CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
 CREATE (st)-[:WRITES]->(o)
 CREATE (o)-[:ABOUT]->(g)
-RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit, g.id AS group_id
+CREATE (o)-[:ABOUT_TEACHER]->(t)
+RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit, g.id AS group_id, t.idx AS teacher_idx
 ```

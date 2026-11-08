@@ -8,6 +8,7 @@ class OpinionCreateRequest(BaseModel):
     content: Optional[str] = None
     submit: datetime
     group_id: str
+    teacher_idx: str
     student_idx: Optional[str] = None
     # ^ required only when the caller is admin (WRITES needs a Student).
     #   When caller is student, derive from session and ignore/reject
@@ -20,4 +21,5 @@ class OpinionCreateResponse(BaseModel):
     content: Optional[str] = None
     submit: datetime
     group_id: str
+    teacher_idx: str
     err: Optional[str] = None

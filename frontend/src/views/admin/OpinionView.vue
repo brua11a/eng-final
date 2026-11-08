@@ -7,6 +7,7 @@ import ApiMessages from '../../components/ApiMessages.vue'
 const api = useApiCall()
 const studentIdx = ref('')
 const groupId = ref('')
+const teacherIdx = ref('')
 const grade = ref(5)
 const content = ref('')
 
@@ -18,6 +19,7 @@ function send() {
       content: content.value.trim() || null,
       submit: new Date().toISOString(),
       group_id: groupId.value,
+      teacher_idx: teacherIdx.value,
     }),
   )
 }
@@ -32,6 +34,7 @@ function send() {
       <form class="admin-form" @submit.prevent="send">
         <label>Student idx <input v-model="studentIdx" required /></label>
         <label>Group id <input v-model="groupId" required /></label>
+        <label>Teacher idx <input v-model="teacherIdx" required /></label>
         <label>Grade <input v-model="grade" type="number" step="0.1" min="2" max="5" required /></label>
         <label>Content <textarea v-model="content" rows="3" /></label>
         <button type="submit" class="teacher-btn-save" :disabled="api.loading">Submit</button>

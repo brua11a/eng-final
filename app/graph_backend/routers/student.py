@@ -379,6 +379,14 @@ async def dashboard(
         MATCH (si)-[:INSTANCE_OF]->(su:Subject)
         MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
         OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+        OPTIONAL MATCH (te:Teacher)-[:TEACHES]->(g)
+        WITH
+          g,
+          su,
+          gt,
+          ac,
+          r,
+          collect(DISTINCT te) AS teacher_nodes
         RETURN
           g.id AS group_id,
           su.code AS course_code,
@@ -390,7 +398,8 @@ async def dashboard(
           g.end_time AS end,
           g.pnp AS pnp,
           r.building + " " + r.room_num AS room,
-          ac.year + " " + ac.season AS cycle
+          ac.year + " " + ac.season AS cycle,
+          [x IN teacher_nodes WHERE x IS NOT NULL | {idx: x.idx, name: x.name, surname: x.surname}] AS teachers
         """,
         student_idx=caller.idx,
     )
@@ -415,7 +424,48 @@ async def create_opinion(
             content=body.content,
             submit=body.submit,
             group_id=body.group_id,
+            teacher_idx=body.teacher_idx,
             err="student_idx is required",
+        )
+    check = await one(
+        session,
+        """
+        MATCH (st:Student {idx: $student_idx})
+        OPTIONAL MATCH (st)-[:REGISTERED_IN]->(g:Group {id: $group_id})
+        OPTIONAL MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
+        OPTIONAL MATCH (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t)
+        RETURN g IS NOT NULL AS registered, t IS NOT NULL AS teaches, dup IS NOT NULL AS duplicate
+        """,
+        student_idx=student_idx,
+        group_id=body.group_id,
+        teacher_idx=body.teacher_idx,
+    )
+    if check is None or not check["registered"]:
+        return OpinionCreateResponse(
+            grade=body.grade,
+            content=body.content,
+            submit=body.submit,
+            group_id=body.group_id,
+            teacher_idx=body.teacher_idx,
+            err="Forbidden",
+        )
+    if not check["teaches"]:
+        return OpinionCreateResponse(
+            grade=body.grade,
+            content=body.content,
+            submit=body.submit,
+            group_id=body.group_id,
+            teacher_idx=body.teacher_idx,
+            err="Teacher does not teach this group",
+        )
+    if check["duplicate"]:
+        return OpinionCreateResponse(
+            grade=body.grade,
+            content=body.content,
+            submit=body.submit,
+            group_id=body.group_id,
+            teacher_idx=body.teacher_idx,
+            err="Opinion already exists",
         )
     opinion_id = await next_id(session, "Opinion")
     try:
@@ -423,13 +473,22 @@ async def create_opinion(
             session,
             """
             MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
+            MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
             CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
             CREATE (st)-[:WRITES]->(o)
             CREATE (o)-[:ABOUT]->(g)
-            RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit, g.id AS group_id
+            CREATE (o)-[:ABOUT_TEACHER]->(t)
+            RETURN
+              o.id AS id,
+              o.grade AS grade,
+              o.content AS content,
+              o.submit AS submit,
+              g.id AS group_id,
+              t.idx AS teacher_idx
             """,
             student_idx=student_idx,
             group_id=body.group_id,
+            teacher_idx=body.teacher_idx,
             id=opinion_id,
             grade=body.grade,
             content=body.content,
@@ -441,14 +500,7 @@ async def create_opinion(
             content=body.content,
             submit=body.submit,
             group_id=body.group_id,
+            teacher_idx=body.teacher_idx,
             err=db_err(exc),
-        )
-    if row is None:
-        return OpinionCreateResponse(
-            grade=body.grade,
-            content=body.content,
-            submit=body.submit,
-            group_id=body.group_id,
-            err="Forbidden",
         )
     return OpinionCreateResponse(**row)

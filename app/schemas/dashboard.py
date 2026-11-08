@@ -3,6 +3,12 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+class GroupTeacher(BaseModel):
+    idx: str
+    name: str
+    surname: str
+
+
 class RegisteredGroup(BaseModel):
     group_id: str
     course_code: str
@@ -15,6 +21,7 @@ class RegisteredGroup(BaseModel):
     pnp: str = ""
     room: Optional[str] = None
     cycle: Optional[str] = None
+    teachers: List[GroupTeacher] = []
 
 
 class DashboardResponse(BaseModel):

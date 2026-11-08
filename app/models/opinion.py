@@ -9,3 +9,4 @@ class Opinion(BaseModel):
     submit: datetime
     student_idx: str
     group_id: int
+    teacher_idx: str

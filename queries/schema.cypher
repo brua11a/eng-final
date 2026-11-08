@@ -122,6 +122,7 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	}]->(g),
 	(st)-[:ASSIGNED => {}]->(rt),
 	(o)-[:ABOUT => {}]->(g),
+	(o)-[:ABOUT_TEACHER => {}]->(t),
 	(p)-[:HAS_CURRICULUM => {}]->(c),
 	(p)-[:OFFERED_BY => {}]->(fa),
 	(c)-[:HAS_TERM => {}]->(ct),

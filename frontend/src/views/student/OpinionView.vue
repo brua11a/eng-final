@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { student } from '../../api/client'
 import ApiMessages from '../../components/ApiMessages.vue'
 import { errorMessage } from '../../utils/format'
@@ -10,10 +10,29 @@ const loadError = ref('')
 const drafts = reactive({})
 const status = reactive({})
 
+const targets = computed(() => {
+  const out = []
+  for (const g of groups.value) {
+    const teachers = g.teachers?.length ? g.teachers : []
+    for (const t of teachers) {
+      out.push({ ...g, teacher: t })
+    }
+  }
+  return out
+})
+
+function targetKey(g) {
+  return `${g.group_id}:${g.teacher.idx}`
+}
+
 function groupLabel(g) {
   return [g.course_name || g.course_code, g.g_type, g.number != null ? `#${g.number}` : '']
     .filter(Boolean)
     .join(' · ')
+}
+
+function teacherLabel(t) {
+  return [t.name, t.surname].filter(Boolean).join(' ')
 }
 
 async function loadGroups() {
@@ -22,9 +41,10 @@ async function loadGroups() {
   try {
     const data = await student.dashboard()
     groups.value = data?.groups || []
-    for (const g of groups.value) {
-      drafts[g.group_id] ??= { grade: 4.5, content: '' }
-      status[g.group_id] ??= { saving: false, error: '', ok: '' }
+    for (const item of targets.value) {
+      const key = targetKey(item)
+      drafts[key] ??= { grade: 4.5, content: '' }
+      status[key] ??= { saving: false, error: '', ok: '' }
     }
   } catch (e) {
     loadError.value = errorMessage(e)
@@ -34,16 +54,18 @@ async function loadGroups() {
   }
 }
 
-async function submitForGroup(g) {
-  const st = status[g.group_id]
-  const draft = drafts[g.group_id]
+async function submitForTarget(item) {
+  const key = targetKey(item)
+  const st = status[key]
+  const draft = drafts[key]
   Object.assign(st, { saving: true, error: '', ok: '' })
   try {
     const res = await student.createOpinion({
       grade: Number(draft.grade),
       content: draft.content.trim() || null,
       submit: new Date().toISOString(),
-      group_id: g.group_id,
+      group_id: item.group_id,
+      teacher_idx: item.teacher.idx,
     })
     if (res?.err) st.error = res.err
     else st.ok = 'Saved'
@@ -68,18 +90,18 @@ onMounted(loadGroups)
 
     <ApiMessages :error="loadError" />
 
-    <p v-if="!loading && !groups.length" class="page-empty">No registered groups.</p>
+    <p v-if="!loading && !targets.length" class="page-empty">No registered groups.</p>
 
     <div class="opinion-grid">
-      <div v-for="g in groups" :key="g.group_id" class="teacher-panel opinion-card">
-        <h2 class="opinion-card-title" :title="groupLabel(g)">{{ groupLabel(g) }}</h2>
-        <p class="opinion-meta">{{ g.course_code || '\u00a0' }}</p>
+      <div v-for="item in targets" :key="targetKey(item)" class="teacher-panel opinion-card">
+        <h2 class="opinion-card-title" :title="groupLabel(item)">{{ groupLabel(item) }}</h2>
+        <p class="opinion-meta">{{ item.course_code || '\u00a0' }} · {{ teacherLabel(item.teacher) }}</p>
 
-        <form class="opinion-form" @submit.prevent="submitForGroup(g)">
+        <form class="opinion-form" @submit.prevent="submitForTarget(item)">
           <label>
             Grade
             <input
-              v-model.number="drafts[g.group_id].grade"
+              v-model.number="drafts[targetKey(item)].grade"
               type="number"
               step="0.1"
               min="2"
@@ -89,15 +111,15 @@ onMounted(loadGroups)
           </label>
           <label>
             Content
-            <textarea v-model="drafts[g.group_id].content" rows="3" placeholder="Optional comment" />
+            <textarea v-model="drafts[targetKey(item)].content" rows="3" placeholder="Optional comment" />
           </label>
           <div class="opinion-actions">
-            <button type="submit" class="teacher-btn-save" :disabled="status[g.group_id].saving">
-              {{ status[g.group_id].saving ? 'Submitting…' : 'Submit' }}
+            <button type="submit" class="teacher-btn-save" :disabled="status[targetKey(item)].saving">
+              {{ status[targetKey(item)].saving ? 'Submitting…' : 'Submit' }}
             </button>
           </div>
-          <p v-if="status[g.group_id].error" class="opinion-err">{{ status[g.group_id].error }}</p>
-          <p v-if="status[g.group_id].ok" class="opinion-ok">{{ status[g.group_id].ok }}</p>
+          <p v-if="status[targetKey(item)].error" class="opinion-err">{{ status[targetKey(item)].error }}</p>
+          <p v-if="status[targetKey(item)].ok" class="opinion-ok">{{ status[targetKey(item)].ok }}</p>
         </form>
       </div>
     </div>

@@ -71,8 +71,10 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/opinions.csv" AS orow
 MATCH (o:Opinion {id: orow.id})
 MATCH (st:Student {idx: orow.student_idx})
 MATCH (g:Group {id: orow.group_id})
+MATCH (t:Teacher {idx: orow.teacher_idx})-[:TEACHES]->(g)
 MERGE (st)-[:WRITES]->(o)
-MERGE (o)-[:ABOUT]->(g);
+MERGE (o)-[:ABOUT]->(g)
+MERGE (o)-[:ABOUT_TEACHER]->(t);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/registrations.csv" AS regrow
 MATCH (reg:Registration {id: regrow.id})

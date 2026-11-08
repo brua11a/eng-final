@@ -1,6 +1,6 @@
 # Admin endpoints
 
-See `user_endpoints.md` for conventions. Every endpoint here is allowed for Admin only. Admins can also use the teacher endpoints and `POST /opinions` (see the other files).
+See `user_endpoints.md` for conventions. Every endpoint here is allowed for Admin only. Admins can also use the teacher endpoints and `POST /opinions` (requires `student_idx`, `group_id`, and `teacher_idx`; see `student_endpoints.md`).
 
 Time and DateTime inputs without a UTC offset are stored as `+01:00`.
 
