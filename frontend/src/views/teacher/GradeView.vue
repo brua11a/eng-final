@@ -22,7 +22,7 @@ function submit() {
     <form class="form" @submit.prevent="submit">
       <label>group_id <input v-model="groupId" required /></label>
       <label>student_idx <input v-model="studentIdx" required /></label>
-      <label>grade <input v-model="grade" type="number" step="0.1" required /></label>
+      <label>grade <input v-model="grade" type="number" step="0.5" min="2" max="5" required /></label>
       <button type="submit" :disabled="api.loading">POST /groups/students/grade</button>
     </form>
     <ApiMessages :error="api.error" :api-message="api.apiMessage" />

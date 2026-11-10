@@ -51,6 +51,8 @@ class TeachingGroupItem(BaseModel):
     g_type: str
     group_num: int
     academic_cycle: str
+    cycle_start: Optional[date] = None
+    cycle_end: Optional[date] = None
     room: str = ""
     weekday: int = 0
     start: Optional[time] = None

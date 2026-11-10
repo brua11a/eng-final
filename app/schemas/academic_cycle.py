@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import date, time
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
@@ -6,18 +6,24 @@ from pydantic import BaseModel, Field
 class AcademicCycleCreateRequest(BaseModel):
     year: str
     season: str
+    start_date: date
+    end_date: date
 
 
 class AcademicCycleCreateResponse(BaseModel):
     id: str
     year: str
     season: str
+    start_date: date
+    end_date: date
     err: Optional[str] = None
 
 class MyAcademicCycleItem(BaseModel):
     id: str
     year: str
     season: str
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
 
 
 class MyAcademicCyclesResponse(BaseModel):

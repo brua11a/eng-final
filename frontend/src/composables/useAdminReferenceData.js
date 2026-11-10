@@ -11,6 +11,9 @@ export function useAdminReferenceData() {
   const curricula = ref([])
   const teachers = ref([])
   const groups = ref([])
+  const students = ref([])
+  const terms = ref([])
+  const turns = ref([])
   const loading = ref(false)
   const error = ref('')
 
@@ -18,7 +21,7 @@ export function useAdminReferenceData() {
     loading.value = true
     error.value = ''
     try {
-      const [f, p, r, c, su, cur, t, g] = await Promise.all([
+      const [f, p, r, c, su, cur, t, g, st, te, tu] = await Promise.all([
         admin.listFaculties(),
         admin.listProgrammes(),
         admin.listRooms(),
@@ -27,6 +30,9 @@ export function useAdminReferenceData() {
         admin.listCurricula(),
         admin.listTeachers(),
         admin.listGroups(),
+        admin.listStudents(),
+        admin.listTerms(),
+        admin.listTurns(),
       ])
       faculties.value = f.faculties || []
       programmes.value = p.programmes || []
@@ -36,6 +42,9 @@ export function useAdminReferenceData() {
       curricula.value = cur.curricula || []
       teachers.value = t.teachers || []
       groups.value = g.groups || []
+      students.value = st.students || []
+      terms.value = te.terms || []
+      turns.value = tu.turns || []
     } catch (e) {
       error.value = errorMessage(e)
     } finally {
@@ -68,6 +77,9 @@ export function useAdminReferenceData() {
     curricula,
     teachers,
     groups,
+    students,
+    terms,
+    turns,
     loading,
     error,
     load,

@@ -107,6 +107,8 @@ Query string:
 		"g_type": String,
 		"group_num": Integer,
 		"academic_cycle": String,
+		"cycle_start": Date?,
+		"cycle_end": Date?,
 		"room": String,
 		"weekday": Integer,
 		"start": Time?,
@@ -135,6 +137,8 @@ RETURN
   g.pnp AS pnp,
   ac.year AS cycle_year,
   ac.season AS cycle_season,
+  ac.start_date AS cycle_start,
+  ac.end_date AS cycle_end,
   r.building AS building,
   r.room_num AS room_num
 ORDER BY ac.year DESC, ac.season, su.name, gt.g_type, g.number
@@ -208,6 +212,8 @@ ORDER BY st.surname, st.name
 	"grade": Float
 }
 ```
+
+`grade` must be one of `2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0`; any other value is rejected with HTTP 422.
 
 **Response**
 

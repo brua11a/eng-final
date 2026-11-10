@@ -20,6 +20,8 @@ RETURN
   g.pnp AS pnp,
   ac.year AS cycle_year,
   ac.season AS cycle_season,
+  ac.start_date AS cycle_start,
+  ac.end_date AS cycle_end,
   r.building AS building,
   r.room_num AS room_num
 ORDER BY ac.year DESC, ac.season, su.name, gt.g_type, g.number
@@ -48,6 +50,8 @@ async def teacher_groups(session: AsyncSession, idx: str) -> list[TeachingGroupI
             g_type=row["g_type"],
             group_num=row["group_num"],
             academic_cycle=_cycle(row.get("cycle_year"), row.get("cycle_season")),
+            cycle_start=row.get("cycle_start"),
+            cycle_end=row.get("cycle_end"),
             room=_room(row.get("building"), row.get("room_num")),
             weekday=row.get("weekday") if row.get("weekday") is not None else 0,
             start=row.get("start"),

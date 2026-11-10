@@ -39,3 +39,31 @@ class AdminGroupItem(BaseModel):
 
 class AdminGroupListResponse(BaseModel):
     groups: List[AdminGroupItem]
+
+
+class AdminStudentItem(BaseModel):
+    idx: str
+    name: str
+    surname: str
+
+
+class AdminStudentListResponse(BaseModel):
+    students: List[AdminStudentItem]
+
+
+class AdminTermItem(BaseModel):
+    id: str
+    label: str
+
+
+class AdminTermListResponse(BaseModel):
+    terms: List[AdminTermItem]
+
+
+class AdminTurnItem(BaseModel):
+    id: str
+    label: str
+
+
+class AdminTurnListResponse(BaseModel):
+    turns: List[AdminTurnItem]

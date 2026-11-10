@@ -1,9 +1,10 @@
 FROM neo4j:2026.07.1-enterprise
 
 ENV NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
-ENV NEO4J_PLUGINS='["apoc"]'
-ENV NEO4J_apoc_import_file_enabled=true
-ENV NEO4J_apoc_export_file_enabled=true
+# No plugins: APOC was unused, and its file import/export would let queries
+# read and write files on the server.
+# Only the import directory is readable by LOAD CSV.
+ENV NEO4J_server_directories_import=/import
 
 VOLUME ["/data", "/logs", "/import", "/plugins", "/conf"]
 

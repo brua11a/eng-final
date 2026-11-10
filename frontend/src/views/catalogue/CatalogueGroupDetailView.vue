@@ -6,6 +6,7 @@ import { useApiCall } from '../../composables/useApiCall'
 import { useAuthStore } from '../../stores/auth'
 import ApiMessages from '../../components/ApiMessages.vue'
 import GroupFacts from '../../components/GroupFacts.vue'
+import OpinionList from '../../components/OpinionList.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -68,6 +69,7 @@ function load() {
         </RouterLink>
       </p>
     </div>
+    <OpinionList v-if="api.result" :group-id="groupId" />
   </div>
 </template>
 

@@ -447,6 +447,8 @@ None.
 		"pnp": String,
 		"room": String?,
 		"cycle": String?,
+		"cycle_start": Date?,
+		"cycle_end": Date?,
 		"teachers": List[{ "idx": String, "name": String, "surname": String }]
 	}
 }
@@ -473,6 +475,8 @@ RETURN
   g.pnp AS pnp,
   r.building + " " + r.room_num AS room,
   ac.year + " " + ac.season AS cycle,
+  ac.start_date AS cycle_start,
+  ac.end_date AS cycle_end,
   [x IN teacher_nodes WHERE x IS NOT NULL | {idx: x.idx, name: x.name, surname: x.surname}] AS teachers
 ```
 

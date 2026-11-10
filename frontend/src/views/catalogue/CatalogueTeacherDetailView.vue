@@ -5,6 +5,7 @@ import { catalogue } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
 import { useAuthStore } from '../../stores/auth'
 import ApiMessages from '../../components/ApiMessages.vue'
+import OpinionList from '../../components/OpinionList.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -69,6 +70,7 @@ function groupLabel(g) {
         </li>
       </ul>
     </div>
+    <OpinionList v-if="api.result && !api.result.err" :teacher-idx="String(route.params.idx)" />
   </div>
 </template>
 

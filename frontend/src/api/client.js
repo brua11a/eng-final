@@ -139,6 +139,7 @@ export const catalogue = {
     apiRequest('/subjects/groups', { method: 'POST', body: { subject_code, cycle_id } }),
   groupDetail: (group_id) => apiRequest('/groups/detail', { method: 'POST', body: { group_id } }),
   teacherDetail: (idx) => apiRequest('/teachers/detail', { method: 'POST', body: { idx } }),
+  opinions: (query) => apiRequest('/opinions/list', { method: 'POST', body: query }),
 }
 
 export const student = {
@@ -204,4 +205,15 @@ export const admin = {
   assignTeacherToGroup: (body) => apiRequest('/admin/groups/teachers', { method: 'POST', body }),
   startRegistrations: (body) => apiRequest('/admin/registrations', { method: 'POST', body }),
   createOpinion: (body) => apiRequest('/opinions', { method: 'POST', body }),
+  createAdmin: (body) => apiRequest('/admin/admins', { method: 'POST', body }),
+  removeUser: (idx) => apiRequest('/admin/users/remove', { method: 'POST', body: { idx } }),
+  createProgramme: (body) => apiRequest('/admin/programmes', { method: 'POST', body }),
+  addSubjectToTerm: (body) => apiRequest('/admin/curriculum-terms/subjects', { method: 'POST', body }),
+  enrolStudent: (body) => apiRequest('/admin/students/enrol', { method: 'POST', body }),
+  assignStudentsToTurn: (body) =>
+    apiRequest('/admin/registrations/turns/students', { method: 'POST', body }),
+  deanRegister: (body) => apiRequest('/admin/groups/students', { method: 'POST', body }),
+  listStudents: () => apiRequest('/admin/students'),
+  listTerms: () => apiRequest('/admin/curriculum-terms'),
+  listTurns: () => apiRequest('/admin/registration-turns'),
 }

@@ -12,6 +12,7 @@ from app.schemas.curriculum import (
 )
 from app.schemas.generic import TeacherNameRef
 from app.schemas.group import GroupDetailRequest, GroupDetailResponse, GroupTracked
+from app.schemas.opinion import OpinionItem, OpinionListRequest, OpinionListResponse
 from app.schemas.subject import (
     SubjectCatalogueItem,
     SubjectCatalogueResponse,
@@ -422,3 +423,40 @@ async def teacher_detail(
         email=profile["email"],
         groups=await teacher_groups(session, body.idx),
     )
+
+
+# Opinions are anonymous: the author (WRITES) is never returned.
+_OPINIONS = """
+MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
+WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
+  AND ($group_id IS NULL OR g.id = $group_id)
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+RETURN
+  o.id AS id,
+  o.grade AS grade,
+  o.content AS content,
+  o.submit AS submit,
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type AS g_type,
+  ac.year + " " + ac.season AS cycle,
+  t.idx AS teacher_idx,
+  t.name + " " + t.surname AS teacher
+ORDER BY o.submit DESC
+"""
+
+
+@router.post("/opinions/list", response_model=OpinionListResponse)
+async def list_opinions(
+    body: OpinionListRequest,
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_logged_in),
+) -> OpinionListResponse:
+    if not body.teacher_idx and not body.group_id:
+        raise HTTPException(status_code=400, detail="teacher_idx or group_id is required")
+    rows = await run(session, _OPINIONS, teacher_idx=body.teacher_idx, group_id=body.group_id)
+    opinions = [OpinionItem(**row) for row in rows]
+    avg = sum(o.grade for o in opinions) / len(opinions) if opinions else None
+    return OpinionListResponse(opinions=opinions, avg_grade=avg)

@@ -64,7 +64,9 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 	(ac:AcademicCycle => {
 		id :: STRING,
 		year :: STRING NOT NULL,
-		season :: STRING NOT NULL
+		season :: STRING NOT NULL,
+		start_date :: DATE NOT NULL,
+		end_date :: DATE NOT NULL
 	}) REQUIRE ac.id IS KEY
 	   REQUIRE (ac.year, ac.season) IS UNIQUE,
 

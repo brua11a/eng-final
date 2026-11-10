@@ -5,7 +5,7 @@ import { catalogue, teacher } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
 import ApiMessages from '../../components/ApiMessages.vue'
 
-const GRADE_OPTIONS = [2, 3, 3.5, 4, 4.5, 5]
+const GRADE_OPTIONS = [2, 2.5, 3, 3.5, 4, 4.5, 5]
 
 const route = useRoute()
 const groupId = computed(() => route.params.groupId?.toString() ?? '')

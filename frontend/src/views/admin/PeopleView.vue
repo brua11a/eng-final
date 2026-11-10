@@ -5,10 +5,32 @@ import { useApiCall } from '../../composables/useApiCall'
 import { useAdminReferenceData } from '../../composables/useAdminReferenceData'
 import ApiMessages from '../../components/ApiMessages.vue'
 
-const { faculties, programmes, facultyLabel, programmeLabel, error: refsError } = useAdminReferenceData()
+const {
+  faculties,
+  programmes,
+  students,
+  terms,
+  facultyLabel,
+  programmeLabel,
+  error: refsError,
+  load: reloadRefs,
+} = useAdminReferenceData()
 
 const teacherApi = useApiCall()
 const studentApi = useApiCall()
+const adminApi = useApiCall()
+const enrolApi = useApiCall()
+
+const a = ref({ name: '', surname: '', phone: '' })
+const enrol = ref({ student_idx: '', term_id: '' })
+
+function createAdmin() {
+  adminApi.run(() => admin.createAdmin(a.value))
+}
+
+function enrolStudent() {
+  enrolApi.run(() => admin.enrolStudent(enrol.value))
+}
 
 const t = ref({
   name: '',
@@ -38,14 +60,15 @@ function createTeacher() {
   )
 }
 
-function createStudent() {
-  studentApi.run(() =>
+async function createStudent() {
+  await studentApi.run(() =>
     admin.createStudent({
       ...s.value,
       joined: `${s.value.joined}T00:00:00`,
       photo: s.value.photo || null,
     }),
   )
+  if (studentApi.result?.idx && !studentApi.apiMessage) reloadRefs()
 }
 </script>
 
@@ -102,6 +125,47 @@ function createStudent() {
       <ApiMessages :error="studentApi.error" :api-message="studentApi.apiMessage" />
       <p v-if="studentApi.result?.idx && !studentApi.apiMessage" class="admin-ok">
         Created student {{ studentApi.result.idx }}
+      </p>
+    </section>
+
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Enrol student in curriculum term</h2>
+      <form class="admin-form" @submit.prevent="enrolStudent">
+        <label>
+          Student
+          <select v-model="enrol.student_idx" required>
+            <option value="" disabled>Select student</option>
+            <option v-for="st in students" :key="st.idx" :value="st.idx">
+              {{ st.idx }} {{ st.name }} {{ st.surname }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Curriculum term
+          <select v-model="enrol.term_id" required>
+            <option value="" disabled>Select term</option>
+            <option v-for="t in terms" :key="t.id" :value="t.id">{{ t.label }}</option>
+          </select>
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="enrolApi.loading">Enrol</button>
+      </form>
+      <ApiMessages :error="enrolApi.error" :api-message="enrolApi.apiMessage" />
+      <p v-if="enrolApi.result && !enrolApi.apiMessage" class="admin-ok">
+        Enrolled {{ enrolApi.result.student_idx }}
+      </p>
+    </section>
+
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">New administrator</h2>
+      <form class="admin-form" @submit.prevent="createAdmin">
+        <label>Name <input v-model="a.name" required /></label>
+        <label>Surname <input v-model="a.surname" required /></label>
+        <label>Phone <input v-model="a.phone" required /></label>
+        <button type="submit" class="teacher-btn-save" :disabled="adminApi.loading">Create</button>
+      </form>
+      <ApiMessages :error="adminApi.error" :api-message="adminApi.apiMessage" />
+      <p v-if="adminApi.result?.idx && !adminApi.apiMessage" class="admin-ok">
+        Created administrator {{ adminApi.result.idx }}. Assign a login in User accounts.
       </p>
     </section>
   </div>

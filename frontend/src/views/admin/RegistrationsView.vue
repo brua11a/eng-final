@@ -5,7 +5,40 @@ import { useApiCall } from '../../composables/useApiCall'
 import { useAdminReferenceData } from '../../composables/useAdminReferenceData'
 import ApiMessages from '../../components/ApiMessages.vue'
 
-const { faculties, cycles, groups, facultyLabel, cycleLabel, error: refsError } = useAdminReferenceData()
+const {
+  faculties,
+  cycles,
+  groups,
+  students,
+  turns: existingTurns,
+  facultyLabel,
+  cycleLabel,
+  error: refsError,
+  load: reloadRefs,
+} = useAdminReferenceData()
+
+const assignApi = useApiCall()
+const deanApi = useApiCall()
+const dean = ref({ student_idx: '', group_id: '', ignore_capacity: false })
+
+function deanRegister() {
+  deanApi.run(() => admin.deanRegister(dean.value))
+}
+const assignTurnId = ref('')
+const assignStudentIdxs = ref([])
+
+function toggleStudent(idx) {
+  const i = assignStudentIdxs.value.indexOf(idx)
+  if (i >= 0) assignStudentIdxs.value.splice(i, 1)
+  else assignStudentIdxs.value.push(idx)
+}
+
+async function assignStudents() {
+  const data = await assignApi.run(() =>
+    admin.assignStudentsToTurn({ turn_id: assignTurnId.value, student_idxs: assignStudentIdxs.value }),
+  )
+  if (data && !assignApi.apiMessage) assignStudentIdxs.value = []
+}
 
 const api = useApiCall()
 const formError = ref('')
@@ -48,7 +81,7 @@ function toTimeString(v) {
   return v.length === 5 ? `${v}:00` : v
 }
 
-function submit() {
+async function submit() {
   formError.value = ''
   if (!turns.value.length) {
     formError.value = 'Add at least one turn'
@@ -66,7 +99,7 @@ function submit() {
     start: toTimeString(t.start),
     end: toTimeString(t.end),
   }))
-  api.run(() =>
+  const data = await api.run(() =>
     admin.startRegistrations({
       name: name.value,
       cycle_id: cycleId.value,
@@ -76,6 +109,7 @@ function submit() {
       group_ids: selectedGroupIds.value,
     }),
   )
+  if (data?.id && !api.apiMessage) reloadRefs()
 }
 </script>
 
@@ -151,6 +185,64 @@ function submit() {
       </form>
       <ApiMessages :error="formError || api.error" :api-message="api.apiMessage" />
       <p v-if="api.result?.id && !api.apiMessage" class="admin-ok">Registration {{ api.result.id }}</p>
+    </section>
+
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Assign students to a turn</h2>
+      <form class="admin-form admin-form-wide" @submit.prevent="assignStudents">
+        <label>
+          Turn
+          <select v-model="assignTurnId" required>
+            <option value="" disabled>Select turn</option>
+            <option v-for="t in existingTurns" :key="t.id" :value="t.id">{{ t.label }}</option>
+          </select>
+        </label>
+        <fieldset class="admin-group-pick">
+          <legend>Students ({{ assignStudentIdxs.length }} selected)</legend>
+          <label v-for="st in students" :key="st.idx" class="admin-check">
+            <input type="checkbox" :checked="assignStudentIdxs.includes(st.idx)" @change="toggleStudent(st.idx)" />
+            {{ st.idx }} {{ st.name }} {{ st.surname }}
+          </label>
+        </fieldset>
+        <button type="submit" class="teacher-btn-save" :disabled="assignApi.loading || !assignStudentIdxs.length">
+          Assign
+        </button>
+      </form>
+      <ApiMessages :error="assignApi.error" :api-message="assignApi.apiMessage" />
+      <p v-if="assignApi.result?.assigned?.length && !assignApi.apiMessage" class="admin-ok">
+        Assigned {{ assignApi.result.assigned.length }} student(s)
+      </p>
+    </section>
+
+    <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Dean's office registration</h2>
+      <form class="admin-form admin-form-wide" @submit.prevent="deanRegister">
+        <label>
+          Student
+          <select v-model="dean.student_idx" required>
+            <option value="" disabled>Select student</option>
+            <option v-for="st in students" :key="st.idx" :value="st.idx">
+              {{ st.idx }} {{ st.name }} {{ st.surname }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Group
+          <select v-model="dean.group_id" required>
+            <option value="" disabled>Select group</option>
+            <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.label }}</option>
+          </select>
+        </label>
+        <label class="admin-check">
+          <input v-model="dean.ignore_capacity" type="checkbox" />
+          Ignore group capacity
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="deanApi.loading">Register</button>
+      </form>
+      <ApiMessages :error="deanApi.error" :api-message="deanApi.apiMessage" />
+      <p v-if="deanApi.result && !deanApi.apiMessage && !deanApi.error" class="admin-ok">
+        Registered {{ deanApi.result.student_idx }}
+      </p>
     </section>
   </div>
 </template>

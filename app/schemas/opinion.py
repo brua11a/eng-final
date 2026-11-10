@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -23,3 +23,27 @@ class OpinionCreateResponse(BaseModel):
     group_id: str
     teacher_idx: str
     err: Optional[str] = None
+
+
+class OpinionListRequest(BaseModel):
+    teacher_idx: Optional[str] = None
+    group_id: Optional[str] = None
+
+
+class OpinionItem(BaseModel):
+    id: str
+    grade: float
+    content: Optional[str] = None
+    submit: datetime
+    group_id: str
+    course_code: str
+    course_name: str
+    g_type: str
+    cycle: str
+    teacher_idx: str
+    teacher: str
+
+
+class OpinionListResponse(BaseModel):
+    opinions: List[OpinionItem]
+    avg_grade: Optional[float] = None

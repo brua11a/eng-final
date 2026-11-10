@@ -516,6 +516,8 @@ RETURN
 		"g_type": String,
 		"group_num": Integer,
 		"academic_cycle": String,
+		"cycle_start": Date?,
+		"cycle_end": Date?,
 		"room": String,
 		"weekday": Integer,
 		"start": Time?,
@@ -535,4 +537,58 @@ MATCH (t:Teacher {idx: $idx})
 RETURN t.degree AS degree, t.name AS name, t.surname AS surname, t.email AS email, t.phone AS phone
 
 // 2. Groups: the teaching-groups query from GET /me/groups (teacher_endpoints.md)
+```
+
+---
+
+## POST /opinions/list
+
+**Allowed:** Student, Teacher, Admin
+
+Opinions are anonymous: the author is never returned. At least one of `teacher_idx` and `group_id` is required (HTTP 400 otherwise).
+
+**Request**
+
+```json
+{
+	"teacher_idx": String?,
+	"group_id": String?
+}
+```
+
+**Response**
+
+```json
+{
+	"opinions": List[Opinion],
+	"avg_grade": Float?
+
+	Opinion = {
+		"id": String,
+		"grade": Float,
+		"content": String?,
+		"submit": DateTime,
+		"group_id": String,
+		"course_code": String,
+		"course_name": String,
+		"g_type": String,
+		"cycle": String,
+		"teacher_idx": String,
+		"teacher": String
+	}
+}
+```
+
+**Query**
+
+```cypher
+MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
+WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
+  AND ($group_id IS NULL OR g.id = $group_id)
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit,
+  g.id AS group_id, su.code AS course_code, su.name AS course_name, gt.g_type AS g_type,
+  ac.year + " " + ac.season AS cycle, t.idx AS teacher_idx, t.name + " " + t.surname AS teacher
+ORDER BY o.submit DESC
 ```

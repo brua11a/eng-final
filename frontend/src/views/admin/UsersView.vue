@@ -7,6 +7,8 @@ import ApiMessages from '../../components/ApiMessages.vue'
 const assignApi = useApiCall()
 const deactivateApi = useApiCall()
 const activateApi = useApiCall()
+const removeApi = useApiCall()
+const confirmRemove = ref(false)
 const roleApi = useApiCall()
 const removeRoleApi = useApiCall()
 
@@ -29,6 +31,11 @@ function deactivate() {
 
 function activate() {
   activateApi.run(() => admin.activateUser(idx.value))
+}
+
+async function removeAccount() {
+  await removeApi.run(() => admin.removeUser(idx.value))
+  confirmRemove.value = false
 }
 
 function addRole() {
@@ -92,6 +99,21 @@ function rolesText(res) {
           <button type="button" class="teacher-btn-secondary" :disabled="activateApi.loading" @click="activate">
             Activate
           </button>
+          <button
+            v-if="!confirmRemove"
+            type="button"
+            class="teacher-btn-secondary"
+            :disabled="!idx"
+            @click="confirmRemove = true"
+          >
+            Remove account
+          </button>
+          <template v-else>
+            <button type="button" class="teacher-btn-save" :disabled="removeApi.loading" @click="removeAccount">
+              Confirm removal of {{ idx }}
+            </button>
+            <button type="button" class="teacher-btn-secondary" @click="confirmRemove = false">Cancel</button>
+          </template>
         </div>
       </div>
       <ApiMessages :error="deactivateApi.error" :api-message="deactivateApi.apiMessage" />
@@ -101,6 +123,10 @@ function rolesText(res) {
       </p>
       <p v-if="activateApi.result && !activateApi.apiMessage" class="admin-ok">
         Activated {{ activateApi.result.idx }}
+      </p>
+      <ApiMessages :error="removeApi.error" :api-message="removeApi.apiMessage" />
+      <p v-if="removeApi.result && !removeApi.apiMessage" class="admin-ok">
+        Removed login of {{ removeApi.result.idx }}
       </p>
     </section>
 

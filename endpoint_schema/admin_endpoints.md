@@ -518,9 +518,13 @@ RETURN r.id AS id, r.building AS building, r.room_num AS room_num
 ```json
 {
 	"year": String,
-	"season": String
+	"season": String,
+	"start_date": Date,
+	"end_date": Date
 }
 ```
+
+`start_date` and `end_date` bound the teaching period; the weekly schedule shows a cycle's classes only between them. Fails if `end_date` is not after `start_date`.
 
 **Response**
 
@@ -529,6 +533,8 @@ RETURN r.id AS id, r.building AS building, r.room_num AS room_num
 	"id": String,
 	"year": String,
 	"season": String,
+	"start_date": Date,
+	"end_date": Date,
 	"err": String?
 }
 ```
@@ -536,8 +542,12 @@ RETURN r.id AS id, r.building AS building, r.room_num AS room_num
 **Query**
 
 ```cypher
-CREATE (ac:AcademicCycle {id: $id, year: $year, season: $season})
-RETURN ac.id AS id, ac.year AS year, ac.season AS season
+CREATE (ac:AcademicCycle {
+  id: $id, year: $year, season: $season,
+  start_date: date($start_date), end_date: date($end_date)
+})
+RETURN ac.id AS id, ac.year AS year, ac.season AS season,
+       ac.start_date AS start_date, ac.end_date AS end_date
 ```
 
 ---
@@ -838,7 +848,9 @@ None.
 	AcademicCycle = {
 		"id": String,
 		"year": String,
-		"season": String
+		"season": String,
+		"start_date": Date?,
+		"end_date": Date?
 	}
 }
 ```
@@ -847,8 +859,9 @@ None.
 
 ```cypher
 MATCH (ac:AcademicCycle)
-RETURN ac.id AS id, ac.year AS year, ac.season AS season
-ORDER BY ac.year, ac.season
+RETURN ac.id AS id, ac.year AS year, ac.season AS season,
+       ac.start_date AS start_date, ac.end_date AS end_date
+ORDER BY ac.start_date
 ```
 
 ---
@@ -969,7 +982,7 @@ None.
 }
 ```
 
-`label` is built by the server as `"<subject code> <cycle> <type> #<number> (day <weekday>)"`.
+`label` is built by the server as `"<subject code> <subject name>, <cycle>, <type> #<number>, <Mon..Sun> <start>-<end>"`.
 
 **Query**
 
@@ -982,7 +995,371 @@ RETURN
   su.code AS course_code,
   ac.year + " " + ac.season AS cycle,
   gt.g_type AS g_type,
+  su.name AS course_name,
   g.number AS number,
-  g.weekday AS weekday
+  g.weekday AS weekday,
+  g.start_hr AS start,
+  g.end_time AS end
 ORDER BY su.code, ac.year, ac.season, gt.g_type, g.number
 ```
+
+---
+
+## POST /admin/admins
+
+**Allowed:** Admin
+
+Creates an administrator person. A login is assigned separately with `POST /admin/users`.
+
+**Request**
+
+```json
+{
+	"name": String,
+	"surname": String,
+	"phone": String
+}
+```
+
+**Response**
+
+```json
+{
+	"idx": String?,
+	"name": String,
+	"surname": String,
+	"phone": String,
+	"err": String?
+}
+```
+
+**Query**
+
+```cypher
+// 1. Next admin idx ("A" + 3 digits)
+OPTIONAL MATCH (p:Person) WHERE p.idx STARTS WITH "A"
+RETURN coalesce(max(toInteger(substring(p.idx, 1))), 0) + 1 AS n
+
+// 2. Create
+CREATE (a:Admin:Person {idx: $idx, name: $name, surname: $surname, phone: $phone})
+RETURN a.idx AS idx, a.name AS name, a.surname AS surname, a.phone AS phone
+```
+
+---
+
+## POST /admin/users/remove
+
+**Allowed:** Admin (not on their own account)
+
+Deletes the login account. The person node, its roles and its history (registrations, grades, opinions) stay in the graph.
+
+**Request**
+
+```json
+{
+	"idx": String
+}
+```
+
+**Response**
+
+```json
+{
+	"idx": String,
+	"err": String?
+}
+```
+
+**Query**
+
+```cypher
+MATCH (u:User {idx: $idx})
+REMOVE u:User:Inactive, u.email, u.passwd_hash, u.deactivated_at
+RETURN u.idx AS idx
+```
+
+---
+
+## POST /admin/programmes
+
+**Allowed:** Admin
+
+**Request**
+
+```json
+{
+	"name": String,
+	"faculty_id": String
+}
+```
+
+**Response**
+
+```json
+{
+	"id": String?,
+	"name": String,
+	"faculty_id": String,
+	"err": String?
+}
+```
+
+**Query**
+
+```cypher
+MATCH (fa:Faculty {id: $faculty_id})
+CREATE (p:Programme {id: $id, name: $name})-[:OFFERED_BY]->(fa)
+RETURN p.id AS id, p.name AS name, fa.id AS faculty_id
+```
+
+---
+
+## POST /admin/curriculum-terms/subjects
+
+**Allowed:** Admin
+
+Adds a subject to a curriculum term. Required before a group type can be created for that subject in the term's cycle.
+
+**Request**
+
+```json
+{
+	"term_id": String,
+	"subject_code": String
+}
+```
+
+**Response**
+
+```json
+{
+	"term_id": String,
+	"subject_code": String,
+	"err": String?
+}
+```
+
+**Query**
+
+```cypher
+MATCH (ct:CurriculumTerm {id: $term_id})
+MATCH (su:Subject {code: $subject_code})
+WITH ct, su, EXISTS { (ct)-[:INCLUDES]->(su) } AS already
+MERGE (ct)-[:INCLUDES]->(su)
+RETURN already
+```
+
+---
+
+## POST /admin/students/enrol
+
+**Allowed:** Admin
+
+Enrols an existing student in a curriculum term (e.g. the next semester).
+
+**Request**
+
+```json
+{
+	"student_idx": String,
+	"term_id": String
+}
+```
+
+**Response**
+
+```json
+{
+	"student_idx": String,
+	"term_id": String,
+	"err": String?
+}
+```
+
+**Query**
+
+```cypher
+MATCH (st:Student {idx: $student_idx})
+MATCH (ct:CurriculumTerm {id: $term_id})
+WITH st, ct, EXISTS { (st)-[:ENROLLED]->(ct) } AS already
+MERGE (st)-[:ENROLLED]->(ct)
+RETURN already
+```
+
+---
+
+## POST /admin/registrations/turns/students
+
+**Allowed:** Admin
+
+Assigns students to a registration turn. All-or-nothing: fails if any student does not exist or is already assigned to another turn of the same registration.
+
+**Request**
+
+```json
+{
+	"turn_id": String,
+	"student_idxs": List[String]
+}
+```
+
+**Response**
+
+```json
+{
+	"turn_id": String,
+	"assigned": List[String],
+	"err": String?
+}
+```
+
+**Query**
+
+```cypher
+// 1. Validation
+MATCH (rt:RegistrationTurn {id: $turn_id})<-[:HAS_TURN]-(reg:Registration)
+UNWIND $student_idxs AS sidx
+OPTIONAL MATCH (st:Student {idx: sidx})
+WITH sidx, st, EXISTS {
+  MATCH (st)-[:ASSIGNED]->(other:RegistrationTurn)<-[:HAS_TURN]-(reg)
+  WHERE other <> rt
+} AS other_turn
+RETURN
+  [x IN collect({idx: sidx, found: st IS NOT NULL}) WHERE NOT x.found | x.idx] AS missing,
+  [x IN collect({idx: sidx, other: other_turn}) WHERE x.other | x.idx] AS conflicts
+
+// 2. Assign
+MATCH (rt:RegistrationTurn {id: $turn_id})
+UNWIND $student_idxs AS sidx
+MATCH (st:Student {idx: sidx})
+MERGE (st)-[:ASSIGNED]->(rt)
+RETURN collect(DISTINCT st.idx) AS assigned
+```
+
+---
+
+## GET /admin/students
+
+**Allowed:** Admin
+
+**Response**
+
+```json
+{
+	"students": List[{ "idx": String, "name": String, "surname": String }]
+}
+```
+
+**Query**
+
+```cypher
+MATCH (st:Student)
+RETURN st.idx AS idx, st.name AS name, st.surname AS surname
+ORDER BY st.surname, st.name
+```
+
+---
+
+## GET /admin/curriculum-terms
+
+**Allowed:** Admin
+
+**Response**
+
+```json
+{
+	"terms": List[{ "id": String, "label": String }]
+}
+```
+
+`label` is built by the server as `"<programme> <intake year>, sem. <n> (<cycle>)"`.
+
+**Query**
+
+```cypher
+MATCH (p:Programme)-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm)
+OPTIONAL MATCH (ct)-[:TAUGHT_IN]->(ac:AcademicCycle)
+RETURN ct.id AS id, p.name AS programme, c.intake_year AS intake_year, ct.sem AS sem,
+       ac.year AS year, ac.season AS season
+ORDER BY p.name, c.intake_year DESC, ct.sem
+```
+
+---
+
+## GET /admin/registration-turns
+
+**Allowed:** Admin
+
+**Response**
+
+```json
+{
+	"turns": List[{ "id": String, "label": String }]
+}
+```
+
+`label` is built by the server as `"<registration>, turn <n> (<date> <start>-<end>)"`.
+
+**Query**
+
+```cypher
+MATCH (reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)
+RETURN rt.id AS id, reg.name AS registration, rt.turn_number AS turn_number,
+       rt.date AS date, rt.start_hr AS start, rt.end_time AS end
+ORDER BY rt.date DESC, reg.name, rt.turn_number
+```
+
+---
+
+## POST /admin/groups/students
+
+**Allowed:** Admin
+
+Dean's office registration of a student to a group. Bypasses registration turns. A student can still be in only one group of each type per subject. Group capacity is enforced unless `ignore_capacity` is `true`.
+
+**Request**
+
+```json
+{
+	"student_idx": String,
+	"group_id": String,
+	"ignore_capacity": Boolean?
+}
+```
+
+**Response**
+
+```json
+{
+	"student_idx": String,
+	"group_id": String,
+	"ignore_capacity": Boolean,
+	"err": String?
+}
+```
+
+**Query**
+
+```cypher
+MATCH (st:Student {idx: $student_idx})
+MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)
+SET g.capacity = g.capacity
+WITH st, g,
+  EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
+  EXISTS {
+    MATCH (st)-[:REGISTERED_IN]->(other:Group)-[:OF_TYPE]->(gt)
+    WHERE other <> g
+  } AS conflict,
+  COUNT { (g)<-[:REGISTERED_IN]-(:Student) } >= g.capacity AS full
+WITH st, g, CASE
+  WHEN already THEN "already"
+  WHEN conflict THEN "conflict"
+  WHEN full AND NOT $ignore_capacity THEN "full"
+  ELSE "ok"
+END AS status
+FOREACH (_ IN CASE WHEN status = "ok" THEN [1] ELSE [] END |
+  CREATE (st)-[:REGISTERED_IN {registered_at: datetime()}]->(g)
+)
+RETURN status
+```
+

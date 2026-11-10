@@ -44,7 +44,8 @@ SET ct.sem = toInteger(row.sem);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/academic_cycles.csv" AS row
 MERGE (ac:AcademicCycle {id: row.id})
-SET ac.year = row.year, ac.season = row.season;
+SET ac.year = row.year, ac.season = row.season,
+    ac.start_date = date(row.start_date), ac.end_date = date(row.end_date);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/rooms.csv" AS row
 MERGE (r:Room {id: row.id})

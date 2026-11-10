@@ -18,10 +18,30 @@ from app.schemas.admin_lists import (
     AdminCurriculumListResponse,
     AdminGroupItem,
     AdminGroupListResponse,
+    AdminStudentItem,
+    AdminStudentListResponse,
     AdminTeacherItem,
     AdminTeacherListResponse,
+    AdminTermItem,
+    AdminTermListResponse,
+    AdminTurnItem,
+    AdminTurnListResponse,
     SubjectListItem,
     SubjectListResponse,
+)
+from app.schemas.admin_links import (
+    AdminCreateRequest,
+    AdminCreateResponse,
+    AssignTurnRequest,
+    AssignTurnResponse,
+    DeanRegisterRequest,
+    DeanRegisterResponse,
+    EnrolStudentRequest,
+    EnrolStudentResponse,
+    ProgrammeCreateRequest,
+    ProgrammeCreateResponse,
+    TermSubjectRequest,
+    TermSubjectResponse,
 )
 from app.schemas.auth import (
     AddRoleRequest,
@@ -583,19 +603,29 @@ async def create_cycle(
     caller=Depends(_admin),
 ) -> AcademicCycleCreateResponse:
     cycle_id = await next_id(session, "AcademicCycle")
+    if body.end_date <= body.start_date:
+        return AcademicCycleCreateResponse(
+            id=cycle_id, **body.model_dump(), err="end_date must be after start_date"
+        )
     try:
         row = await one(
             session,
             """
-            CREATE (ac:AcademicCycle {id: $id, year: $year, season: $season})
-            RETURN ac.id AS id, ac.year AS year, ac.season AS season
+            CREATE (ac:AcademicCycle {
+              id: $id, year: $year, season: $season,
+              start_date: date($start_date), end_date: date($end_date)
+            })
+            RETURN ac.id AS id, ac.year AS year, ac.season AS season,
+                   ac.start_date AS start_date, ac.end_date AS end_date
             """,
             id=cycle_id,
             year=body.year,
             season=body.season,
+            start_date=body.start_date.isoformat(),
+            end_date=body.end_date.isoformat(),
         )
     except Neo4jError as exc:
-        return AcademicCycleCreateResponse(id=cycle_id, year=body.year, season=body.season, err=db_err(exc))
+        return AcademicCycleCreateResponse(id=cycle_id, **body.model_dump(), err=db_err(exc))
     return AcademicCycleCreateResponse(**row)
 
 
@@ -847,7 +877,8 @@ async def list_cycles(
 ) -> AcademicCycleListResponse:
     rows = await run(
         session,
-        "MATCH (ac:AcademicCycle) RETURN ac.id AS id, ac.year AS year, ac.season AS season ORDER BY ac.year, ac.season",
+        "MATCH (ac:AcademicCycle) RETURN ac.id AS id, ac.year AS year, ac.season AS season, "
+        "ac.start_date AS start_date, ac.end_date AS end_date ORDER BY ac.start_date",
     )
     return AcademicCycleListResponse(cycles=[MyAcademicCycleItem(**row) for row in rows])
 
@@ -896,6 +927,9 @@ async def list_teachers(
     return AdminTeacherListResponse(teachers=[AdminTeacherItem(**row) for row in rows])
 
 
+_WEEKDAYS = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
+
+
 @router.get("/groups", response_model=AdminGroupListResponse)
 async def list_groups(
     session: AsyncSession = Depends(get_session),
@@ -912,13 +946,336 @@ async def list_groups(
           su.code AS course_code,
           ac.year + " " + ac.season AS cycle,
           gt.g_type AS g_type,
+          su.name AS course_name,
           g.number AS number,
-          g.weekday AS weekday
+          g.weekday AS weekday,
+          g.start_hr AS start,
+          g.end_time AS end
         ORDER BY su.code, ac.year, ac.season, gt.g_type, g.number
         """,
     )
     groups = []
     for row in rows:
-        label = f"{row['course_code']} {row['cycle']} {row['g_type']} #{row['number']} (day {row['weekday']})"
+        day = _WEEKDAYS.get(row["weekday"], "?")
+        hours = f"{row['start'].strftime('%H:%M')}-{row['end'].strftime('%H:%M')}"
+        label = (
+            f"{row['course_code']} {row['course_name']}, {row['cycle']}, "
+            f"{row['g_type']} #{row['number']}, {day} {hours}"
+        )
         groups.append(AdminGroupItem(id=row["id"], label=label))
     return AdminGroupListResponse(groups=groups)
+
+
+async def _admin_idx(session: AsyncSession) -> str:
+    row = await one(
+        session,
+        """
+        OPTIONAL MATCH (p:Person) WHERE p.idx STARTS WITH "A"
+        RETURN coalesce(max(toInteger(substring(p.idx, 1))), 0) + 1 AS n
+        """,
+    )
+    return f"A{row['n']:03d}"
+
+
+@router.post("/admins", response_model=AdminCreateResponse)
+async def create_admin(
+    body: AdminCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AdminCreateResponse:
+    idx = await _admin_idx(session)
+    try:
+        row = await one(
+            session,
+            """
+            CREATE (a:Admin:Person {idx: $idx, name: $name, surname: $surname, phone: $phone})
+            RETURN a.idx AS idx, a.name AS name, a.surname AS surname, a.phone AS phone
+            """,
+            idx=idx,
+            name=body.name,
+            surname=body.surname,
+            phone=body.phone,
+        )
+    except Neo4jError as exc:
+        return AdminCreateResponse(**body.model_dump(), err=db_err(exc))
+    return AdminCreateResponse(**row)
+
+
+@router.post("/users/remove", response_model=UserAccountResponse)
+async def remove_user_account(
+    body: UserIdxRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> UserAccountResponse:
+    """Delete the login account; the person node and its history stay in the graph."""
+    if body.idx == caller.idx:
+        return UserAccountResponse(idx=body.idx, err="Cannot remove your own account")
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (u:User {idx: $idx})
+            REMOVE u:User:Inactive, u.email, u.passwd_hash, u.deactivated_at
+            RETURN u.idx AS idx
+            """,
+            idx=body.idx,
+        )
+    except Neo4jError as exc:
+        return UserAccountResponse(idx=body.idx, err=db_err(exc))
+    if row is None:
+        return UserAccountResponse(idx=body.idx, err="Account not found")
+    return UserAccountResponse(**row)
+
+
+@router.post("/programmes", response_model=ProgrammeCreateResponse)
+async def create_programme(
+    body: ProgrammeCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> ProgrammeCreateResponse:
+    programme_id = await next_id(session, "Programme")
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (fa:Faculty {id: $faculty_id})
+            CREATE (p:Programme {id: $id, name: $name})-[:OFFERED_BY]->(fa)
+            RETURN p.id AS id, p.name AS name, fa.id AS faculty_id
+            """,
+            faculty_id=body.faculty_id,
+            id=programme_id,
+            name=body.name,
+        )
+    except Neo4jError as exc:
+        return ProgrammeCreateResponse(**body.model_dump(), err=db_err(exc))
+    if row is None:
+        return ProgrammeCreateResponse(**body.model_dump(), err="Faculty not found")
+    return ProgrammeCreateResponse(**row)
+
+
+@router.post("/curriculum-terms/subjects", response_model=TermSubjectResponse)
+async def add_subject_to_term(
+    body: TermSubjectRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> TermSubjectResponse:
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (ct:CurriculumTerm {id: $term_id})
+            MATCH (su:Subject {code: $subject_code})
+            WITH ct, su, EXISTS { (ct)-[:INCLUDES]->(su) } AS already
+            MERGE (ct)-[:INCLUDES]->(su)
+            RETURN already
+            """,
+            term_id=body.term_id,
+            subject_code=body.subject_code,
+        )
+    except Neo4jError as exc:
+        return TermSubjectResponse(**body.model_dump(), err=db_err(exc))
+    if row is None:
+        return TermSubjectResponse(**body.model_dump(), err="Term or subject not found")
+    if row["already"]:
+        return TermSubjectResponse(**body.model_dump(), err="Subject already in this term")
+    return TermSubjectResponse(**body.model_dump())
+
+
+@router.post("/students/enrol", response_model=EnrolStudentResponse)
+async def enrol_student(
+    body: EnrolStudentRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> EnrolStudentResponse:
+    try:
+        row = await one(
+            session,
+            """
+            MATCH (st:Student {idx: $student_idx})
+            MATCH (ct:CurriculumTerm {id: $term_id})
+            WITH st, ct, EXISTS { (st)-[:ENROLLED]->(ct) } AS already
+            MERGE (st)-[:ENROLLED]->(ct)
+            RETURN already
+            """,
+            student_idx=body.student_idx,
+            term_id=body.term_id,
+        )
+    except Neo4jError as exc:
+        return EnrolStudentResponse(**body.model_dump(), err=db_err(exc))
+    if row is None:
+        return EnrolStudentResponse(**body.model_dump(), err="Student or term not found")
+    if row["already"]:
+        return EnrolStudentResponse(**body.model_dump(), err="Student already enrolled in this term")
+    return EnrolStudentResponse(**body.model_dump())
+
+
+@router.post("/registrations/turns/students", response_model=AssignTurnResponse)
+async def assign_students_to_turn(
+    body: AssignTurnRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AssignTurnResponse:
+    if not body.student_idxs:
+        return AssignTurnResponse(turn_id=body.turn_id, err="No students given")
+    try:
+        check = await one(
+            session,
+            """
+            MATCH (rt:RegistrationTurn {id: $turn_id})<-[:HAS_TURN]-(reg:Registration)
+            UNWIND $student_idxs AS sidx
+            OPTIONAL MATCH (st:Student {idx: sidx})
+            WITH sidx, st, EXISTS {
+              MATCH (st)-[:ASSIGNED]->(other:RegistrationTurn)<-[:HAS_TURN]-(reg)
+              WHERE other <> rt
+            } AS other_turn
+            RETURN
+              [x IN collect({idx: sidx, found: st IS NOT NULL}) WHERE NOT x.found | x.idx] AS missing,
+              [x IN collect({idx: sidx, other: other_turn}) WHERE x.other | x.idx] AS conflicts
+            """,
+            turn_id=body.turn_id,
+            student_idxs=body.student_idxs,
+        )
+        if check is None:
+            return AssignTurnResponse(turn_id=body.turn_id, err="Registration turn not found")
+        if check["missing"]:
+            return AssignTurnResponse(
+                turn_id=body.turn_id, err=f"Students not found: {', '.join(check['missing'])}"
+            )
+        if check["conflicts"]:
+            return AssignTurnResponse(
+                turn_id=body.turn_id,
+                err=f"Already assigned to another turn of this registration: {', '.join(check['conflicts'])}",
+            )
+        row = await one(
+            session,
+            """
+            MATCH (rt:RegistrationTurn {id: $turn_id})
+            UNWIND $student_idxs AS sidx
+            MATCH (st:Student {idx: sidx})
+            MERGE (st)-[:ASSIGNED]->(rt)
+            RETURN collect(DISTINCT st.idx) AS assigned
+            """,
+            turn_id=body.turn_id,
+            student_idxs=body.student_idxs,
+        )
+    except Neo4jError as exc:
+        return AssignTurnResponse(turn_id=body.turn_id, err=db_err(exc))
+    return AssignTurnResponse(turn_id=body.turn_id, assigned=row["assigned"])
+
+
+@router.get("/students", response_model=AdminStudentListResponse)
+async def list_students(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AdminStudentListResponse:
+    rows = await run(
+        session,
+        """
+        MATCH (st:Student)
+        RETURN st.idx AS idx, st.name AS name, st.surname AS surname
+        ORDER BY st.surname, st.name
+        """,
+    )
+    return AdminStudentListResponse(students=[AdminStudentItem(**row) for row in rows])
+
+
+@router.get("/curriculum-terms", response_model=AdminTermListResponse)
+async def list_terms(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AdminTermListResponse:
+    rows = await run(
+        session,
+        """
+        MATCH (p:Programme)-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm)
+        OPTIONAL MATCH (ct)-[:TAUGHT_IN]->(ac:AcademicCycle)
+        RETURN ct.id AS id, p.name AS programme, c.intake_year AS intake_year, ct.sem AS sem,
+               ac.year AS year, ac.season AS season
+        ORDER BY p.name, c.intake_year DESC, ct.sem
+        """,
+    )
+    terms = []
+    for row in rows:
+        cycle = f" ({row['year']} {row['season']})" if row["year"] else ""
+        label = f"{row['programme']} {row['intake_year']}, sem. {row['sem']}{cycle}"
+        terms.append(AdminTermItem(id=row["id"], label=label))
+    return AdminTermListResponse(terms=terms)
+
+
+@router.get("/registration-turns", response_model=AdminTurnListResponse)
+async def list_turns(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> AdminTurnListResponse:
+    rows = await run(
+        session,
+        """
+        MATCH (reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)
+        RETURN rt.id AS id, reg.name AS registration, rt.turn_number AS turn_number,
+               rt.date AS date, rt.start_hr AS start, rt.end_time AS end
+        ORDER BY rt.date DESC, reg.name, rt.turn_number
+        """,
+    )
+    turns = []
+    for row in rows:
+        start = row["start"].strftime("%H:%M") if row["start"] else ""
+        end = row["end"].strftime("%H:%M") if row["end"] else ""
+        label = f"{row['registration']}, turn {row['turn_number']} ({row['date']} {start}-{end})"
+        turns.append(AdminTurnItem(id=row["id"], label=label))
+    return AdminTurnListResponse(turns=turns)
+
+
+# Dean's office registration: bypasses registration turns, still allows only one group
+# of each type per subject. Capacity is checked unless ignore_capacity is set.
+# Rewriting capacity takes a write lock on the group (same as student registration).
+_DEAN_REGISTER = """
+MATCH (st:Student {idx: $student_idx})
+MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)
+SET g.capacity = g.capacity
+WITH st, g,
+  EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
+  EXISTS {
+    MATCH (st)-[:REGISTERED_IN]->(other:Group)-[:OF_TYPE]->(gt)
+    WHERE other <> g
+  } AS conflict,
+  COUNT { (g)<-[:REGISTERED_IN]-(:Student) } >= g.capacity AS full
+WITH st, g, CASE
+  WHEN already THEN "already"
+  WHEN conflict THEN "conflict"
+  WHEN full AND NOT $ignore_capacity THEN "full"
+  ELSE "ok"
+END AS status
+FOREACH (_ IN CASE WHEN status = "ok" THEN [1] ELSE [] END |
+  CREATE (st)-[:REGISTERED_IN {registered_at: datetime()}]->(g)
+)
+RETURN status
+"""
+
+
+@router.post("/groups/students", response_model=DeanRegisterResponse)
+async def dean_register(
+    body: DeanRegisterRequest,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> DeanRegisterResponse:
+    def result(err: str | None = None) -> DeanRegisterResponse:
+        return DeanRegisterResponse(**body.model_dump(), err=err)
+
+    try:
+        row = await one(
+            session,
+            _DEAN_REGISTER,
+            student_idx=body.student_idx,
+            group_id=body.group_id,
+            ignore_capacity=body.ignore_capacity,
+        )
+    except Neo4jError as exc:
+        return result(db_err(exc))
+    if row is None:
+        return result("Student or group not found")
+    errors = {
+        "already": "Student is already registered in this group",
+        "conflict": "Student is already registered in another group of this type for this subject",
+        "full": "Group is full",
+    }
+    return result(errors.get(row["status"]))

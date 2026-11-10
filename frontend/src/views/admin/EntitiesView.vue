@@ -6,13 +6,16 @@ import { useAdminReferenceData } from '../../composables/useAdminReferenceData'
 import ApiMessages from '../../components/ApiMessages.vue'
 
 const {
+  faculties,
   programmes,
+  terms,
   rooms,
   cycles,
   subjects,
   curricula,
   teachers,
   groups,
+  facultyLabel,
   programmeLabel,
   roomLabel,
   cycleLabel,
@@ -35,10 +38,12 @@ const termApi = useApiCall()
 const groupTypeApi = useApiCall()
 const groupApi = useApiCall()
 const assignTeacherApi = useApiCall()
+const programmeApi = useApiCall()
+const termSubjectApi = useApiCall()
 
 const faculty = ref({ name: '', full_name: '' })
 const room = ref({ building: '', room_num: '' })
-const cycle = ref({ year: '2025', season: 'winter' })
+const cycle = ref({ year: '2026/27', season: 'Z', start_date: '2026-10-01', end_date: '2027-02-03' })
 const subject = ref({ code: '', name: '', ects: '' })
 const curriculum = ref({ programme_id: '', intake_year: '2024' })
 const term = ref({ sem: 1, curriculum_id: '', cycle_id: '' })
@@ -56,6 +61,8 @@ const group = ref({
   room_id: '',
 })
 const assign = ref({ teacher_idx: '', group_id: '' })
+const programme = ref({ name: '', faculty_id: '' })
+const termSubject = ref({ term_id: '', subject_code: '' })
 </script>
 
 <template>
@@ -75,6 +82,25 @@ const assign = ref({ teacher_idx: '', group_id: '' })
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Programme</h2>
+      <form class="admin-form" @submit.prevent="create(programmeApi, () => admin.createProgramme(programme))">
+        <label>Name <input v-model="programme.name" required /></label>
+        <label>
+          Faculty
+          <select v-model="programme.faculty_id" required>
+            <option value="" disabled>Select faculty</option>
+            <option v-for="f in faculties" :key="f.id" :value="f.id">
+              {{ facultyLabel(f) }}
+            </option>
+          </select>
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="programmeApi.loading">Create</button>
+      </form>
+      <ApiMessages :error="programmeApi.error" :api-message="programmeApi.apiMessage" />
+      <p v-if="programmeApi.result?.id && !programmeApi.apiMessage" class="admin-ok">Id {{ programmeApi.result.id }}</p>
+    </section>
+
+    <section class="teacher-panel admin-panel-spaced">
       <h2 class="admin-section-title">Room</h2>
       <form class="admin-form" @submit.prevent="create(roomApi, () => admin.createRoom(room))">
         <label>Building <input v-model="room.building" required /></label>
@@ -90,6 +116,8 @@ const assign = ref({ teacher_idx: '', group_id: '' })
       <form class="admin-form" @submit.prevent="create(cycleApi, () => admin.createAcademicCycle(cycle))">
         <label>Year <input v-model="cycle.year" required /></label>
         <label>Season <input v-model="cycle.season" required /></label>
+        <label>Classes start <input v-model="cycle.start_date" type="date" required /></label>
+        <label>Classes end <input v-model="cycle.end_date" type="date" required /></label>
         <button type="submit" class="teacher-btn-save" :disabled="cycleApi.loading">Create</button>
       </form>
       <ApiMessages :error="cycleApi.error" :api-message="cycleApi.apiMessage" />
@@ -178,6 +206,33 @@ const assign = ref({ teacher_idx: '', group_id: '' })
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
+      <h2 class="admin-section-title">Subject in curriculum term</h2>
+      <form class="admin-form" @submit.prevent="create(termSubjectApi, () => admin.addSubjectToTerm(termSubject))">
+        <label>
+          Curriculum term
+          <select v-model="termSubject.term_id" required>
+            <option value="" disabled>Select term</option>
+            <option v-for="t in terms" :key="t.id" :value="t.id">{{ t.label }}</option>
+          </select>
+        </label>
+        <label>
+          Subject
+          <select v-model="termSubject.subject_code" required>
+            <option value="" disabled>Select subject</option>
+            <option v-for="su in subjects" :key="su.code" :value="su.code">
+              {{ su.code }} {{ su.name }}
+            </option>
+          </select>
+        </label>
+        <button type="submit" class="teacher-btn-save" :disabled="termSubjectApi.loading">Add</button>
+      </form>
+      <ApiMessages :error="termSubjectApi.error" :api-message="termSubjectApi.apiMessage" />
+      <p v-if="termSubjectApi.result && !termSubjectApi.apiMessage" class="admin-ok">
+        Added {{ termSubjectApi.result.subject_code }}
+      </p>
+    </section>
+
+    <section class="teacher-panel admin-panel-spaced">
       <h2 class="admin-section-title">Group type</h2>
       <form
         class="admin-form"
@@ -195,7 +250,7 @@ const assign = ref({ teacher_idx: '', group_id: '' })
           <select v-model="groupType.subject_code" required>
             <option value="" disabled>Select subject</option>
             <option v-for="su in subjects" :key="su.code" :value="su.code">
-              {{ su.code }}
+              {{ su.code }} {{ su.name }}
             </option>
           </select>
         </label>

@@ -141,13 +141,31 @@ export function normalizeEntry(entry, role) {
     title,
     sub,
     room: entry.room || '',
+    cycleStart: entry.cycle_start || null,
+    cycleEnd: entry.cycle_end || null,
     label: `${title}${sub ? ` (${sub})` : ''}`,
   }
+}
+
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Classes are shown only on days inside their academic cycle's teaching period.
+export function withinCycle(entry, weekStart) {
+  // Anchor at noon so a DST shift in weekStart (built by adding 7*24h) cannot change the date.
+  const d = new Date(weekStart.getTime() + 12 * 3600000)
+  d.setDate(d.getDate() + entry.weekday - 1)
+  const day = isoDate(d)
+  if (entry.cycleStart && day < entry.cycleStart) return false
+  if (entry.cycleEnd && day > entry.cycleEnd) return false
+  return true
 }
 
 export function eventsForWeek(entries, weekStart, gridStart, gridEnd) {
   const byDay = [[], [], [], [], []]
   for (const e of entries) {
+    if (!withinCycle(e, weekStart)) continue
     if (!pnpShowsThisWeek(e.pnp, weekStart)) continue
     if (e.endMin <= gridStart || e.startMin >= gridEnd) continue
     byDay[e.weekday - 1].push(e)

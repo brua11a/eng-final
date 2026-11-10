@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import date, time
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -21,6 +21,8 @@ class RegisteredGroup(BaseModel):
     pnp: str = ""
     room: Optional[str] = None
     cycle: Optional[str] = None
+    cycle_start: Optional[date] = None
+    cycle_end: Optional[date] = None
     teachers: List[GroupTeacher] = []
 
 

@@ -399,6 +399,8 @@ async def dashboard(
           g.pnp AS pnp,
           r.building + " " + r.room_num AS room,
           ac.year + " " + ac.season AS cycle,
+          ac.start_date AS cycle_start,
+          ac.end_date AS cycle_end,
           [x IN teacher_nodes WHERE x IS NOT NULL | {idx: x.idx, name: x.name, surname: x.surname}] AS teachers
         """,
         student_idx=caller.idx,
