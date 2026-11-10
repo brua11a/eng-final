@@ -6,6 +6,7 @@ GRADE_SCALE = (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)
 
 
 class StudentCreateRequest(BaseModel):
+    idx: str = Field(pattern=r"^[0-9]+$")
     name: str
     surname: str
     phone: str

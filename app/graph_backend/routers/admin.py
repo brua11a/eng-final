@@ -2,7 +2,7 @@ from datetime import datetime, time
 
 from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
-from neo4j.exceptions import Neo4jError
+from neo4j.exceptions import ConstraintError, Neo4jError
 
 from app.database import get_session
 from app.graph_backend.auth import hash_password, require, roles_from_flags
@@ -38,6 +38,7 @@ from app.schemas.admin_links import (
     DeanRegisterResponse,
     EnrolStudentRequest,
     EnrolStudentResponse,
+    NextIdxResponse,
     ProgrammeCreateRequest,
     ProgrammeCreateResponse,
     TermSubjectRequest,
@@ -91,20 +92,9 @@ def _zoned_datetime(value: datetime) -> str:
     return text if value.tzinfo else f"{text}+01:00"
 
 
-async def _teacher_idx(session: AsyncSession) -> str:
-    row = await one(
-        session,
-        "OPTIONAL MATCH (t:Teacher) RETURN coalesce(max(toInteger(substring(t.idx, 1))), 0) + 1 AS n",
-    )
-    return f"T{row['n']}"
-
-
-async def _student_idx(session: AsyncSession) -> str:
-    row = await one(
-        session,
-        "OPTIONAL MATCH (st:Student) RETURN coalesce(max(toInteger(st.idx)), 0) + 1 AS n",
-    )
-    return str(row["n"])
+def _idx_taken(exc: Neo4jError) -> bool:
+    """True when a CREATE failed because another person already has this idx."""
+    return isinstance(exc, ConstraintError) and "`idx`" in (exc.message or "")
 
 
 @router.post("/teachers", response_model=TeacherCreateResponse)
@@ -113,7 +103,7 @@ async def create_teacher(
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> TeacherCreateResponse:
-    idx = await _teacher_idx(session)
+    idx = body.idx
     try:
         row = await one(
             session,
@@ -147,7 +137,8 @@ async def create_teacher(
         return TeacherCreateResponse(
             idx=idx, name=body.name, surname=body.surname, phone=body.phone,
             degree=body.degree, photo=body.photo, working_since=body.working_since,
-            faculty_id=body.faculty_id, err=db_err(exc),
+            faculty_id=body.faculty_id,
+            err=f"Person with idx {idx} already exists" if _idx_taken(exc) else db_err(exc),
         )
     if row is None:
         return TeacherCreateResponse(
@@ -164,7 +155,7 @@ async def create_student(
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> StudentCreateResponse:
-    idx = await _student_idx(session)
+    idx = body.idx
 
     def failed(err: str) -> StudentCreateResponse:
         return StudentCreateResponse(
@@ -217,7 +208,7 @@ async def create_student(
             photo=body.photo,
         )
     except Neo4jError as exc:
-        return failed(db_err(exc))
+        return failed(f"Person with idx {idx} already exists" if _idx_taken(exc) else db_err(exc))
     if row is None:
         return failed("Term not found")
     return StudentCreateResponse(**row)
@@ -326,22 +317,24 @@ _ADD_ROLE = {
 }
 
 
+# Runs in the same transaction after _LOCK_PERSON. Labels are read by a new statement, so
+# they reflect the state after the lock was acquired (a single statement would see labels
+# as they were when it matched the node, before waiting for the lock).
+_LOCK_PERSON = "MATCH (p:Person {idx: $idx}) SET p.idx = p.idx RETURN p.idx AS idx"
+
 _REMOVE_ROLE = {
-    "Admin": """
-        MATCH (p:Person {idx: $idx})
-        REMOVE p:Admin
-        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
-    """,
-    "Teacher": """
-        MATCH (p:Person {idx: $idx})
-        REMOVE p:Teacher
-        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
-    """,
-    "Student": """
-        MATCH (p:Person {idx: $idx})
-        REMOVE p:Student
-        RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
-    """,
+    role: f"""
+        MATCH (p:Person {{idx: $idx}})
+        // labels(p) rather than p:Label: after waiting for the lock, the label predicate
+        // could still report a label that the other transaction has just removed.
+        WITH p, labels(p) AS l
+        WITH p, "Admin" IN l AS admin, "Teacher" IN l AS teacher, "Student" IN l AS student,
+             "{role}" IN l AND size([r IN ["Admin", "Teacher", "Student"] WHERE r IN l]) > 1 AS removed
+        FOREACH (_ IN CASE WHEN removed THEN [1] ELSE [] END | REMOVE p:{role})
+        // Flags are read before REMOVE; the caller derives the resulting roles from them.
+        RETURN p.idx AS idx, p.email AS email, admin, teacher, student, removed
+    """
+    for role in ("Admin", "Teacher", "Student")
 }
 
 
@@ -416,16 +409,28 @@ async def remove_role(
             err="Cannot remove last role",
         )
     try:
-        row = await one(session, _REMOVE_ROLE[body.role], idx=body.idx)
+        tx = await session.begin_transaction()
+        try:
+            row = None
+            if await tx_one(tx, _LOCK_PERSON, idx=body.idx) is not None:
+                row = await tx_one(tx, _REMOVE_ROLE[body.role], idx=body.idx)
+            await tx.commit()
+        finally:
+            await tx.close()
     except Neo4jError as exc:
         return RemoveRoleResponse(idx=body.idx, err=db_err(exc))
     if row is None:
         return RemoveRoleResponse(idx=body.idx, err="Person not found")
-    return RemoveRoleResponse(
-        idx=row["idx"],
-        email=row["email"],
-        roles=list(roles_from_flags(row["admin"], row["teacher"], row["student"])),
-    )
+    flags = {key: row[key] for key in ("admin", "teacher", "student")}
+    if not row["removed"]:
+        return RemoveRoleResponse(
+            idx=row["idx"],
+            email=row["email"],
+            roles=list(roles_from_flags(**flags)),
+            err="Cannot remove last role",
+        )
+    flags[body.role.lower()] = False
+    return RemoveRoleResponse(idx=row["idx"], email=row["email"], roles=list(roles_from_flags(**flags)))
 
 
 @router.post("/group-types", response_model=GroupTypeCreateResponse)
@@ -463,11 +468,20 @@ async def create_group_type(
             MATCH (su:Subject {code: $subject_code})
             MATCH (ac:AcademicCycle {id: $cycle_id})
             WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
+            // Write lock on the subject: concurrent requests for it wait here, so neither
+            // the subject instance nor the group type can be created twice.
+            SET su.code = su.code
             MERGE (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
               ON CREATE SET si.id = $instance_id
-            CREATE (si)-[:HAS_TYPE]->(gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
+            WITH su, ac, si
+            OPTIONAL MATCH (si)-[:HAS_TYPE]->(old:GroupType {g_type: $g_type})
+            FOREACH (_ IN CASE WHEN old IS NULL THEN [1] ELSE [] END |
+              CREATE (si)-[:HAS_TYPE]->(:GroupType {id: $id, g_type: $g_type, weight: $weight})
+            )
+            WITH su, ac, si, old IS NOT NULL AS existed
+            MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
             RETURN gt.id AS id, su.code AS subject_code, ac.id AS cycle_id,
-                   gt.g_type AS g_type, gt.weight AS weight
+                   gt.g_type AS g_type, gt.weight AS weight, existed
             """,
             subject_code=body.subject_code,
             cycle_id=body.cycle_id,
@@ -480,6 +494,8 @@ async def create_group_type(
         return failed(db_err(exc))
     if row is None:
         return failed("Subject or cycle not found, or subject is not taught in this cycle")
+    if row.pop("existed"):
+        return failed("Group type already exists", row["id"])
     return GroupTypeCreateResponse(**row)
 
 
@@ -547,6 +563,7 @@ async def assign_teacher_to_group(
             """
             MATCH (t:Teacher {idx: $teacher_idx})
             MATCH (g:Group {id: $group_id})
+            SET g.id = g.id
             MERGE (t)-[:TEACHES]->(g)
             RETURN t.idx AS teacher_idx, g.id AS group_id
             """,
@@ -966,24 +983,12 @@ async def list_groups(
     return AdminGroupListResponse(groups=groups)
 
 
-async def _admin_idx(session: AsyncSession) -> str:
-    row = await one(
-        session,
-        """
-        OPTIONAL MATCH (p:Person) WHERE p.idx STARTS WITH "A"
-        RETURN coalesce(max(toInteger(substring(p.idx, 1))), 0) + 1 AS n
-        """,
-    )
-    return f"A{row['n']:03d}"
-
-
 @router.post("/admins", response_model=AdminCreateResponse)
 async def create_admin(
     body: AdminCreateRequest,
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> AdminCreateResponse:
-    idx = await _admin_idx(session)
     try:
         row = await one(
             session,
@@ -991,13 +996,14 @@ async def create_admin(
             CREATE (a:Admin:Person {idx: $idx, name: $name, surname: $surname, phone: $phone})
             RETURN a.idx AS idx, a.name AS name, a.surname AS surname, a.phone AS phone
             """,
-            idx=idx,
+            idx=body.idx,
             name=body.name,
             surname=body.surname,
             phone=body.phone,
         )
     except Neo4jError as exc:
-        return AdminCreateResponse(**body.model_dump(), err=db_err(exc))
+        err = f"Person with idx {body.idx} already exists" if _idx_taken(exc) else db_err(exc)
+        return AdminCreateResponse(**body.model_dump(), err=err)
     return AdminCreateResponse(**row)
 
 
@@ -1065,6 +1071,7 @@ async def add_subject_to_term(
             """
             MATCH (ct:CurriculumTerm {id: $term_id})
             MATCH (su:Subject {code: $subject_code})
+            SET ct.id = ct.id
             WITH ct, su, EXISTS { (ct)-[:INCLUDES]->(su) } AS already
             MERGE (ct)-[:INCLUDES]->(su)
             RETURN already
@@ -1093,6 +1100,7 @@ async def enrol_student(
             """
             MATCH (st:Student {idx: $student_idx})
             MATCH (ct:CurriculumTerm {id: $term_id})
+            SET st.idx = st.idx
             WITH st, ct, EXISTS { (st)-[:ENROLLED]->(ct) } AS already
             MERGE (st)-[:ENROLLED]->(ct)
             RETURN already
@@ -1109,6 +1117,33 @@ async def enrol_student(
     return EnrolStudentResponse(**body.model_dump())
 
 
+# All-or-nothing: checks and writes in one query. The write lock on the registration
+# makes concurrent assignments to its turns wait, so a student cannot end up in two turns.
+_ASSIGN_TURN = """
+MATCH (rt:RegistrationTurn {id: $turn_id})<-[:HAS_TURN]-(reg:Registration)
+SET reg.id = reg.id
+WITH rt, reg
+UNWIND $student_idxs AS sidx
+OPTIONAL MATCH (st:Student {idx: sidx})
+WITH rt, collect({
+  idx: sidx,
+  st: st,
+  other: st IS NOT NULL AND EXISTS {
+    MATCH (st)-[:ASSIGNED]->(o:RegistrationTurn)<-[:HAS_TURN]-(reg)
+    WHERE o <> rt
+  }
+}) AS rows
+WITH rt, rows,
+  [r IN rows WHERE r.st IS NULL | r.idx] AS missing,
+  [r IN rows WHERE r.other | r.idx] AS conflicts
+WITH rt, rows, missing, conflicts, size(missing) = 0 AND size(conflicts) = 0 AS ok
+FOREACH (r IN CASE WHEN ok THEN rows ELSE [] END |
+  FOREACH (st IN [r.st] | MERGE (st)-[:ASSIGNED]->(rt))
+)
+RETURN missing, conflicts, CASE WHEN ok THEN [r IN rows | r.idx] ELSE [] END AS assigned
+"""
+
+
 @router.post("/registrations/turns/students", response_model=AssignTurnResponse)
 async def assign_students_to_turn(
     body: AssignTurnRequest,
@@ -1118,48 +1153,20 @@ async def assign_students_to_turn(
     if not body.student_idxs:
         return AssignTurnResponse(turn_id=body.turn_id, err="No students given")
     try:
-        check = await one(
-            session,
-            """
-            MATCH (rt:RegistrationTurn {id: $turn_id})<-[:HAS_TURN]-(reg:Registration)
-            UNWIND $student_idxs AS sidx
-            OPTIONAL MATCH (st:Student {idx: sidx})
-            WITH sidx, st, EXISTS {
-              MATCH (st)-[:ASSIGNED]->(other:RegistrationTurn)<-[:HAS_TURN]-(reg)
-              WHERE other <> rt
-            } AS other_turn
-            RETURN
-              [x IN collect({idx: sidx, found: st IS NOT NULL}) WHERE NOT x.found | x.idx] AS missing,
-              [x IN collect({idx: sidx, other: other_turn}) WHERE x.other | x.idx] AS conflicts
-            """,
-            turn_id=body.turn_id,
-            student_idxs=body.student_idxs,
-        )
-        if check is None:
-            return AssignTurnResponse(turn_id=body.turn_id, err="Registration turn not found")
-        if check["missing"]:
-            return AssignTurnResponse(
-                turn_id=body.turn_id, err=f"Students not found: {', '.join(check['missing'])}"
-            )
-        if check["conflicts"]:
-            return AssignTurnResponse(
-                turn_id=body.turn_id,
-                err=f"Already assigned to another turn of this registration: {', '.join(check['conflicts'])}",
-            )
-        row = await one(
-            session,
-            """
-            MATCH (rt:RegistrationTurn {id: $turn_id})
-            UNWIND $student_idxs AS sidx
-            MATCH (st:Student {idx: sidx})
-            MERGE (st)-[:ASSIGNED]->(rt)
-            RETURN collect(DISTINCT st.idx) AS assigned
-            """,
-            turn_id=body.turn_id,
-            student_idxs=body.student_idxs,
-        )
+        row = await one(session, _ASSIGN_TURN, turn_id=body.turn_id, student_idxs=body.student_idxs)
     except Neo4jError as exc:
         return AssignTurnResponse(turn_id=body.turn_id, err=db_err(exc))
+    if row is None:
+        return AssignTurnResponse(turn_id=body.turn_id, err="Registration turn not found")
+    if row["missing"]:
+        return AssignTurnResponse(
+            turn_id=body.turn_id, err=f"Students not found: {', '.join(row['missing'])}"
+        )
+    if row["conflicts"]:
+        return AssignTurnResponse(
+            turn_id=body.turn_id,
+            err=f"Already assigned to another turn of this registration: {', '.join(row['conflicts'])}",
+        )
     return AssignTurnResponse(turn_id=body.turn_id, assigned=row["assigned"])
 
 
@@ -1227,10 +1234,11 @@ async def list_turns(
 
 # Dean's office registration: bypasses registration turns, still allows only one group
 # of each type per subject. Capacity is checked unless ignore_capacity is set.
-# Rewriting capacity takes a write lock on the group (same as student registration).
+# Locks the student, then the group, exactly like student registration (see student.py).
 _DEAN_REGISTER = """
 MATCH (st:Student {idx: $student_idx})
 MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)
+SET st.idx = st.idx
 SET g.capacity = g.capacity
 WITH st, g,
   EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
@@ -1279,3 +1287,35 @@ async def dean_register(
         "full": "Group is full",
     }
     return result(errors.get(row["status"]))
+
+
+# Suggestions only (max + 1 per idx format). Two admins may get the same suggestion;
+# the idx KEY constraint then rejects the second create with a clear error.
+_NEXT_IDX = """
+RETURN
+  coalesce(head(COLLECT {
+    MATCH (p:Person) WHERE p.idx =~ 'T[0-9]+'
+    RETURN toInteger(substring(p.idx, 1)) AS n ORDER BY n DESC LIMIT 1
+  }), 0) + 1 AS teacher,
+  coalesce(head(COLLECT {
+    MATCH (p:Person) WHERE p.idx =~ '[0-9]+'
+    RETURN toInteger(p.idx) AS n ORDER BY n DESC LIMIT 1
+  }), 0) + 1 AS student,
+  coalesce(head(COLLECT {
+    MATCH (p:Person) WHERE p.idx =~ 'A[0-9]+'
+    RETURN toInteger(substring(p.idx, 1)) AS n ORDER BY n DESC LIMIT 1
+  }), 0) + 1 AS admin
+"""
+
+
+@router.get("/people/next-idx", response_model=NextIdxResponse)
+async def next_person_idx(
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),
+) -> NextIdxResponse:
+    row = await one(session, _NEXT_IDX)
+    return NextIdxResponse(
+        teacher=f"T{row['teacher']:03d}",
+        student=str(row["student"]),
+        admin=f"A{row['admin']:03d}",
+    )

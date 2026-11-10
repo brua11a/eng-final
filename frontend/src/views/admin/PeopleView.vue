@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { admin } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
 import { useAdminReferenceData } from '../../composables/useAdminReferenceData'
@@ -21,11 +21,33 @@ const studentApi = useApiCall()
 const adminApi = useApiCall()
 const enrolApi = useApiCall()
 
-const a = ref({ name: '', surname: '', phone: '' })
+const a = ref({ idx: '', name: '', surname: '', phone: '' })
 const enrol = ref({ student_idx: '', term_id: '' })
 
-function createAdmin() {
-  adminApi.run(() => admin.createAdmin(a.value))
+// Prefill idx fields with the next free numbers; the admin may change them.
+async function suggestIdx() {
+  try {
+    const next = await admin.nextIdx()
+    t.value.idx = next.teacher
+    s.value.idx = next.student
+    a.value.idx = next.admin
+  } catch {
+    // Leave the fields for manual input.
+  }
+}
+
+onMounted(suggestIdx)
+
+async function afterCreate(api) {
+  if (api.result && !api.apiMessage && !api.error) {
+    reloadRefs()
+    await suggestIdx()
+  }
+}
+
+async function createAdmin() {
+  await adminApi.run(() => admin.createAdmin(a.value))
+  await afterCreate(adminApi)
 }
 
 function enrolStudent() {
@@ -33,6 +55,7 @@ function enrolStudent() {
 }
 
 const t = ref({
+  idx: '',
   name: '',
   surname: '',
   phone: '',
@@ -43,6 +66,7 @@ const t = ref({
 })
 
 const s = ref({
+  idx: '',
   name: '',
   surname: '',
   phone: '',
@@ -51,13 +75,14 @@ const s = ref({
   programme: '',
 })
 
-function createTeacher() {
-  teacherApi.run(() =>
+async function createTeacher() {
+  await teacherApi.run(() =>
     admin.createTeacher({
       ...t.value,
       photo: t.value.photo || null,
     }),
   )
+  await afterCreate(teacherApi)
 }
 
 async function createStudent() {
@@ -68,7 +93,7 @@ async function createStudent() {
       photo: s.value.photo || null,
     }),
   )
-  if (studentApi.result?.idx && !studentApi.apiMessage) reloadRefs()
+  await afterCreate(studentApi)
 }
 </script>
 
@@ -80,6 +105,7 @@ async function createStudent() {
     <section class="teacher-panel admin-panel-spaced">
       <h2 class="admin-section-title">New teacher</h2>
       <form class="admin-form" @submit.prevent="createTeacher">
+        <label>Idx <input v-model="t.idx" required pattern="T[0-9]+" title="T followed by digits, e.g. T011" /></label>
         <label>Name <input v-model="t.name" required /></label>
         <label>Surname <input v-model="t.surname" required /></label>
         <label>Phone <input v-model="t.phone" required /></label>
@@ -106,6 +132,7 @@ async function createStudent() {
     <section class="teacher-panel admin-panel-spaced">
       <h2 class="admin-section-title">New student</h2>
       <form class="admin-form" @submit.prevent="createStudent">
+        <label>Index number <input v-model="s.idx" required pattern="[0-9]+" title="Digits only" /></label>
         <label>Name <input v-model="s.name" required /></label>
         <label>Surname <input v-model="s.surname" required /></label>
         <label>Phone <input v-model="s.phone" required /></label>
@@ -158,6 +185,7 @@ async function createStudent() {
     <section class="teacher-panel admin-panel-spaced">
       <h2 class="admin-section-title">New administrator</h2>
       <form class="admin-form" @submit.prevent="createAdmin">
+        <label>Idx <input v-model="a.idx" required pattern="A[0-9]+" title="A followed by digits, e.g. A002" /></label>
         <label>Name <input v-model="a.name" required /></label>
         <label>Surname <input v-model="a.surname" required /></label>
         <label>Phone <input v-model="a.phone" required /></label>

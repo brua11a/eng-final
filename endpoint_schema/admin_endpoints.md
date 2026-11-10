@@ -4,6 +4,8 @@ See `user_endpoints.md` for conventions. Every endpoint here is allowed for Admi
 
 Time and DateTime inputs without a UTC offset are stored as `+01:00`.
 
+Person idx values (`POST /admin/teachers`, `/admin/students`, `/admin/admins`) are given by the admin; the client prefills them from `GET /admin/people/next-idx`. A taken idx is rejected by the `idx IS KEY` constraint with `err` = `"Person with idx <idx> already exists"`.
+
 ---
 
 ## POST /admin/teachers
@@ -14,6 +16,7 @@ Time and DateTime inputs without a UTC offset are stored as `+01:00`.
 
 ```json
 {
+	"idx": String,  // "T" + digits, e.g. "T011"
 	"name": String,
 	"surname": String,
 	"phone": String,
@@ -43,11 +46,6 @@ Time and DateTime inputs without a UTC offset are stored as `+01:00`.
 **Query**
 
 ```cypher
-// 1. Next teacher idx ("T" + number)
-OPTIONAL MATCH (t:Teacher)
-RETURN coalesce(max(toInteger(substring(t.idx, 1))), 0) + 1 AS n
-
-// 2. Create
 MATCH (f:Faculty {id: $faculty_id})
 CREATE (t:Teacher:Person {
   idx: $idx,
@@ -75,6 +73,7 @@ RETURN
 
 ```json
 {
+	"idx": String,  // digits only (index number)
 	"name": String,
 	"surname": String,
 	"phone": String,
@@ -104,10 +103,6 @@ RETURN
 **Query**
 
 ```cypher
-// 1. Next student idx (number)
-OPTIONAL MATCH (st:Student)
-RETURN coalesce(max(toInteger(st.idx)), 0) + 1 AS n
-
 // 2. Resolve the term. The server takes the first entry of `terms`, and reports
 //    "Programme not found", "Programme has no curriculum", "Programme has no first semester"
 //    or "Term does not belong to this programme" when it cannot.
@@ -323,11 +318,21 @@ Fails if the person does not have the role, or if it is their last role.
 MATCH (p:Person {idx: $idx})
 RETURN p:Admin AS admin, p:Teacher AS teacher, p:Student AS student, p.email AS email
 
-// 2. Remove one label (Admin, Teacher or Student)
+// 2. One transaction, two statements. The first takes a write lock on the person, so
+//    concurrent removals run one at a time; the second re-checks the role count.
+//    labels(p) is used because the p:Label predicate may still report a label that
+//    a concurrent transaction removed before the lock was acquired.
+MATCH (p:Person {idx: $idx}) SET p.idx = p.idx RETURN p.idx AS idx
+
 MATCH (p:Person {idx: $idx})
-REMOVE p:Admin
-RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p:Student AS student
+WITH p, labels(p) AS l
+WITH p, "Admin" IN l AS admin, "Teacher" IN l AS teacher, "Student" IN l AS student,
+     "Admin" IN l AND size([r IN ["Admin", "Teacher", "Student"] WHERE r IN l]) > 1 AS removed
+FOREACH (_ IN CASE WHEN removed THEN [1] ELSE [] END | REMOVE p:Admin)
+RETURN p.idx AS idx, p.email AS email, admin, teacher, student, removed
 ```
+
+Removing `Teacher` or `Student` is rejected by the graph type while the person still has relationships that require that label (e.g. `WORKS_AT`, `ENROLLED`).
 
 ---
 
@@ -369,15 +374,24 @@ MATCH (:Subject {code: $subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OF
 MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
 RETURN gt.id AS id
 
-// 2. Create, reusing the subject's instance for the cycle if it exists
+// 2. Create, reusing the subject's instance for the cycle if it exists.
+//    The write lock on the subject serialises concurrent requests, so neither the
+//    instance nor a group type with the same name can be created twice.
 MATCH (su:Subject {code: $subject_code})
 MATCH (ac:AcademicCycle {id: $cycle_id})
 WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
+SET su.code = su.code
 MERGE (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
   ON CREATE SET si.id = $instance_id
-CREATE (si)-[:HAS_TYPE]->(gt:GroupType {id: $id, g_type: $g_type, weight: $weight})
+WITH su, ac, si
+OPTIONAL MATCH (si)-[:HAS_TYPE]->(old:GroupType {g_type: $g_type})
+FOREACH (_ IN CASE WHEN old IS NULL THEN [1] ELSE [] END |
+  CREATE (si)-[:HAS_TYPE]->(:GroupType {id: $id, g_type: $g_type, weight: $weight})
+)
+WITH su, ac, si, old IS NOT NULL AS existed
+MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
 RETURN gt.id AS id, su.code AS subject_code, ac.id AS cycle_id,
-       gt.g_type AS g_type, gt.weight AS weight
+       gt.g_type AS g_type, gt.weight AS weight, existed
 ```
 
 ---
@@ -470,6 +484,7 @@ RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number
 ```cypher
 MATCH (t:Teacher {idx: $teacher_idx})
 MATCH (g:Group {id: $group_id})
+SET g.id = g.id
 MERGE (t)-[:TEACHES]->(g)
 RETURN t.idx AS teacher_idx, g.id AS group_id
 ```
@@ -1015,6 +1030,7 @@ Creates an administrator person. A login is assigned separately with `POST /admi
 
 ```json
 {
+	"idx": String,  // "A" + digits, e.g. "A002"
 	"name": String,
 	"surname": String,
 	"phone": String
@@ -1036,11 +1052,6 @@ Creates an administrator person. A login is assigned separately with `POST /admi
 **Query**
 
 ```cypher
-// 1. Next admin idx ("A" + 3 digits)
-OPTIONAL MATCH (p:Person) WHERE p.idx STARTS WITH "A"
-RETURN coalesce(max(toInteger(substring(p.idx, 1))), 0) + 1 AS n
-
-// 2. Create
 CREATE (a:Admin:Person {idx: $idx, name: $name, surname: $surname, phone: $phone})
 RETURN a.idx AS idx, a.name AS name, a.surname AS surname, a.phone AS phone
 ```
@@ -1144,6 +1155,7 @@ Adds a subject to a curriculum term. Required before a group type can be created
 ```cypher
 MATCH (ct:CurriculumTerm {id: $term_id})
 MATCH (su:Subject {code: $subject_code})
+SET ct.id = ct.id
 WITH ct, su, EXISTS { (ct)-[:INCLUDES]->(su) } AS already
 MERGE (ct)-[:INCLUDES]->(su)
 RETURN already
@@ -1181,6 +1193,7 @@ Enrols an existing student in a curriculum term (e.g. the next semester).
 ```cypher
 MATCH (st:Student {idx: $student_idx})
 MATCH (ct:CurriculumTerm {id: $term_id})
+SET st.idx = st.idx
 WITH st, ct, EXISTS { (st)-[:ENROLLED]->(ct) } AS already
 MERGE (st)-[:ENROLLED]->(ct)
 RETURN already
@@ -1216,24 +1229,29 @@ Assigns students to a registration turn. All-or-nothing: fails if any student do
 **Query**
 
 ```cypher
-// 1. Validation
+// Checks and writes in one query. The write lock on the registration makes concurrent
+// assignments to its turns wait, so a student cannot end up in two of its turns.
 MATCH (rt:RegistrationTurn {id: $turn_id})<-[:HAS_TURN]-(reg:Registration)
+SET reg.id = reg.id
+WITH rt, reg
 UNWIND $student_idxs AS sidx
 OPTIONAL MATCH (st:Student {idx: sidx})
-WITH sidx, st, EXISTS {
-  MATCH (st)-[:ASSIGNED]->(other:RegistrationTurn)<-[:HAS_TURN]-(reg)
-  WHERE other <> rt
-} AS other_turn
-RETURN
-  [x IN collect({idx: sidx, found: st IS NOT NULL}) WHERE NOT x.found | x.idx] AS missing,
-  [x IN collect({idx: sidx, other: other_turn}) WHERE x.other | x.idx] AS conflicts
-
-// 2. Assign
-MATCH (rt:RegistrationTurn {id: $turn_id})
-UNWIND $student_idxs AS sidx
-MATCH (st:Student {idx: sidx})
-MERGE (st)-[:ASSIGNED]->(rt)
-RETURN collect(DISTINCT st.idx) AS assigned
+WITH rt, collect({
+  idx: sidx,
+  st: st,
+  other: st IS NOT NULL AND EXISTS {
+    MATCH (st)-[:ASSIGNED]->(o:RegistrationTurn)<-[:HAS_TURN]-(reg)
+    WHERE o <> rt
+  }
+}) AS rows
+WITH rt, rows,
+  [r IN rows WHERE r.st IS NULL | r.idx] AS missing,
+  [r IN rows WHERE r.other | r.idx] AS conflicts
+WITH rt, rows, missing, conflicts, size(missing) = 0 AND size(conflicts) = 0 AS ok
+FOREACH (r IN CASE WHEN ok THEN rows ELSE [] END |
+  FOREACH (st IN [r.st] | MERGE (st)-[:ASSIGNED]->(rt))
+)
+RETURN missing, conflicts, CASE WHEN ok THEN [r IN rows | r.idx] ELSE [] END AS assigned
 ```
 
 ---
@@ -1343,6 +1361,7 @@ Dean's office registration of a student to a group. Bypasses registration turns.
 ```cypher
 MATCH (st:Student {idx: $student_idx})
 MATCH (g:Group {id: $group_id})-[:OF_TYPE]->(gt:GroupType)
+SET st.idx = st.idx
 SET g.capacity = g.capacity
 WITH st, g,
   EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
@@ -1361,5 +1380,41 @@ FOREACH (_ IN CASE WHEN status = "ok" THEN [1] ELSE [] END |
   CREATE (st)-[:REGISTERED_IN {registered_at: datetime()}]->(g)
 )
 RETURN status
+```
+
+---
+
+## GET /admin/people/next-idx
+
+**Allowed:** Admin
+
+Suggested next free idx for each person kind (`max + 1` of the existing values in that format). The admin client uses them to prefill the forms. Two admins may receive the same suggestion; the second create is then rejected by the `idx IS KEY` constraint.
+
+**Response**
+
+```json
+{
+	"teacher": String,  // e.g. "T011"
+	"student": String,  // e.g. "285906"
+	"admin": String     // e.g. "A002"
+}
+```
+
+**Query**
+
+```cypher
+RETURN
+  coalesce(head(COLLECT {
+    MATCH (p:Person) WHERE p.idx =~ 'T[0-9]+'
+    RETURN toInteger(substring(p.idx, 1)) AS n ORDER BY n DESC LIMIT 1
+  }), 0) + 1 AS teacher,
+  coalesce(head(COLLECT {
+    MATCH (p:Person) WHERE p.idx =~ '[0-9]+'
+    RETURN toInteger(p.idx) AS n ORDER BY n DESC LIMIT 1
+  }), 0) + 1 AS student,
+  coalesce(head(COLLECT {
+    MATCH (p:Person) WHERE p.idx =~ 'A[0-9]+'
+    RETURN toInteger(substring(p.idx, 1)) AS n ORDER BY n DESC LIMIT 1
+  }), 0) + 1 AS admin
 ```
 

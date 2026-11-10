@@ -1,9 +1,10 @@
 from datetime import date, time
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TeacherCreateRequest(BaseModel):
+    idx: str = Field(pattern=r"^T[0-9]+$")
     name: str
     surname: str
     phone: str

@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProgrammeCreateRequest(BaseModel):
@@ -16,6 +16,7 @@ class ProgrammeCreateResponse(BaseModel):
 
 
 class AdminCreateRequest(BaseModel):
+    idx: str = Field(pattern=r"^A[0-9]+$")
     name: str
     surname: str
     phone: str
@@ -73,3 +74,9 @@ class DeanRegisterResponse(BaseModel):
     group_id: str
     ignore_capacity: bool = False
     err: Optional[str] = None
+
+
+class NextIdxResponse(BaseModel):
+    teacher: str
+    student: str
+    admin: str

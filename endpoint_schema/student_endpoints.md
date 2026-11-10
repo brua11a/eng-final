@@ -199,12 +199,13 @@ Rejected when the student has no access to the group (`"Forbidden"`), already ha
 
 **Query**
 
-All checks and the write run in one query. Rewriting `g.capacity` takes a write lock on the group, so concurrent registrations for the same group run one at a time and cannot both take the last place. No row means no access. Otherwise `status` is `ok`, `conflict` or `full`.
+All checks and the write run in one query. It takes write locks on the student and then on the group (always in this order, so concurrent requests cannot deadlock). The student lock makes the student's concurrent requests wait, so they cannot end up in two groups of the same type; the group lock makes concurrent registrations to the group run one at a time, so they cannot both take the last place. No row means no access. Otherwise `status` is `ok`, `conflict` or `full`.
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
 WITH DISTINCT st, g, gt
+SET st.idx = st.idx
 SET g.capacity = g.capacity
 WITH st, g,
   EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
@@ -519,11 +520,14 @@ Fails with `"Forbidden"` if the student is not registered in the group, `"Teache
 
 **Query**
 
-Validation, then:
+Validation, then the write. The duplicate check is repeated inside the write under a write lock on the student, so concurrent requests (e.g. a double click) create only one opinion; no row means a duplicate.
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
 MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
+SET st.idx = st.idx
+WITH st, g, t
+WHERE NOT EXISTS { (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t) }
 CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
 CREATE (st)-[:WRITES]->(o)
 CREATE (o)-[:ABOUT]->(g)

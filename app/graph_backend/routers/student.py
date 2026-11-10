@@ -53,12 +53,15 @@ RETURN reg.id AS id
 """
 
 
-# Rewriting capacity takes a write lock on the group, so concurrent registrations
-# for the same group see each other's writes before the capacity check.
+# Write locks (always student first, then group, so concurrent requests cannot deadlock):
+# - on the student: their concurrent requests for other groups of the same type wait,
+#   so the one-group-per-type check sees the registration committed a moment earlier;
+# - on the group: concurrent registrations to it wait, so the capacity check is exact.
 _REGISTER = """
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
 WITH DISTINCT st, g, gt
+SET st.idx = st.idx
 SET g.capacity = g.capacity
 WITH st, g,
   EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
@@ -476,6 +479,11 @@ async def create_opinion(
             """
             MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
             MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
+            // Write lock on the student: concurrent opinions by the same student wait here,
+            // so the duplicate check below sees an opinion committed a moment earlier.
+            SET st.idx = st.idx
+            WITH st, g, t
+            WHERE NOT EXISTS { (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t) }
             CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
             CREATE (st)-[:WRITES]->(o)
             CREATE (o)-[:ABOUT]->(g)
@@ -504,5 +512,15 @@ async def create_opinion(
             group_id=body.group_id,
             teacher_idx=body.teacher_idx,
             err=db_err(exc),
+        )
+    if row is None:
+        # Another request created the same opinion between the check above and this write.
+        return OpinionCreateResponse(
+            grade=body.grade,
+            content=body.content,
+            submit=body.submit,
+            group_id=body.group_id,
+            teacher_idx=body.teacher_idx,
+            err="Opinion already exists",
         )
     return OpinionCreateResponse(**row)

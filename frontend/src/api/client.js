@@ -213,6 +213,7 @@ export const admin = {
   assignStudentsToTurn: (body) =>
     apiRequest('/admin/registrations/turns/students', { method: 'POST', body }),
   deanRegister: (body) => apiRequest('/admin/groups/students', { method: 'POST', body }),
+  nextIdx: () => apiRequest('/admin/people/next-idx'),
   listStudents: () => apiRequest('/admin/students'),
   listTerms: () => apiRequest('/admin/curriculum-terms'),
   listTurns: () => apiRequest('/admin/registration-turns'),
