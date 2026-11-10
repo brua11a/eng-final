@@ -190,6 +190,7 @@
   },
   "active": "82d9e8b7a5847c5d",
   "lastOpenFiles": [
+    "queries/nodes.cypher~",
     "scripts/verify_import_layout.py.part",
     "import/edges/subject_instance_offered_in.csv",
     "import/edges/subject_instance_of.csv",
@@ -200,7 +201,6 @@
     "import/edges/registration_for_cycle.csv",
     "import/edges/term_cycles.csv",
     "import/edges/programme_curriculums.csv",
-    "import/edges/instance_group_types.csv",
     "data.svg",
     "visualisation.svg",
     "endpoint_schema/admin_endpoints.md",
