@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
-GRADE_SCALE = (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)
+from app.schemas.grades import check_grade
 
 
 class StudentCreateRequest(BaseModel):
@@ -68,9 +68,7 @@ class SetGroupGradeRequest(BaseModel):
     @field_validator("grade")
     @classmethod
     def grade_on_scale(cls, value: float) -> float:
-        if value not in GRADE_SCALE:
-            raise ValueError(f"grade must be one of {', '.join(map(str, GRADE_SCALE))}")
-        return value
+        return check_grade(value)
 
 
 class SetGroupGradeResponse(BaseModel):

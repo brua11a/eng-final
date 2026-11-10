@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from neo4j import AsyncSession
 from neo4j.exceptions import Neo4jError
@@ -38,10 +36,6 @@ from app.schemas.registration import (
 
 router = APIRouter(tags=["student"])
 
-
-def _zoned_datetime(value: datetime) -> str:
-    text = value.isoformat()
-    return text if value.tzinfo else f"{text}+01:00"
 
 
 _student = require("Student")
@@ -427,7 +421,6 @@ async def create_opinion(
         return OpinionCreateResponse(
             grade=body.grade,
             content=body.content,
-            submit=body.submit,
             group_id=body.group_id,
             teacher_idx=body.teacher_idx,
             err="student_idx is required",
@@ -449,7 +442,6 @@ async def create_opinion(
         return OpinionCreateResponse(
             grade=body.grade,
             content=body.content,
-            submit=body.submit,
             group_id=body.group_id,
             teacher_idx=body.teacher_idx,
             err="Forbidden",
@@ -458,7 +450,6 @@ async def create_opinion(
         return OpinionCreateResponse(
             grade=body.grade,
             content=body.content,
-            submit=body.submit,
             group_id=body.group_id,
             teacher_idx=body.teacher_idx,
             err="Teacher does not teach this group",
@@ -467,7 +458,6 @@ async def create_opinion(
         return OpinionCreateResponse(
             grade=body.grade,
             content=body.content,
-            submit=body.submit,
             group_id=body.group_id,
             teacher_idx=body.teacher_idx,
             err="Opinion already exists",
@@ -484,7 +474,7 @@ async def create_opinion(
             SET st.idx = st.idx
             WITH st, g, t
             WHERE NOT EXISTS { (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t) }
-            CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
+            CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime()})
             CREATE (st)-[:WRITES]->(o)
             CREATE (o)-[:ABOUT]->(g)
             CREATE (o)-[:ABOUT_TEACHER]->(t)
@@ -502,13 +492,11 @@ async def create_opinion(
             id=opinion_id,
             grade=body.grade,
             content=body.content,
-            submit=_zoned_datetime(body.submit),
         )
     except Neo4jError as exc:
         return OpinionCreateResponse(
             grade=body.grade,
             content=body.content,
-            submit=body.submit,
             group_id=body.group_id,
             teacher_idx=body.teacher_idx,
             err=db_err(exc),
@@ -518,7 +506,6 @@ async def create_opinion(
         return OpinionCreateResponse(
             grade=body.grade,
             content=body.content,
-            submit=body.submit,
             group_id=body.group_id,
             teacher_idx=body.teacher_idx,
             err="Opinion already exists",

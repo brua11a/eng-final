@@ -492,8 +492,7 @@ RETURN
 ```json
 {
 	"grade": Float,
-	"content": String?,
-	"submit": DateTime,
+	"content": String?,  // at most 1000 characters
 	"group_id": String,
 	"teacher_idx": String,
 	"student_idx": String?
@@ -502,6 +501,8 @@ RETURN
 
 `student_idx` is required for admins. For students it is ignored and taken from the token. `teacher_idx` must be a teacher who `TEACHES` the given group.
 
+`grade` must be one of `2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0` (the same scale as teacher grades); any other value is rejected with HTTP 422. `submit` is set by the server to the time the opinion is created.
+
 **Response**
 
 ```json
@@ -509,7 +510,7 @@ RETURN
 	"id": String?,
 	"grade": Float,
 	"content": String?,
-	"submit": DateTime,
+	"submit": DateTime?,  // null when the opinion was not created
 	"group_id": String,
 	"teacher_idx": String,
 	"err": String?
@@ -528,7 +529,7 @@ MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
 SET st.idx = st.idx
 WITH st, g, t
 WHERE NOT EXISTS { (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t) }
-CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime($submit)})
+CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime()})
 CREATE (st)-[:WRITES]->(o)
 CREATE (o)-[:ABOUT]->(g)
 CREATE (o)-[:ABOUT_TEACHER]->(t)

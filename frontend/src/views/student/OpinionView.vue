@@ -63,7 +63,6 @@ async function submitForTarget(item) {
     const res = await student.createOpinion({
       grade: Number(draft.grade),
       content: draft.content.trim() || null,
-      submit: new Date().toISOString(),
       group_id: item.group_id,
       teacher_idx: item.teacher.idx,
     })
@@ -103,7 +102,7 @@ onMounted(loadGroups)
             <input
               v-model.number="drafts[targetKey(item)].grade"
               type="number"
-              step="0.1"
+              step="0.5"
               min="2"
               max="5"
               required
@@ -111,7 +110,7 @@ onMounted(loadGroups)
           </label>
           <label>
             Content
-            <textarea v-model="drafts[targetKey(item)].content" rows="3" placeholder="Optional comment" />
+            <textarea maxlength="1000" v-model="drafts[targetKey(item)].content" rows="3" placeholder="Optional comment" />
           </label>
           <div class="opinion-actions">
             <button type="submit" class="teacher-btn-save" :disabled="status[targetKey(item)].saving">

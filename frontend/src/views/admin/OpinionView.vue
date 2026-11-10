@@ -17,7 +17,6 @@ function send() {
       student_idx: studentIdx.value,
       grade: Number(grade.value),
       content: content.value.trim() || null,
-      submit: new Date().toISOString(),
       group_id: groupId.value,
       teacher_idx: teacherIdx.value,
     }),
@@ -35,8 +34,8 @@ function send() {
         <label>Student idx <input v-model="studentIdx" required /></label>
         <label>Group id <input v-model="groupId" required /></label>
         <label>Teacher idx <input v-model="teacherIdx" required /></label>
-        <label>Grade <input v-model="grade" type="number" step="0.1" min="2" max="5" required /></label>
-        <label>Content <textarea v-model="content" rows="3" /></label>
+        <label>Grade <input v-model="grade" type="number" step="0.5" min="2" max="5" required /></label>
+        <label>Content <textarea maxlength="1000" v-model="content" rows="3" /></label>
         <button type="submit" class="teacher-btn-save" :disabled="api.loading">Submit</button>
       </form>
       <ApiMessages :error="api.error" :api-message="api.apiMessage" />
