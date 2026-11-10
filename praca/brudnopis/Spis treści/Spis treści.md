@@ -1,0 +1,1 @@
+zrobi sie sam na początku

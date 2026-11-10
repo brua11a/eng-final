@@ -1,0 +1,1 @@
+zrob po implementacji

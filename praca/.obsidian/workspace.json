@@ -1,0 +1,233 @@
+{
+  "main": {
+    "id": "5631933b19da2da5",
+    "type": "split",
+    "children": [
+      {
+        "id": "81505a762fe9777e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "25bd858520d885a5",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "brudnopis/Rodział 1/Rozdział 1.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Rozdział 1"
+            }
+          },
+          {
+            "id": "87f7fd60d5a43b2d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "brudnopis/Wstęp/Wstęp.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Wstęp"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "65424a157b67bcbc",
+    "type": "split",
+    "children": [
+      {
+        "id": "c32e8cba7576941d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "47f057cca5d297b7",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "90b87615ec303d10",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "bbcbca455bdc52c1",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "08351da830c300af",
+    "type": "split",
+    "children": [
+      {
+        "id": "f9f1bb62fda9eb9a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "dbfb7663e493328a",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "brudnopis/Wstęp/Wstęp.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "d4a32a2dd6cb7604",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "brudnopis/Wstęp/Wstęp.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "07caca0f771e5578",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "68e66aaf9caeae6f",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "e297897c2f70b1bc",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "brudnopis/Wstęp/Wstęp.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "87f7fd60d5a43b2d",
+  "lastOpenFiles": [
+    "brudnopis/Rozdział 2/Analiza wymagań.md",
+    "brudnopis/Wstęp/Wstęp.md",
+    "brudnopis/Strona tytułowa/Strona tytułowa.md",
+    "brudnopis/Rodział 1/Podstawy teoretyczne.md",
+    "brudnopis/Rozdział 3/Projekt systemu.md",
+    "brudnopis/Rozdział 4/Implementacja.md",
+    "brudnopis/Streszczenie/Streszczenie.md",
+    "brudnopis/Spis treści/Spis treści.md",
+    "brudnopis/Rozdział 5/Testy.md",
+    "brudnopis/Podsumowanie i wnioski/Podsumowanie i wnioski.md",
+    "brudnopis/Literatura/Literatura.md",
+    "brudnopis/Dodatki/Dodatki.md",
+    "brudnopis/Rozdział 5/media_rozdzial5",
+    "brudnopis/Rozdział 5",
+    "brudnopis/Rozdział 4/media_rozdzial4",
+    "brudnopis/Rozdział 4",
+    "brudnopis/Dodatki/media_dodatki",
+    "brudnopis/Dodatki",
+    "brudnopis/Podsumowanie i wnioski/media_podsumowanie",
+    "brudnopis/Podsumowanie i wnioski",
+    "brudnopis/Literatura",
+    "brudnopis/Rozdział 3/media_rozdzial3",
+    "brudnopis/Rozdział 2/Untitled.md",
+    "brudnopis/Strona tytułowa/media_strona_tytulowa/Pasted image 20261109213902.png"
+  ]
+}

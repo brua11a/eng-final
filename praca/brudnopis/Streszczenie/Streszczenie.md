@@ -1,0 +1,1 @@
+napisze po napisaniu wszystkiego

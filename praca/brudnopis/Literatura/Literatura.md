@@ -1,0 +1,1 @@
+Da sie na koniec

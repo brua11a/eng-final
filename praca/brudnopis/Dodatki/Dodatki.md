@@ -1,0 +1,1 @@
+Instrukcja uruchomienia - instaluj docker, docker compose up --build
