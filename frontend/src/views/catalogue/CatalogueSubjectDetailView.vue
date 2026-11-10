@@ -83,7 +83,7 @@ watch(selectedCycleId, loadGroups)
               </RouterLink>
             </td>
             <td>{{ g.number }}</td>
-            <td>{{ scheduleLine(g.weekday, g.start_hr, g.end_time) }} {{ g.pnp }}</td>
+            <td>{{ scheduleLine(g.weekday, g.start_time, g.end_time) }} {{ g.pnp }}</td>
             <td>{{ g.room }} · {{ g.cycle }}</td>
             <td>{{ g.filled }} / {{ g.capacity }}</td>
           </tr>

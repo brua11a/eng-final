@@ -46,7 +46,7 @@ RETURN
   }) AS curriculum_id,
   rt.turn_number AS turn_number,
   rt.date AS date,
-  rt.start_hr AS start,
+  rt.start_time AS start,
   rt.end_time AS end
 ```
 
@@ -161,7 +161,7 @@ RETURN
   gt.g_type AS g_type,
   g.number AS number,
   g.weekday AS weekday,
-  g.start_hr AS start,
+  g.start_time AS start,
   g.end_time AS end,
   g.capacity AS capacity,
   size([(g)<-[:REGISTERED_IN]-() | 1]) AS filled,
@@ -412,7 +412,7 @@ RETURN
   gt.g_type AS g_type,
   g.number AS number,
   g.weekday AS weekday,
-  g.start_hr AS start,
+  g.start_time AS start,
   g.end_time AS end,
   r.building + " " + r.room_num AS room,
   t.name + " " + t.surname AS teacher,
@@ -471,7 +471,7 @@ RETURN
   gt.g_type AS g_type,
   g.number AS number,
   g.weekday AS weekday,
-  g.start_hr AS start,
+  g.start_time AS start,
   g.end_time AS end,
   g.pnp AS pnp,
   r.building + " " + r.room_num AS room,

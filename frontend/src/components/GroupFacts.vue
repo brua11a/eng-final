@@ -10,7 +10,7 @@ const props = defineProps({
 
 const schedule = computed(() => {
   const g = props.group
-  return [WEEKDAYS[g.weekday] || '', g.pnp, timeRange(g.start_hr, g.end_time)]
+  return [WEEKDAYS[g.weekday] || '', g.pnp, timeRange(g.start_time, g.end_time)]
     .filter(Boolean)
     .join(', ')
 })

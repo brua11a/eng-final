@@ -1,4 +1,4 @@
-id,weekday,number,pnp,capacity,start_hr,end_time
+id,weekday,number,pnp,capacity,start_time,end_time
 131f00c2-a504-550e-8117-167bd6218535,3,1,NP,120,13:15:00+02:00,15:00:00+02:00
 74e99473-12fb-5919-9992-db58d514944b,3,1,P,120,13:15:00+02:00,15:00:00+02:00
 f1421862-5912-57ee-a1d6-cb357169c3fc,1,1,ALL,120,15:15:00+02:00,16:55:00+02:00

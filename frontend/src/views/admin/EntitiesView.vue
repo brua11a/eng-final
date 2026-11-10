@@ -54,7 +54,7 @@ const group = ref({
   number: 1,
   pnp: 'P',
   capacity: 30,
-  start_hr: '08:00:00',
+  start_time: '08:00:00',
   end_time: '09:30:00',
   subject_code: '',
   cycle_id: '',
@@ -291,7 +291,7 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         <label>Number <input v-model="group.number" type="number" required /></label>
         <label>P/NP/ALL <input v-model="group.pnp" required /></label>
         <label>Capacity <input v-model="group.capacity" type="number" required /></label>
-        <label>Start <input v-model="group.start_hr" required /></label>
+        <label>Start <input v-model="group.start_time" required /></label>
         <label>End <input v-model="group.end_time" required /></label>
         <label>
           Subject

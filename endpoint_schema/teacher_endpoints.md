@@ -132,7 +132,7 @@ RETURN
   gt.g_type AS g_type,
   g.number AS group_num,
   g.weekday AS weekday,
-  g.start_hr AS start,
+  g.start_time AS start,
   g.end_time AS end,
   g.pnp AS pnp,
   ac.year AS cycle_year,

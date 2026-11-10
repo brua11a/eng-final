@@ -122,7 +122,7 @@ export function layoutDayEvents(rawEvents, gridStart, gridEnd) {
 }
 
 export function normalizeEntry(entry, role) {
-  const startMin = parseTimeToMinutes(entry.start ?? entry.start_hr)
+  const startMin = parseTimeToMinutes(entry.start ?? entry.start_time)
   const endMin = parseTimeToMinutes(entry.end ?? entry.end_time)
   const wdRaw = entry.weekday
   if (startMin == null || endMin == null || wdRaw == null || wdRaw === '') return null

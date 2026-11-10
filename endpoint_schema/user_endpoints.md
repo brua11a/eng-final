@@ -370,7 +370,7 @@ RETURN
 		"number": Integer,
 		"pnp": String,
 		"capacity": Integer,
-		"start_hr": Time,
+		"start_time": Time,
 		"end_time": Time,
 		"cycle": String,
 		"room": String,
@@ -399,12 +399,12 @@ RETURN
   g.number AS number,
   g.pnp AS pnp,
   g.capacity AS capacity,
-  g.start_hr AS start_hr,
+  g.start_time AS start_time,
   g.end_time AS end_time,
   r.building AS building,
   r.room_num AS room_num,
   COUNT { (g)<-[:REGISTERED_IN]-(:Student) } AS filled
-ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
+ORDER BY gt.g_type, g.weekday, g.start_time, g.number
 ```
 
 ---
@@ -432,7 +432,7 @@ ORDER BY gt.g_type, g.weekday, g.start_hr, g.number
 	"group_num": Integer,
 	"weekday": Integer?,
 	"pnp": String,
-	"start_hr": Time?,
+	"start_time": Time?,
 	"end_time": Time?,
 	"room": String,
 	"building": String,
@@ -471,7 +471,7 @@ RETURN
   g.number AS group_num,
   g.weekday AS weekday,
   g.pnp AS pnp,
-  g.start_hr AS start_hr,
+  g.start_time AS start_time,
   g.end_time AS end_time,
   g.capacity AS capacity,
   r.building AS building,

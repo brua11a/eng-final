@@ -18,5 +18,5 @@ class RegistrationTurn(BaseModel):
     registration_id: int
     turn_number: int
     date: date
-    start_hr: time
+    start_time: time
     end_time: time

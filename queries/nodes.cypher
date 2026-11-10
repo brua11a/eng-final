@@ -61,7 +61,7 @@ SET g.weekday = toInteger(row.weekday),
     g.number = toInteger(row.number),
     g.pnp = row.pnp,
     g.capacity = toInteger(row.capacity),
-    g.start_hr = time(row.start_hr),
+    g.start_time = time(row.start_time),
     g.end_time = time(row.end_time);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/registrations.csv" AS row
@@ -73,7 +73,7 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/registration_turns.csv" AS row
 MERGE (rt:RegistrationTurn {id: row.id})
 SET rt.turn_number = toInteger(row.turn_number),
     rt.date = date(row.date),
-    rt.start_hr = time(row.start_hr),
+    rt.start_time = time(row.start_time),
     rt.end_time = time(row.end_time);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/opinions.csv" AS row

@@ -409,7 +409,7 @@ RETURN gt.id AS id, su.code AS subject_code, ac.id AS cycle_id,
 	"number": Integer,
 	"pnp": String,
 	"capacity": Integer,
-	"start_hr": Time,
+	"start_time": Time,
 	"end_time": Time,
 	"subject_code": String,
 	"cycle_id": String,
@@ -427,7 +427,7 @@ RETURN gt.id AS id, su.code AS subject_code, ac.id AS cycle_id,
 	"number": Integer,
 	"pnp": String,
 	"capacity": Integer,
-	"start_hr": Time,
+	"start_time": Time,
 	"end_time": Time,
 	"subject_code": String,
 	"cycle_id": String,
@@ -446,11 +446,11 @@ MATCH (si)-[:HAS_TYPE]->(gt:GroupType {g_type: $g_type})
 MATCH (r:Room {id: $room_id})
 CREATE (g:Group {
   id: $id, weekday: $weekday, number: $number, pnp: $pnp,
-  capacity: $capacity, start_hr: time($start_hr), end_time: time($end_time)
+  capacity: $capacity, start_time: time($start_time), end_time: time($end_time)
 })-[:OF_TYPE]->(gt),
 (g)-[:IN_ROOM]->(r)
 RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
-       g.pnp AS pnp, g.capacity AS capacity, g.start_hr AS start_hr, g.end_time AS end_time,
+       g.pnp AS pnp, g.capacity AS capacity, g.start_time AS start_time, g.end_time AS end_time,
        su.code AS subject_code, ac.id AS cycle_id, r.id AS room_id
 ```
 
@@ -766,7 +766,7 @@ MATCH (reg:Registration {id: $registration_id})
 UNWIND $turns AS turn
 CREATE (rt:RegistrationTurn {
   id: turn.id, turn_number: turn.turn_number, date: date(turn.date),
-  start_hr: time(turn.start), end_time: time(turn.end)
+  start_time: time(turn.start), end_time: time(turn.end)
 })
 CREATE (reg)-[:HAS_TURN]->(rt)
 RETURN count(rt) AS created
@@ -1013,7 +1013,7 @@ RETURN
   su.name AS course_name,
   g.number AS number,
   g.weekday AS weekday,
-  g.start_hr AS start,
+  g.start_time AS start,
   g.end_time AS end
 ORDER BY su.code, ac.year, ac.season, gt.g_type, g.number
 ```
@@ -1323,7 +1323,7 @@ ORDER BY p.name, c.intake_year DESC, ct.sem
 ```cypher
 MATCH (reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)
 RETURN rt.id AS id, reg.name AS registration, rt.turn_number AS turn_number,
-       rt.date AS date, rt.start_hr AS start, rt.end_time AS end
+       rt.date AS date, rt.start_time AS start, rt.end_time AS end
 ORDER BY rt.date DESC, reg.name, rt.turn_number
 ```
 

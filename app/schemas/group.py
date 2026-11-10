@@ -27,7 +27,7 @@ class GroupCreateRequest(BaseModel):
     number: int
     pnp: str
     capacity: int
-    start_hr: time
+    start_time: time
     end_time: time
     subject_code: str
     cycle_id: str
@@ -41,7 +41,7 @@ class GroupCreateResponse(BaseModel):
     number: int
     pnp: str
     capacity: int
-    start_hr: time
+    start_time: time
     end_time: time
     subject_code: str
     cycle_id: str
@@ -67,7 +67,7 @@ class GroupNested(BaseModel):
     number: int
     pnp: str
     capacity: int
-    start_hr: time
+    start_time: time
     end_time: time
     cycle: str
     room: str
@@ -96,7 +96,7 @@ class GroupDetailResponse(BaseModel):
     group_num: int
     weekday: Optional[int] = None
     pnp: str = ""
-    start_hr: Optional[time] = None
+    start_time: Optional[time] = None
     end_time: Optional[time] = None
     room: str = ""
     building: str

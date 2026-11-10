@@ -8,7 +8,7 @@ class Group(BaseModel):
     number: int
     pnp: str
     capacity: int
-    start_hr: time
+    start_time: time
     end_time: time
     subject_code: str
     room_id: int
