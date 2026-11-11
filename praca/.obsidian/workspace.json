@@ -13,20 +13,6 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "brudnopis/Rodział 1/Rozdział 1.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "Rozdział 1"
-            }
-          },
-          {
-            "id": "87f7fd60d5a43b2d",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
                 "file": "brudnopis/Rozdział 3/Projekt systemu.md",
                 "mode": "source",
                 "source": false
@@ -35,8 +21,7 @@
               "title": "Projekt systemu"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "vertical"
@@ -70,7 +55,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "",
+                "query": "arrow",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -203,42 +188,42 @@
       "bases:Create new base": false
     }
   },
-  "active": "87f7fd60d5a43b2d",
+  "active": "47f057cca5d297b7",
   "lastOpenFiles": [
-    "brudnopis/Rozdział 3/Projekt systemu.md.tmp.27872.2621342d557e",
-    "brudnopis/Rozdział 3/media_rozdzial3/Projekt i implementacja uczelnianego systemu zarządzania danymi z RBAC opartego na grafowej bazie danych.png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(5).png",
+    "brudnopis/Rozdział 3/Projekt systemu.md.tmp.52067.40c6a6e173b4",
+    "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(4).png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(3).png",
+    "visualisation.png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110202719.png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110203022.png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110203108.png",
     "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(2).png",
     "brudnopis/Rozdział 3/Projekt systemu.md",
-    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110203108.png",
-    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110203022.png",
-    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110202719.png",
-    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110201620.png",
-    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110202158.png",
-    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110202158.png~",
-    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110201500.png",
-    "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(1).png",
-    "brudnopis/Rozdział 3/sedtLaNJh",
-    "brudnopis/Literatura/Literatura.md",
-    "brudnopis/Dodatki/Dodatki.md",
+    "brudnopis/Rozdział 4/Implementacja.md",
+    "brudnopis/Rozdział 2/Analiza wymagań.md",
+    "brudnopis/Rodział 1/Podstawy teoretyczne.md",
     "brudnopis/Wstęp/Wstęp.md",
     "brudnopis/Strona tytułowa/Strona tytułowa.md",
     "brudnopis/Streszczenie/Streszczenie.md",
+    "brudnopis/Dodatki/Dodatki.md",
+    "brudnopis/Podsumowanie i wnioski/Podsumowanie i wnioski.md",
+    "brudnopis/Rozdział 3/Projekt systemu.md.tmp.27872.2621342d557e",
+    "brudnopis/Rozdział 3/media_rozdzial3/Projekt i implementacja uczelnianego systemu zarządzania danymi z RBAC opartego na grafowej bazie danych.png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110201620.png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110202158.png",
+    "brudnopis/Rozdział 3/media_rozdzial3/Pasted image 20261110202158.png~",
+    "brudnopis/Rozdział 3/sedtLaNJh",
+    "brudnopis/Literatura/Literatura.md",
     "brudnopis/Spis treści/Spis treści.md",
-    "brudnopis/Rozdział 4/Implementacja.md",
     "brudnopis/Rozdział 6/Porównanie z modelem relacyjnym.md",
     "brudnopis/Rozdział 5/Testy.md",
     "brudnopis/Rozdział 3/Projekt systemu.md.tmp.85396.562d2f29490d",
     "brudnopis/Rozdział 3/Projekt systemu.md.tmp.85396.807cc78577bf",
-    "brudnopis/Rozdział 2/Analiza wymagań.md",
-    "brudnopis/Rodział 1/Podstawy teoretyczne.md",
-    "brudnopis/Strona tytułowa/media_strona_tytulowa/Pasted image 20261109213902.png",
     "brudnopis/Rozdział 6/media_rozdzial6",
     "brudnopis/Rozdział 6",
-    "brudnopis/Podsumowanie i wnioski/Podsumowanie i wnioski.md",
     "brudnopis/Rozdział 5/media_rozdzial5",
     "brudnopis/Rozdział 5",
-    "brudnopis/Rozdział 4/media_rozdzial4",
-    "brudnopis/Rozdział 4",
     "brudnopis/Rozdział 2/Untitled.md"
   ]
 }

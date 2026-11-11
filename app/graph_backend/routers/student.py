@@ -52,7 +52,9 @@ RETURN reg.id AS id
 #   so the one-group-per-type check sees the registration committed a moment earlier;
 # - on the group: concurrent registrations to it wait, so the capacity check is exact.
 _REGISTER = """
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+// Turn time window, disabled for testing: uncomment to allow registering only during the student's turn.
+// WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
 WITH DISTINCT st, g, gt
 SET st.idx = st.idx
@@ -226,7 +228,9 @@ async def deregister_from_group(
         """
         MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
         MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
-        MATCH (st)-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+        MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+        // Turn time window, disabled for testing: uncomment to allow deregistering only during the student's turn.
+        // WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
         DELETE r
         RETURN g.id AS group_id
         """,
