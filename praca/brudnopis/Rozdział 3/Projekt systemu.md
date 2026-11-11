@@ -234,7 +234,7 @@ Rejestracja na zajęcia jest momentem, w którym setki studentów jednocześnie 
 
 4.3.5 Opinie
 
-Studenci mogą oceniać zajęcia, w których uczestniczą, i ich prowadzących. Opinię opisuje etykieta Opinion. Przechowuje ona identyfikator, ocenę liczbową (`grade`, w tej samej skali od 2,0 do 5,0 co oceny z zajęć), opcjonalną treść (`content`) oraz moment wystawienia (`submit`, data i czas). Opinia jest połączona z trzema węzłami: z autorem krawędzią WRITES (od studenta do opinii), z grupą, której dotyczy, krawędzią ABOUT oraz z ocenianym prowadzącym krawędzią ABOUT_TEACHER.
+Studenci mogą oceniać zajęcia, w których uczestniczą i prowadzących tych grup. Opinię ją etykieta Opinion. Przechowuje identyfikator, ocenę liczbową (`grade`), opcjonalną treść (`content`) oraz moment wystawienia (`submit`). Opinia jest połączona z trzema węzłami: z autorem krawędzią WRITES (od studenta do opinii), z grupą, której dotyczy krawędzią ABOUT oraz z ocenianym prowadzącym krawędzią ABOUT_TEACHER.
 
 Opinię może wystawić tylko student zapisany do danej grupy i tylko o prowadzącym, który tę grupę prowadzi. Na trójkę student, grupa i prowadzący przypada co najwyżej jedna opinia. Jeśli grupę prowadzi kilka osób, student może ocenić każdą z nich osobno.
 
@@ -246,49 +246,49 @@ Opinię może wystawić tylko student zapisany do danej grupy i tylko o prowadz�
 | | `submit` | data i czas ze strefą | tak | – | moment wystawienia |
 *Właściwości etykiety Opinion*
 
-Opinia mogłaby wydawać się naturalnym kandydatem na krawędź od studenta do grupy, podobnie jak zapis z oceną (4.3.3). Wiąże ona jednak trzy byty: autora, grupę i prowadzącego. Krawędź w grafie właściwości ma dokładnie dwa końce, więc związku trójstronnego nie da się nią wyrazić. Samo połączenie z grupą nie wystarczy, ponieważ grupa może mieć kilku prowadzących, a opinia dotyczy jednego z nich. Dlatego związek ten zamieniono w osobny węzeł (reifikacja), a każdy z trzech uczestników jest z nim połączony własną krawędzią.
+Opinia na początku była krawędzią od studenta do grupy, a nauczyciel wynikał pośrednio z tej krawędzi. Po rozważeniu jednak sytuacji, w której jedna grupa jest prowadzona przez kilka osób (np. wykład, na którym prezentacja jest prowadzona prawie za każdym razem przez kogoś innego), zdecydowano się zmienić Opinion na pełnoprawny węzeł. Oficjalna nazwa tego zabiegu to *reifikacja*.
 
-Takie rozwiązanie ma też zalety przy odczycie. Do opinii można dojść od każdej z trzech stron: od studenta (jego opinie), od grupy (opinie o zajęciach) i od prowadzącego (wszystkie opinie o nim, ze wszystkich grup i cykli, bez przechodzenia przez grupy). Opinia jako węzeł może też w przyszłości otrzymać kolejne powiązania, np. odpowiedź prowadzącego lub zgłoszenie do moderacji.
+Takie rozwiązanie ma też zalety przy odczycie. Do opinii można dojść od każdej z trzech stron: od studenta (jego opinie), od grupy (opinie o zajęciach) i od prowadzącego (wszystkie opinie o nim, ze wszystkich grup i cykli). Opinia jako węzeł może też w przyszłości otrzymać kolejne powiązania, np. odpowiedź prowadzącego lub zgłoszenie do moderacji.
 
 ![[Untitled graph(6).png]]
 
-*Wizualizacja opinii połączonej z autorem, grupą i prowadzącym wykonana w arrows.app*
+*Wizualizacja zmiany konwencji wystawiania opinii wykonana w arrows.app*
 
 4.3.6 Krawędzie i kardynalność
 
-W modelu grafowym nie są potrzebne tabele łączące ani klucze obce – każde powiązanie między węzłami jest krawędzią, niezależnie od tego, czy w modelu relacyjnym byłoby powiązaniem jeden-do-wielu, czy wiele-do-wielu. Kardynalność nadal wynika jednak z domeny (np. grupa zajęciowa odbywa się w jednej sali, a w jednej sali odbywa się wiele grup).
+W modelu grafowym nie są potrzebne tabele łączące ani klucze obce. Każde powiązanie między węzłami jest krawędzią, niezależnie od tego, czy w modelu relacyjnym byłoby powiązaniem jeden-do-wielu, czy wiele-do-wielu. Kardynalność nadal wynika jednak z domeny (np. grupa zajęciowa odbywa się w jednej sali, a w jednej sali odbywa się wiele grup).
 
 Każda krawędź ma kierunek, nadany zgodnie ze znaczeniem relacji (np. student pisze opinię, a nie opinia studenta). Kierunek nie ogranicza jednak zapytań: po krawędzi można przejść w obie strony z tym samym kosztem, więc wybór kierunku jest decyzją o czytelności modelu, a nie o wydajności.
 
-Poniższa tabela zestawia wszystkie 22 typy krawędzi modelu. Kardynalność zapisano w kolejności od węzła początkowego do końcowego: N:1 oznacza, że wiele węzłów początkowych może wskazywać ten sam węzeł końcowy, a każdy węzeł początkowy wskazuje dokładnie jeden węzeł końcowy.
-
-| Krawędź | Od | Do | Znaczenie | Kardynalność | Uwagi |
-|---|---|---|---|---|---|
-| OFFERED_BY | Programme | Faculty | kierunek prowadzony przez wydział | N:1 | |
-| HAS_CURRICULUM | Programme | Curriculum | plan studiów rocznika na kierunku | 1:N | |
-| HAS_TERM | Curriculum | CurriculumTerm | semestr planu studiów | 1:N | |
-| TAUGHT_IN | CurriculumTerm | AcademicCycle | cykl, w którym odbywa się semestr | N:1 | opcjonalna dla semestrów przyszłych |
-| INCLUDES | CurriculumTerm | Subject | przedmiot w planie semestru | N:M | |
-| INSTANCE_OF | SubjectInstance | Subject | realizacja przedmiotu | N:1 | |
-| OFFERED_IN | SubjectInstance | AcademicCycle | cykl realizacji przedmiotu | N:1 | jedna instancja na parę przedmiot i cykl |
-| HAS_TYPE | SubjectInstance | GroupType | forma zajęć instancji | 1:N | |
-| OF_TYPE | Group | GroupType | forma zajęć grupy | N:1 | numer grupy unikalny w obrębie formy |
-| IN_ROOM | Group | Room | sala, w której odbywa się grupa | N:1 | |
-| TEACHES | Teacher | Group | prowadzący grupę | N:M | grupa może mieć kilku prowadzących |
-| WORKS_AT | Teacher | Faculty | zatrudnienie na wydziale | N:M | |
-| ENROLLED | Student | CurriculumTerm | student na semestrze planu | N:M | historia semestrów (4.3.2) |
-| REGISTERED_IN | Student | Group | zapis na grupę z oceną | N:M | najwyżej jedna grupa danej formy zajęć |
-| FOR_CYCLE | Registration | AcademicCycle | cykl, którego dotyczą zapisy | N:1 | |
-| FOR_FACULTY | Registration | Faculty | wydział, którego dotyczą zapisy | N:1 | |
-| HAS_TURN | Registration | RegistrationTurn | tura zapisów | 1:N | |
-| OPENS | Registration | Group | grupa dostępna w zapisach | N:M | grupa może być otwarta w kilku zapisach |
-| ASSIGNED | Student | RegistrationTurn | przydział studenta do tury | N:M | najwyżej jedna tura w ramach jednych zapisów |
-| WRITES | Student | Opinion | autor opinii | 1:N | |
-| ABOUT | Opinion | Group | grupa, której dotyczy opinia | N:1 | |
-| ABOUT_TEACHER | Opinion | Teacher | prowadzący, którego dotyczy opinia | N:1 | |
+| Krawędź        | Od              | Do               | Znaczenie                          | Kardynalność | Uwagi                                        |
+| -------------- | --------------- | ---------------- | ---------------------------------- | ------------ | -------------------------------------------- |
+| OFFERED_BY     | Programme       | Faculty          | kierunek prowadzony przez wydział  | N:1          |                                              |
+| HAS_CURRICULUM | Programme       | Curriculum       | plan studiów rocznika na kierunku  | 1:N          |                                              |
+| HAS_TERM       | Curriculum      | CurriculumTerm   | semestr planu studiów              | 1:N          |                                              |
+| TAUGHT_IN      | CurriculumTerm  | AcademicCycle    | cykl, w którym odbywa się semestr  | N:1          | opcjonalna dla semestrów przyszłych          |
+| INCLUDES       | CurriculumTerm  | Subject          | przedmiot w planie semestru        | N:M          |                                              |
+| INSTANCE_OF    | SubjectInstance | Subject          | realizacja przedmiotu              | N:1          |                                              |
+| OFFERED_IN     | SubjectInstance | AcademicCycle    | cykl realizacji przedmiotu         | N:1          | jedna instancja na parę przedmiot i cykl     |
+| HAS_TYPE       | SubjectInstance | GroupType        | forma zajęć instancji              | 1:N          |                                              |
+| OF_TYPE        | Group           | GroupType        | forma zajęć grupy                  | N:1          | numer grupy unikalny w obrębie formy         |
+| IN_ROOM        | Group           | Room             | sala, w której odbywa się grupa    | N:1          |                                              |
+| TEACHES        | Teacher         | Group            | prowadzący grupę                   | N:M          | grupa może mieć kilku prowadzących           |
+| WORKS_AT       | Teacher         | Faculty          | zatrudnienie na wydziale           | N:M          |                                              |
+| ENROLLED       | Student         | CurriculumTerm   | student na semestrze planu         | N:M          | historia semestrów (4.3.2)                   |
+| REGISTERED_IN  | Student         | Group            | zapis na grupę z oceną             | N:M          | najwyżej jedna grupa danej formy zajęć       |
+| FOR_CYCLE      | Registration    | AcademicCycle    | cykl, którego dotyczą zapisy       | N:1          |                                              |
+| FOR_FACULTY    | Registration    | Faculty          | wydział, którego dotyczą zapisy    | N:1          |                                              |
+| HAS_TURN       | Registration    | RegistrationTurn | tura zapisów                       | 1:N          |                                              |
+| OPENS          | Registration    | Group            | grupa dostępna w zapisach          | N:M          | grupa może być otwarta w kilku zapisach      |
+| ASSIGNED       | Student         | RegistrationTurn | przydział studenta do tury         | N:M          | najwyżej jedna tura w ramach jednych zapisów |
+| WRITES         | Student         | Opinion          | autor opinii                       | 1:N          |                                              |
+| ABOUT          | Opinion         | Group            | grupa, której dotyczy opinia       | N:1          |                                              |
+| ABOUT_TEACHER  | Opinion         | Teacher          | prowadzący, którego dotyczy opinia | N:1          |                                              |
 *Typy krawędzi i ich kardynalność wynikająca z domeny*
 
-Kolumna „Uwagi” zawiera reguły, które wykraczają poza samą kardynalność, bo dotyczą kilku krawędzi naraz, np. zapis do najwyżej jednej grupy danej formy zajęć wymaga spojrzenia na krawędzie REGISTERED_IN i OF_TYPE jednocześnie. Ani te reguły, ani sama kardynalność nie są wymuszane przez typ grafu (zob. 4.3.7).
+Wedle konwencji, nazwy krawędzi powinny wyrażać czynności [CYTOWANIE]. Widać jednak, że ta konwencja nie skaluje się dobrze do tak dużej liczby krawędzi, ponieważ gdybym po prostu używał prostych czasowników, takich jak "IS" czy "IN", to bardzo szybko pojawiałyby się one w kilku miejscach w sposób niezamierzony. Jednocześnie, bardziej jednoznaczne nazwy, typu "ABOUT_TEACHER" źle brzmią, gdy rozważy się całe "zdanie" tworzone czytając węzły wraz z krawędziami, na przykład: "(Opinion)-\[ABOUT_TEACHER]->(Teacher)" brzmi niepotrzebnie verbose. O wiele lepiej brzmi "(Opinion)-\[ABOUT]->(Teacher)" lub "(Opinion)-\[IS_ABOUT]->(Teacher)", jednocześnie po samej nazwie krawędzi trudno się domyślić jakich węzłów ona dotyczy.
+
+Wniosek z tego taki, że dla dużych, ustrukturyzowanych baz grafowych, rozwklekłe, długie i jednoznaczne nazwy ułatwiają pisanie kwerend i zrozumienie infrastruktury. Jest to jedynie konwencja nazewnictwa i uwaga na przyszłość. Przepisanie kwerend od nowa, by podążać za tą obserwacją nie zostało uznane za potrzebne.
 
 4.3.7 Ograniczenia schematu
 
