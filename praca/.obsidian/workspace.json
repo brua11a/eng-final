@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "brudnopis/Rozdział 3/Projekt systemu.md",
+                "file": "brudnopis/Rozdział 5/Porównanie z modelem relacyjnym.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Projekt systemu"
+              "title": "Porównanie z modelem relacyjnym"
             }
           }
         ],
@@ -205,8 +205,10 @@
   },
   "active": "279f61757d48367e",
   "lastOpenFiles": [
-    "brudnopis/Rozdział 3/Projekt systemu.md.tmp.6728.5f27d418a004",
     "brudnopis/Rozdział 4/Implementacja.md",
+    "brudnopis/Rozdział 5/Porównanie z modelem relacyjnym.md",
+    "brudnopis/Rozdział 3/Projekt systemu.md",
+    "brudnopis/Rozdział 3/Projekt systemu.md.tmp.6728.5f27d418a004",
     "brudnopis/Podsumowanie i wnioski/Podsumowanie i wnioski.md",
     "brudnopis/Rodział 1/Podstawy teoretyczne.md",
     "brudnopis/Rozdział 2/Analiza wymagań.md",
@@ -214,9 +216,7 @@
     "brudnopis/Strona tytułowa/Strona tytułowa.md",
     "brudnopis/Streszczenie/Streszczenie.md",
     "brudnopis/Spis treści/Spis treści.md",
-    "brudnopis/Rozdział 6/Porównanie z modelem relacyjnym.md",
-    "brudnopis/Rozdział 3/Projekt systemu.md",
-    "brudnopis/Rozdział 5/Testy.md",
+    "brudnopis/Rozdział 6/Testy.md",
     "brudnopis/Podsumowanie i wnioski/Podsumowanie i wnioski.md.tmp.6728.499dd9823c35",
     "brudnopis/Rozdział 4/Implementacja.md.tmp.6728.643534ffa6e5",
     "brudnopis/Rozdział 3/Projekt systemu.md.tmp.6728.78a3bc4d4b72",
@@ -231,7 +231,6 @@
     "brudnopis/Rozdział 3/Projekt systemu.md.tmp.6728.5b12c5d3a250",
     "brudnopis/Rozdział 3/Projekt systemu.md.tmp.6728.92cb4621d343",
     "brudnopis/Rozdział 3/Projekt systemu.md.tmp.6728.846ea468cab0",
-    "brudnopis/Rozdział 3/Projekt systemu.md.tmp.6728.bbdfc4570e5d",
     "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(6).png",
     "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(5).png",
     "brudnopis/Rozdział 3/media_rozdzial3/Untitled graph(4).png",
