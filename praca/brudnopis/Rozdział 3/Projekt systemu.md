@@ -1,70 +1,29 @@
 4.1 Architektura systemu
 
-System składa się z następujących części:
-- klienta webowego w Vue,
-- warstwy API z backendem grafowym,
-- warstwy API z backendem relacyjnym (todo),
-- warstwy bazy danych,
-- warstwy konteneryzacji i wdrożenia,
-- dokumentacji.
+System składa się z trzech warstw: klienta webowego, interfejsu programistycznego aplikacji (API, ang. *Application Programming Interface*) oraz bazy danych. Warstwa API występuje w dwóch wymiennych wariantach: z backendem grafowym, korzystającym z bazy Neo4j, oraz z backendem relacyjnym. Wszystkie warstwy uruchamiane są w osobnych kontenerach, a schemat i dane początkowe bazy wczytuje jednorazowy proces inicjalizacji.
 
-*todo: diagram - przeglądarka → klient Vue (nginx) → API (FastAPI) → Neo4j, kontener `init`; kto z kim się komunikuje i jakim kontem*
-
-4.2 Struktura repozytorium
-
+```mermaid
+flowchart LR
+    P[Przeglądarka] -- HTTP --> K[Klient webowy]
+    P -- "żądania REST/JSON z tokenem" --> A[API]
+    A -- "konto API: odczyt i zapis danych" --> D[(Baza danych)]
+    I[Proces inicjalizacji] -- "konto administratora: schemat, import" --> D
 ```
-.
-├── app
-│   ├── graph_backend
-│   │   ├── auth
-│   │   └── routers
-│   └── schemas
-├── endpoint_schema
-├── frontend
-│   └── src
-│       ├── api
-│       ├── components
-│       │   └── catalogue
-│       ├── composables
-│       ├── layouts
-│       ├── router
-│       ├── stores
-│       ├── styles
-│       ├── utils
-│       └── views
-│           ├── admin
-│           ├── catalogue
-│           ├── shared
-│           ├── student
-│           └── teacher
-├── import
-│   ├── edges
-│   └── nodes
-├── queries
-├── docker-compose.yml
-├── Dockerfile
-├── Dockerfile.api
-├── init.sh
-├── requirements.txt
-└── .env.example
-```
+*Elementy systemu i komunikacja między nimi*
 
-Klient Vue jest w całości zawarty w katalogu `frontend/`. Jego zadaniem jest umożliwienie wygodnej komunikacji z API, a także wyświetlanie uwierzytelnionemu użytkownikowi jedynie tych zakładek, do których ma on dostęp.
+Klient webowy jest aplikacją jednostronicową (SPA, ang. *Single-Page Application*), która komunikuje się z systemem wyłącznie przez API. Po zalogowaniu przechowuje token otrzymany od API na czas trwania sesji przeglądarki i dołącza go do każdego żądania. Interfejs jest podzielony na zakładki odpowiadające modułom API: katalog, widok studenta, prowadzącego i administratora.
 
-W katalogu `app/` znajduje się backend, w tym warstwa API. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera - na ich podstawie API sprawdza poprawność danych wejściowych i formatuje dane wyjściowe. Obsługa żądania przebiega następująco: API odbiera żądanie na wybranym punkcie końcowym, weryfikuje token i uprawnienia użytkownika, otwiera sesję bazy danych, a następnie - jeśli wykorzystywany jest backend grafowy (katalog `graph_backend/`) - wykonuje kwerendę w języku Cypher, przekształca jej wynik do oczekiwanego kształtu i zwraca go klientowi. Zapytania wykonywane są bezpośrednio przez oficjalny, asynchroniczny driver Neo4j dla Pythona, bez warstwy mapowania obiektowo-grafowego (OGM, ang. *Object-Graph Mapping*). Oficjalna biblioteka Neo4j-OGM jest dostępna jedynie dla języka Java (https://neo4j.com/docs/ogm-manual/current/reference/), a dla Pythona istnieje rozwijana w ramach Neo4j Labs biblioteka neomodel [CYTOWANIE]. Zrezygnowano z niej, aby zachować pełną kontrolę nad treścią zapytań oraz aby porównanie z backendem relacyjnym, również korzystającym z surowego drivera, było miarodajne.
+Użytkownik widzi tylko te zakładki, na które pozwalają role zapisane w tokenie. Ukrywanie zakładek służy jednak wyłącznie wygodzie użytkownika i nie stanowi zabezpieczenia. O dostępie zawsze decyduje backend.
 
-*todo* W tym samym katalogu, w podkatalogu `relation_backend/`, znajdzie się implementacja relacyjna podobnego systemu. Będzie ona działać w ten sam sposób - poprzez surowy driver bazy danych zamiast mapowania obiektowo-relacyjnego (ORM, ang. *Object-Relational Mapping*). Oba backendy będą korzystać z tych samych modeli Pydantic, dzięki czemu wymiana backendu będzie dla klienta niezauważalna.
+API przyjmuje żądanie, sprawdza poprawność danych wejściowych oraz uprawnienia użytkownika, wykonuje zapytania do bazy danych i zwraca wynik w ustalonym kształcie.
 
-Ponieważ eksploracja bazy danych jest szczególnym celem tej pracy, poświęcono jej dużą część repozytorium. W katalogu `import/` znajdują się dane w formacie `.csv`, importowane przy inicjalizacji bazy danych - `nodes/` zawiera węzły, a `edges/` krawędzie. Na każdy typ węzła i na każdy typ krawędzi przypada osobny plik. Wyjątkiem jest etykieta `User` - dane logowania (adres e-mail i skrót hasła) są kolumnami w plikach studentów, prowadzących i administratorów, a etykieta nadawana jest przy imporcie tym osobom, które mają podany adres e-mail.
+Baza danych przechowuje wszystkie dane systemu i sama pilnuje ich struktury wedle zdefiniowanego schematu.
 
-W katalogu `queries/` znajdują się instrukcje w języku Cypher wykonywane przy inicjalizacji bazy danych przez skrypt `init.sh`:
-- `schema.cypher` - narzucenie kształtu węzłów i krawędzi oraz pozostałych ograniczeń,
-- `nodes.cypher` i `edges.cypher` - wczytanie plików `.csv` z węzłami i krawędziami,
-- `security.cypher` - utworzenie konta bazodanowego, którym łączy się API, z uprawnieniami ograniczonymi do odczytu i zapisu danych.
+4.2 Warstwa dostępu do danych
 
-Definicja typu grafu (ang. *graph type*) w `schema.cypher` jest zapisana w wersji Cypher 25 (`CYPHER 25 ALTER CURRENT GRAPH TYPE SET ...`), ponieważ ta funkcjonalność jest dostępna wyłącznie w tej wersji języka. Pozostałe kwerendy, zarówno importujące, jak i wykonywane przez API, korzystają z domyślnej wersji języka skonfigurowanej w bazie.
+Zgodnie z celem pracy (1.2) model danych zostanie odwzorowany również w postaci relacyjnej, a zapytania obu wariantów porównane pod względem liczby złączeń i czasu wykonania. Dlatego warstwę API zaprojektowano tak, aby baza danych była w niej wymienna. Backend grafowy i relacyjny udostępniają te same punkty końcowe i korzystają z tych samych modeli żądań i odpowiedzi. Klient nie wie, z którym backendem się komunikuje, a każda operacja ma w obu wariantach identyczny kontrakt, więc porównaniu podlega wyłącznie jej realizacja po stronie bazy danych.
 
-Dane dostępowe (hasła do bazy danych i klucz podpisujący tokeny) przechowywane są w pliku `.env`, który nie trafia do repozytorium. Wymagane zmienne opisano w pliku `.env.example`. Katalog `endpoint_schema/` zawiera dokumentację endpointów API: dozwolone role, kształt żądań i odpowiedzi oraz wykonywane zapytania bazodanowe.
+Backendy komunikują się z bazą bezpośrednio przez sterownik, wykonując ręcznie napisane zapytania: w języku Cypher dla Neo4j i w języku SQL dla bazy relacyjnej. Zrezygnowano z warstwy mapowania obiektowo-grafowego (OGM, ang. *Object-Graph Mapping*) i obiektowo-relacyjnego (ORM, ang. *Object-Relational Mapping*). Oficjalna biblioteka Neo4j-OGM jest dostępna jedynie dla języka Java [CYTOWANIE: Neo4j-OGM], a dla języka Python istnieje rozwijana w ramach Neo4j Labs biblioteka neomodel [CYTOWANIE: neomodel]. Warstwa mapowania sama generuje zapytania, więc porównanie dotyczyłoby nie modeli danych, lecz tego, jak dwie różne biblioteki tłumaczą te same operacje. Ręcznie pisane zapytania dają ponadto pełną kontrolę nad ich treścią, potrzebną w operacjach, które muszą być odporne na wyścigi (4.3.4).
 
 4.3 Model danych
 
@@ -303,8 +262,110 @@ Typ grafu nie wymusza natomiast kardynalności krawędzi - nic w bazie nie zabra
 
 4.4 Kontrola dostępu
 
-*todo: uwierzytelnianie (bcrypt, JWT z rolami), autoryzacja (rola przy endpoincie + relacje sprawdzane kwerendą - RBAC/ReBAC), konto bazodanowe o ograniczonych uprawnieniach*
+Kontrola dostępu polega na uwierzytelnianiu i autoryzacji: najpierw ustala się, kim jest użytkownik, potem czy może wykonać daną operację. Niezależnie od tego ogranicza się uprawnienia samego API wobec bazy danych.
+
+4.4.1 Uwierzytelnianie
+
+Użytkownik loguje się adresem e-mail i hasłem z etykiety User. Hasła są przechowywane jako skrót wyznaczony algorytmem bcrypt. Jest to funkcja celowo kosztowna obliczeniowo i z wbudowaną solą (ang. *salt*), dzięki czemu nawet wyciek bazy nie pozwala łatwo odtworzyć haseł, a dwóch użytkowników o tym samym haśle ma różne skróty. [CYTOWANIE: https://www.usenix.org/legacy/events/usenix99/provos/provos.pdf]
+
+Logowanie powiedzie się tylko wtedy, gdy istnieje użytkownik o podanym adresie, hasło zgadza się ze skrótem oraz konto nie jest dezaktywowane etykietą Inactive.
+
+Po poprawnym zalogowaniu API wydaje token JWT (ang. *JSON Web Token*) [CYTOWANIE: RFC 7519], podpisany kluczem znanym wyłącznie serwerowi. Token zawiera adres e-mail, identyfikator osoby (`idx`) oraz listę jej ról, a także czas wygaśnięcia. Klient dołącza go do każdego kolejnego żądania w nagłówku `Authorization`. Dzięki temu API jest bezstanowe: nie przechowuje sesji, a do ustalenia tożsamości i ról wystarczy sprawdzić podpis tokenu, bez dodatkowego zapytania do bazy przy każdym żądaniu.
+
+Wybrano JWT, ponieważ jednym z celów pracy jest porównanie wydajności backendu grafowego i relacyjnego. Sprawdzanie tożsamości w bazie przy każdym żądaniu dodawałoby do każdego pomiaru stały narzut, niezwiązany z właściwą operacją, który zaciemniałby różnice między backendami. Przy JWT każde żądanie wykonuje wyłącznie zapytania potrzebne do realizacji samej operacji.
+
+Ceną bezstanowości jest to, że zmiany ról i dezaktywacja konta zaczynają obowiązywać dopiero przy kolejnym logowaniu - wcześniej wydany token pozostaje ważny do wygaśnięcia.
+
+Gdyby ten narzut nie miał znaczenia, można by rozważyć rozwiązanie, w którym token JWT przechowuje jedynie identyfikator osoby i adres e-mail, a role i aktywność konta są sprawdzane na początku każdej kwerendy. Dzięki temu zmiany wchodziłyby w życie od razu. Odczyt etykiety z węzła jest tani [CYTOWANIE], a więc jest to również jak najbardziej poprawne rozwiązanie.
+
+W rzeczywistym wdrożeniu uczelnianym naturalne byłoby oddanie logowania uczelnianemu systemowi pojedynczego logowania (SSO, ang. *Single Sign-On*), co jednak wykracza poza zakres prototypu.
+
+*Chyba przyda sie tutaj jakis obrazek w tym akapicie*
+
+4.4.2 Autoryzacja
+
+Pierwszy etap autoryzacji to kontrola dostępu oparta na rolach (RBAC, ang. *Role-Based Access Control*) [CYTOWANIE]. Każdy punkt końcowy ma z góry określone role, które mogą go wywołać, np. wystawianie ocen jest dostępne dla prowadzących i administratorów, a zapis na grupę - dla studentów. Użytkownik bez wymaganej roli otrzymuje odmowę, zanim żądanie dotrze do bazy danych.
+
+Gdyby polegać jedynie na RBAC, to nie istniałby mechanizm zabraniający prowadzącemu ocenić cudzego studenta w cudzej grupie zajęciowej. Tak samo student mógłby zapisać się do grupy zajęciowej w cudzej turze zapisowej. Sam RBAC nie broni przed taki scenariuszami, ponieważ, wedle ustalonej konwencji, student woła punkty końcowe studenckie, a nauczyciel punkty końcowe nauczycielskie - z poziomu roli problemu nie ma.
+
+Dodatkowy mechanizm blokujący tego typu sytuacje nazywa się kontrolą dostępu opartą na relacjach (ReBAC, ang. *Relationship-Based Access Control*) [CYTOWANIE]. Uprawnienie wynika tu z powiązania między użytkownikiem a zasobem, a nie z samej roli. 
+
+Drugi etap autoryzacji polega więc na sprawdzeniu w bazie, czy odpowiednia ścieżka w grafie istnieje, np. czy od prowadzącego do grupy prowadzi krawędź TEACHES albo czy student jest połączony z grupą krawędzią REGISTERED_IN. Ponownie, w tej platformie krawędzie uprawniające do dostępu są tymi samymi krawędziami, które opisują domenę - nie trzeba utrzymywać osobnych list uprawnień, które mogłyby się rozjechać z danymi. Gdyby przypadkiem dodać prowadzącego do grupy, po czym usunąc powstałą krawędź TEACHES, wraz z nią znikłaby możliwość oceniania studentów w tej grupie przez tego nauczyciela.
+
+Operacje na własnych danych użytkownika, na przykład plan zajęć studenta czy lista jego zapisów, nie przyjmują identyfikatora osoby z treści (ang. *body*) zapytania. Zamiast tego, identyfikator jest brany z tokenu JWT. Dzięki temu student nie może podejrzeć danych innego studenta, podmieniając identyfikator w żądaniu. 
+
+Administrator ma dostęp do wszystkich operacji potrzebnych do zarządzania uczelnią i tworzenia wszystkich niezbędnych krawędzi i węzłów bez potrzeby pisania kwerend w Cypher. Może wykonywać operacje prowadzącego w imieniu dowolnego prowadzącego (np. poprawić ocenę), bez sprawdzania relacji. 
+
+  ```mermaid
+  flowchart LR
+      TA[Teacher A] -- TEACHES --> G[Group: Biometria L3]
+      S[Student] -- REGISTERED_IN --> G
+      TB[Teacher B]
+      TA -. może ocenić .-> S
+      TB -. odmowa .-x S
+  ```
+*Diagram ilustrujący działanie ReBAC w zasadach wystawiania ocen*
+
+4.4.3 Konto bazodanowe
+
+Kontrola dostępu po stronie API nie chroni przed błędami w samym API ani przed sytuacją, w której ktoś przejmie dane dostępowe, którymi API łączy się z bazą. Dlatego zgodnie z zasadą najmniejszych uprawnień (ang. *principle of least privilege*) [CYTOWANIE] API nie korzysta z konta administratora bazy, tylko z osobnego konta, utworzonego przy inicjalizacji bazy.
+
+Konto to może jedynie odczytywać i zapisywać dane: tworzyć, modyfikować i usuwać węzły, krawędzie i ich właściwości. Nie może natomiast zmieniać typu grafu, ograniczeń ani indeksów, zarządzać użytkownikami i rolami bazy ani administrować serwerem.
+
+Kontu odebrano również możliwość wczytywania danych z zewnątrz bazy. Domyślnie każdy użytkownik Neo4j może wykonać instrukcję `LOAD CSV`, która czyta pliki z katalogu importu na serwerze bazy, a także pobiera dane spod dowolnego adresu URL [CYTOWANIE: dokumentacja Neo4j, LOAD CSV]. API nigdy z niej nie korzysta, więc to uprawnienie służyłoby wyłącznie ewentualnemu atakującemu: po udanym wstrzyknięciu zapytania mógłby on odczytać pliki z serwera albo wysłać żądanie do innych usług w sieci wewnętrznej, w imieniu serwera bazy (ang. *Server-Side Request Forgery*, SSRF).
+
+Zmiany schematu i import danych wykonuje wyłącznie jednorazowy proces inicjalizacji, korzystający z konta administratora.
+
+```mermaid
+flowchart LR
+    K[Żądanie klienta] --> T{Token JWT<br/>ważny?}
+    T -- nie --> E401[401]
+    T -- tak --> R{Rola dozwolona<br/>dla punktu końcowego?}
+    R -- nie --> E403a[403]
+    R -- tak --> G{Wymagana ścieżka<br/>w grafie istnieje?<br/>np. TEACHES, REGISTERED_IN}
+    G -- nie --> E403b[odmowa]
+    G -- tak --> DB[(Neo4j<br/>konto API: tylko odczyt<br/>i zapis danych)]
+    subgraph API
+        T
+        R
+        G
+    end
+```
+*Warstwy kontroli dostępu*
 
 4.5 Interfejs API
 
-*todo: podział na moduły (public, catalogue, student, teacher, admin), konwencje (błędy w polu err, 422 przy walidacji)*
+Klient komunikuje się z backendem przez interfejs REST (ang. *Representational State Transfer*) [CYTOWANIE], wymieniając dane w formacie JSON (ang. *JavaScript Object Notation*) przez protokół HTTP (ang. *Hypertext Transfer Protocol*). Podział interfejsu na moduły oraz sposób zgłaszania odmów wynikają z macierzy uprawnień opisanej w podrozdziale 3.4.
+
+4.5.1 Podział na moduły
+
+Punkty końcowe podzielono na moduły odpowiadające tabelom macierzy uprawnień: funkcje wspólne trafiły do modułu katalogu, funkcje studenta i prowadzącego do osobnych modułów, a funkcje administracyjne do modułu administratora. Dzięki temu wymaganą rolę określa się dla całego modułu, a przy pojedynczych punktach końcowych zapisuje się jedynie wyjątki, np. wystawianie opinii przez administratora w imieniu studenta.
+
+| Moduł | Dostęp | Przeznaczenie |
+|---|---|---|
+| public | wszyscy | logowanie |
+| catalogue | zalogowani | przeglądanie oferty dydaktycznej: przedmiotów, planów studiów, grup, prowadzących i opinii |
+| student | Student (opinie także Admin) | semestry, zapisy na zajęcia, oceny, wystawianie opinii |
+| teacher | Teacher, Admin | prowadzone grupy, zapisani studenci, wystawianie ocen |
+| admin | Admin | tworzenie i modyfikacja danych: osób, kont, ról, oferty dydaktycznej, sal, cykli i zapisów; zapis studenta do grupy z pominięciem tur |
+*Moduły interfejsu API*
+
+Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: wymaga zalogowania, ponieważ zawiera dane osobowe prowadzących i opinie. Opinie zwracane są w nim bez informacji o autorze, ponieważ zgodnie z wymaganiami są anonimowe.
+
+4.5.2 Konwencje
+
+Wszystkie żądania i odpowiedzi są opisane modelami danych, wspólnymi dla obu backendów (4.2). Na ich podstawie API sprawdza poprawność danych wejściowych, zanim wykona jakiekolwiek zapytanie do bazy: brakujące pola, niewłaściwe typy czy wartości spoza dozwolonego zakresu, np. ocena spoza skali 2,0–5,0, są odrzucane z kodem HTTP 422 (ang. *Unprocessable Content*) [CYTOWANIE: RFC 9110], wraz z informacją, które pole jest niepoprawne. Walidacja dotyczy również odpowiedzi - API nie zwróci klientowi danych o innym kształcie, niż zadeklarował.
+
+| Kod | Znaczenie |
+|---|---|
+| 200 | żądanie obsłużone; ewentualna odmowa wynikająca z reguł domeny w polu `err` |
+| 400 | nieoczekiwany błąd wykonania zapytania |
+| 401 | brak tokenu albo token nieważny lub wygasły |
+| 403 | brak wymaganej roli lub relacji z zasobem (4.4.2) |
+| 404 | żądany zasób nie istnieje |
+| 422 | dane wejściowe niezgodne z modelem |
+*Kody HTTP zwracane przez API*
+
+Odmowy wynikające z reguł domeny, np. brak wolnych miejsc w grupie lub ponowna opinia o tym samym prowadzącym, nie są błędami - zwracane są z kodem 200, a ich przyczynę podaje pole `err` odpowiedzi. Kod 403 oznacza natomiast brak uprawnienia. Wyjątkiem są zapis na grupę i wypis z niej: uprawnienie sprawdzane jest tam w tym samym zapytaniu co zapis (4.3.4), dlatego jego brak również zgłaszany jest w polu `err`.
+
+Punkty końcowe bez parametrów używają metody GET, a pozostałe - metody POST z parametrami w treści żądania. Dzięki temu wszystkie parametry walidowane są w ten sam sposób, a identyfikatory nie trafiają do adresów URL.

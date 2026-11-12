@@ -517,7 +517,7 @@ RETURN
 }
 ```
 
-Fails with `"Forbidden"` if the student is not registered in the group, `"Teacher does not teach this group"` if `teacher_idx` is invalid for the group, or `"Opinion already exists"` if the student already submitted for that group and teacher.
+Returns HTTP 403 (`"Forbidden"`) if the student is not registered in the group, or HTTP 403 (`"Teacher does not teach this group"`) if `teacher_idx` is invalid for the group. Returns `err="Opinion already exists"` if the student already submitted for that group and teacher.
 
 **Query**
 

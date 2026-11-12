@@ -443,21 +443,9 @@ async def create_opinion(
         teacher_idx=body.teacher_idx,
     )
     if check is None or not check["registered"]:
-        return OpinionCreateResponse(
-            grade=body.grade,
-            content=body.content,
-            group_id=body.group_id,
-            teacher_idx=body.teacher_idx,
-            err="Forbidden",
-        )
+        raise HTTPException(status_code=403, detail="Forbidden")
     if not check["teaches"]:
-        return OpinionCreateResponse(
-            grade=body.grade,
-            content=body.content,
-            group_id=body.group_id,
-            teacher_idx=body.teacher_idx,
-            err="Teacher does not teach this group",
-        )
+        raise HTTPException(status_code=403, detail="Teacher does not teach this group")
     if check["duplicate"]:
         return OpinionCreateResponse(
             grade=body.grade,
