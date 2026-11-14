@@ -1,14 +1,19 @@
-FROM neo4j:2026.07.1-enterprise
+FROM python:3.14-slim
 
-ENV NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
-# No plugins: APOC was unused, and its file import/export would let queries
-# read and write files on the server.
-# Only the import directory is readable by LOAD CSV.
-ENV NEO4J_server_directories_import=/import
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-VOLUME ["/data", "/logs", "/import", "/plugins", "/conf"]
+WORKDIR /app
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD wget -qO- http://localhost:7474 || exit 1
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["neo4j"]
+COPY app ./app
+
+# Run without root privileges.
+RUN useradd --system --no-create-home --uid 10001 api
+USER api
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
