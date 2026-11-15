@@ -527,7 +527,7 @@ Plik `schema.cypher` jest ładowany do bazy danych jako pierwszy, poleceniem `cy
 
 Dla każdego przewidzianego typu węzła powstało w tym pliku odpowiadające mu ograniczenie. Jako przykład posłuży definicja węzła grupy (Group):
 
-```
+```cypher
 	(g:Group => {
 		id :: STRING,
 		weekday :: INTEGER NOT NULL,
@@ -561,7 +561,7 @@ Innym możliwym rozwiązaniem byłoby utworzenie pseudo-typu wyliczeniowego z w�
 
 Uznano, że dzień tygodnia jest zbyt prostą informacją, by wydzielać go do osobnego węzła. Inaczej potraktowano sale, w których odbywają się zajęcia – są one osobnymi węzłami (Room), połączonymi z grupą krawędzią `IN_ROOM`:
 
-```
+```cypher
 	(g)-[:IN_ROOM => {}]->(r),
 ```
 
@@ -573,7 +573,7 @@ Właściwość `pnp`, określająca parzystość tygodni, w których odbywają s
 
 Poza kształtem samego węzła Group typ grafu określa również, jakie krawędzie mogą łączyć grupę z innymi węzłami: `IN_ROOM` (grupa -> sala), `OF_TYPE` (grupa -> typ grupy), `ABOUT` (opinia -> grupa), `REGISTERED_IN` (student -> grupa), `OPENS` (rejestracja -> grupa) oraz `TEACHES` (prowadzący -> grupa). Krawędź `REGISTERED_IN` przechowuje dodatkowo dwie właściwości: `registered_at` typu `ZONED DATETIME` oraz `grade` typu `FLOAT`. W przypadku zapisu istotna jest zarówno data, jak i godzina, a strefa czasowa pozwala jednoznacznie określić ten moment. Ocena jest liczbą zmiennoprzecinkową, ponieważ w skali ocen występują wartości połówkowe (np. 3,5 i 4,5). Właściwość `grade` nie jest oznaczona jako `NOT NULL`, ponieważ student zostaje zapisany do grupy, zanim otrzyma ocenę – do tego czasu wartość pozostaje pusta.
 
-```
+```cypher
 	(st)-[:REGISTERED_IN => {
 		registered_at :: ZONED DATETIME NOT NULL,
 		grade :: FLOAT
@@ -589,7 +589,7 @@ Graph type, poza typem danych, określa również, które właściwości są wym
 
 Ograniczenie typu `KEY` jest równoważne połączeniu ograniczenia unikalności (`IS UNIQUE`) z ograniczeniem istnienia (`IS NOT NULL`) na tym samym zbiorze właściwości [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/schema/constraints/]:
 
-```
+```cypher
 CREATE CONSTRAINT group_id_exists FOR (g:Group) REQUIRE g.id IS NOT NULL;
 CREATE CONSTRAINT group_id_unique FOR (g:Group) REQUIRE g.id IS UNIQUE;
 ```
@@ -600,11 +600,11 @@ Wszystko przebiegłoby zgodnie z założeniami projektowymi, gdyby nie pewne ogr
 
 Surowy komunikat błędu zwracany przez Neo4j (wersja 2026.07.1 Enterprise) przy próbie zdefiniowania węzła bez właściwości:
 
-```
+```cypher
 CYPHER 25 ALTER CURRENT GRAPH TYPE SET { (si:SubjectInstance => {}) }
 ```
 
-```
+```shell
 22NC2: data exception - node element type has no effect. The node element type `SubjectInstance` must contain one or more implied labels, or at least one property type.
   42001: syntax error or access rule violation - invalid syntax
 ```
@@ -613,7 +613,7 @@ Pierwszym obejściem, jakie się nasuwa, jest nadanie węzłowi sztucznego ident
 
 Zamiast tego SubjectInstance nie otrzymała typu węzła wcale. Etykieta pojawia się w typie grafu wyłącznie jako początek krawędzi, które z niej wychodzą:
 
-```
+```cypher
 	(:SubjectInstance)-[:INSTANCE_OF => {}]->(su),
 	(:SubjectInstance)-[:OFFERED_IN => {}]->(ac),
 	(:SubjectInstance)-[:HAS_TYPE => {}]->(gt),
@@ -623,7 +623,7 @@ Pozostałe węzły i krawędzie opisujące model uczelni nie napotkały podobneg
 
 Jak wspomniano wcześniej, wykorzystano etykiety implikowane i wieloetykietowość, żeby każda osoba pracująca na uczelniioraz student musieli być człowiekiem.
 
-```
+```cypher
 	(t:Teacher => :Person {
 		degree :: STRING NOT NULL,
 		working_since :: DATE NOT NULL
@@ -649,7 +649,7 @@ Jak widać, w etykietach Teacher, Student, User i Inactive są przechowywane jed
 
 Problem pojawia się dopiero w samej definicji etykiety Person. Wygodne i oczywiste byłoby zdefiniowanie jej jako na przykład:
 
-```
+```cypher
  (p:Person => {
 	 idx :: STRING,
 	 name :: STRING NOT NULL,
@@ -661,7 +661,7 @@ Problem pojawia się dopiero w samej definicji etykiety Person. Wygodne i oczywi
 
 Okazuje się, że próba zdefiniowania etykiet w ten sposób powoduje błąd 22NC4 [CYTOWANIE: https://neo4j.com/docs/status-codes/current/errors/gql-errors/22NC4/], dokładnie: 
 
-```
+```shell
   22NC4: data exception - a label cannot be both identifying and implied. The label(s) `Person` are defined as both identifying and implied. (line 
   2, column 20 (offset: 60))                                                       "    (t:Teacher => :Person {"                                                                                                                
                       ^                                                              42001: syntax error or access rule violation - invalid syntax
@@ -671,7 +671,7 @@ Jeśli w poleceniu graph type etykieta jest w ogóle zdefiniowana, to staje się
 
 Sposobem na ominięcie tego mechanizmu proponowanym przez Neo4j w opisie tego błędu jest zastąpienie definicji z graph type zwykłymi instrukcjami CONSTRAINT. Z racji tego, że wspólna etykieta, pseudo-klasa bazowa była potrzebna, etykieta Person jest zdefiniowana w postaci listy ograniczeń.
 
-```
+```cypher
 	CONSTRAINT person_idx FOR (pe:Person) REQUIRE pe.idx IS KEY,
 	CONSTRAINT person_identity FOR (pe:Person) REQUIRE (pe.name, pe.surname, pe.phone) IS UNIQUE,
 	CONSTRAINT person_idx_type FOR (pe:Person) REQUIRE pe.idx IS :: STRING,
@@ -685,6 +685,99 @@ Sposobem na ominięcie tego mechanizmu proponowanym przez Neo4j w opisie tego b�
 
 ```
 
+5.3.2 Import węzłów
+
+Po zdefiniowaniu akceptowanych typów danych można zaimportować same dane. Plik `nodes.cypher` zawiera instrukcje Cypher pozwalające odczytać pliki .csv i na ich podstawie utworzyć węzły.
+
+Import węzłów opisujących uczelnię jest bardzo prosty i zostanie omówiony na przykładzie grupy zajęciowej:
+
+```cypher
+LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS row
+MERGE (g:Group {id: row.id})
+SET g.weekday = toInteger(row.weekday),
+    g.number = toInteger(row.number),
+    g.pnp = row.pnp,
+    g.capacity = toInteger(row.capacity),
+    g.start_time = time(row.start_time),
+    g.end_time = time(row.end_time);
+```
+
+Zaczyna się od instrukcji `LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS row`. Odczytuje ona plik wiersz po wierszu, a każdy wiersz udostępnia jako zmienną `row`. Zmienna ta jest mapą, w której kluczami są nazwy kolumn z nagłówka, a wartościami – zawartość odpowiadających im komórek w postaci tekstu. Pozostała część zapytania wykonywana jest osobno dla każdego wiersza.
+
+Zawartość `groups.csv` zaczyna się od:
+
+```csv
+id,weekday,number,pnp,capacity,start_time,end_time
+131f00c2-a504-550e-8117-167bd6218535,3,1,NP,120,13:15:00+02:00,15:00:00+02:00
+74e99473-12fb-5919-9992-db58d514944b,3,1,P,120,13:15:00+02:00,15:00:00+02:00
+f1421862-5912-57ee-a1d6-cb357169c3fc,1,1,ALL,120,15:15:00+02:00,16:55:00+02:00
+3e1d2221-1124-533d-8e5b-cd97e997453d,4,1,ALL,16,17:05:00+02:00,19:40:00+02:00
+```
+
+Plik zawiera więc wszystkie nazwane kolumny konieczne do utworzenia grupy zajęciowej.
+
+Instrukcja `MERGE (g:Group {id: row.id})` szuka węzła z etykietą Group, którego właściwość `id` jest równa wartości kolumny `id` w bieżącym wierszu. Jeśli taki węzeł już istnieje, zostaje przypisany do zmiennej `g`, a jeśli nie, instrukcja go tworzy i dopiero wtedy przypisuje.
+
+Następnie blok instrukcji `SET` ustawia pozostałe właściwości węzła na wartości z pliku. Dzięki temu, jeśli dane w plikach .csv ulegną zmianie, węzły zostaną zaktualizowane przy ponownej inicjalizacji. Zawartość pliku jest odczytywana jako tekst, zatem zapisanie wartości jako czasu lub liczby całkowitej wymaga wywołania wbudowanych funkcji, takich jak `time()` bądź `toInteger()`.
+
+Na koniec instrukcja zamyka się średnikiem. Każde polecenie zakończone średnikiem `cypher-shell` wykonuje w osobnej transakcji, zatem jeśli w którymś z nich wystąpi błąd, zmiany wprowadzone przez wcześniejsze polecenia pozostaną zapisane. Nie stanowi to problemu, ponieważ dzięki użyciu `MERGE` zamiast `CREATE` ponowne uruchomienie importu po usunięciu przyczyny błędu nie utworzy duplikatów.
+
+Gdyby import miał się wykonać w całości albo wcale, można objąć wszystkie polecenia jedną jawną transakcją, umieszczając w pliku przed nimi instrukcję `:begin`, a po nich `:commit` [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/cypher-shell/]. Błąd w dowolnym poleceniu wycofałby wtedy również zmiany wprowadzone przez polecenia wcześniejsze. W projekcie z tej możliwości nie skorzystano, ponieważ przy imporcie opartym na `MERGE` częściowo wykonany import nie pozostawia bazy w stanie, którego nie dałoby się naprawić ponownym uruchomieniem skryptu.
+
+Innym sposobem na osiągnięcie tego samego efektu jest usunięcie średników. Nie jest to jednak sposób dobry. Wszystkie polecenia stałyby się wtedy jednym zapytaniem, w którym kolejne `LOAD CSV` wykonuje się osobno dla każdego wiersza poprzedniego pliku – dla 3 kierunków i 11 planów studiów zapytanie przetwarza 33 wiersze zamiast 14. Ponowne użycie nazwy `row` nie powoduje przy tym jawnego błędu, ale tworzy zachowanie nieoczeniwane. Zmienna nadal wskazuje na wiersz pierwszego pliku. W efekcie poniższe zapytanie próbuje utworzyć plan studiów z identyfikatorem kierunku i bez roku naboru:
+
+```cypher
+LOAD CSV WITH HEADERS FROM "file:///nodes/programmes.csv" AS row
+MERGE (p:Programme {id: row.id})
+SET p.name = row.name
+
+LOAD CSV WITH HEADERS FROM "file:///nodes/curriculums.csv" AS row
+MERGE (c:Curriculum {id: row.id})
+SET c.intake_year = row.intake_year;
+```
+
+Zatrzymuje je dopiero ograniczenie typu grafu, wymagające istnienia właściwości `intake_year`:
+
+```
+22N77: data exception - property presence verification failed. NODE (563) with label 'Curriculum' must have the following properties: `intake_year`.
+```
+
+Bez zdefiniowanego typu grafu zapytanie zakończyłoby się powodzeniem i zapisało w bazie błędne węzły. Rozwiązaniem mogłoby być nazywanie każdej zmiennej odpowiadającej plikowi .csv w inny sposób, czyli jeden `row` importujący grupę nazywałby się `g_row`, dla cyklu akademickiego `ac_row` i tak dalej, zachowując unikatowość dla każdego pliku. Chociaż to działa, to jest bardzo niewygodne i nieeleganckie. 
+
+W podobny sposób przebiega import większości pozostałych węzłów. Wyjątek stanowią węzły dotyczące nauczycieli i studentów. Wynika to z tego, że każda z tych osób na pewno jest osobą (Person), ale jednocześnie może być użytkownikiem (User). W plikach .csv przechowywane są wszystkie informacje na temat ludzi, wraz z tymi opcjonalnymi. 
+
+```cypher
+LOAD CSV WITH HEADERS FROM "file:///nodes/students.csv" AS row
+MERGE (st:Student:Person {idx: row.idx})
+SET st.name = row.name, st.surname = row.surname,
+    st.phone = row.phone, st.photo = nullif(row.photo, ""),
+    st.joined = datetime(row.joined)
+CALL (row, st) {
+    WHEN row.email <> "" THEN {
+        SET st:User, st.email = row.email, st.passwd_hash = row.passwd_hash
+    }
+};
+```
+
+Początek instrukcji jest podobny, jak wcześniej - do zmiennej `row` są po kolei ładowane wszystkie wiersze z nagłówkami określającymi klucze w mapie. 
+
+```csv
+idx,name,surname,phone,photo,joined,email,passwd_hash
+285903,Maja,Król,607216739,,2025-10-01T00:00:00+01:00,285903@student.pwr.edu.pl,$2bHIDDEN
+285904,Filip,Wieczorek,610000007,285904.jpg,2025-10-01T00:00:00+01:00,,
+283501,Aleksandra,Jabłońska,605126225,,2024-10-01T00:00:00+01:00,283501@student.pwr.edu.pl,$2HIDDEN
+```
+
+W przykładowym fragmencie pliku widać, że nie każdy student ma zdjęcie, a przede wszystkim nie każdy student ma adres e-mail i hash hasła. Bez danych do logowania nie da się utworzyć etykiety User. 
+
+Podobnie jak wcześniej, instrukcja `MERGE` szuka węzła Student, jednocześnie Person, o wartości `idx` równej tej z `row`.  Jeśli taki istnieje, to przypisuje go do `st`. Jeśli nie, to go tworzy z tymi dwoma etykietami i wtedy przypisuje. Wymagane właściwości, a także opcjonalna właściwość `photo`, są ustawiane w instrukcji `SET`.
+
+Na uwagę zasługuje podzapytanie `CALL (row, st) { ... }`, któremu przekazywane są zmienne `row` i `st`. Wewnątrz niego znajduje się zapytanie warunkowe `WHEN ... THEN`, dostępne w wersji Cypher 25 [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/queries/composed-queries/conditional-queries/]. Sprawdza ono, czy e-mail jest ustawiony, a jeśli jest, to przypisuje Studentowi etykietę User, wraz z którą obowiązkowo ustawia właściwości `email` i `passwd_hash`. Gdy warunek nie jest spełniony, to nie dzieje się nic - Student pozostaje jedynie Studentem bez Usera.
+
+Bardzo podobny wzorzec jest wykorzystywany w imporcie nauczycieli (Teacher). Podzapytanie do ustawiania etykiety User wygląda tak samo, jedynie różni się nazwą zmiennej przekazywanej do pod-kwerendy - zamiast `CALL (row, st)` widnieje `CALL (row, t)`, co oczywiście wynika z tego, że modyfikowany jest nauczyciel, nie student.
+
+5.3.3 Import krawędzi
+Mając węzły należy je ze sobą połączyć. Służą ku temu krawędzie, również przechowywane w pliku .csv. 
 
 
 5.4 Dokumentacja

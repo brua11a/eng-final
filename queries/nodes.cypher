@@ -3,8 +3,11 @@ MERGE (t:Teacher:Person {idx: row.idx})
 SET t.name = row.name, t.surname = row.surname,
     t.phone = row.phone, t.degree = row.degree,
     t.photo = nullif(row.photo, ""), t.working_since = date(row.working_since)
-FOREACH (_ IN CASE WHEN row.email <> "" THEN [1] ELSE [] END |
-    SET t:User, t.email = row.email, t.passwd_hash = row.passwd_hash);
+CALL (row, t) {
+    WHEN row.email <> "" THEN {
+        SET t:User, t.email = row.email, t.passwd_hash = row.passwd_hash
+    }
+};
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/admins.csv" AS row
 MERGE (a:User:Person:Admin {idx: row.idx})
@@ -16,8 +19,11 @@ MERGE (st:Student:Person {idx: row.idx})
 SET st.name = row.name, st.surname = row.surname,
     st.phone = row.phone, st.photo = nullif(row.photo, ""),
     st.joined = datetime(row.joined)
-FOREACH (_ IN CASE WHEN row.email <> "" THEN [1] ELSE [] END |
-    SET st:User, st.email = row.email, st.passwd_hash = row.passwd_hash);
+CALL (row, st) {
+    WHEN row.email <> "" THEN {
+        SET st:User, st.email = row.email, st.passwd_hash = row.passwd_hash
+    }
+};
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/programmes.csv" AS row
 MERGE (p:Programme {id: row.id})
@@ -43,11 +49,6 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/academic_cycles.csv" AS row
 MERGE (ac:AcademicCycle {id: row.id})
 SET ac.year = row.year, ac.season = row.season,
     ac.start_date = date(row.start_date), ac.end_date = date(row.end_date);
-
-LOAD CSV WITH HEADERS FROM "file:///nodes/subject_instances.csv" AS row
-MATCH (su:Subject {code: row.subject_code})
-MATCH (ac:AcademicCycle {id: row.cycle_id})
-MERGE (su)<-[:INSTANCE_OF]-(:SubjectInstance)-[:OFFERED_IN]->(ac);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/rooms.csv" AS row
 MERGE (r:Room {id: row.id})
