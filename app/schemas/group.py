@@ -1,6 +1,6 @@
 from datetime import date, time
-from typing import List, Optional
-from pydantic import BaseModel
+from typing import List, Literal, Optional
+from pydantic import BaseModel, Field
 
 from .generic import TeacherNameRef
 
@@ -22,10 +22,12 @@ class GroupTypeCreateResponse(BaseModel):
 
 
 class GroupCreateRequest(BaseModel):
-    weekday: int
+    # ISO 8601: 1 = poniedziałek, ..., 7 = niedziela (zgodnie z date.dayOfWeek w Cypher)
+    weekday: int = Field(ge=1, le=7)
     g_type: str
     number: int
-    pnp: str
+    # P = parzyste tygodnie, NP = nieparzyste, ALL = co tydzień
+    pnp: Literal["P", "NP", "ALL"]
     capacity: int
     start_time: time
     end_time: time

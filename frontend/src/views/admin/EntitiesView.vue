@@ -286,10 +286,16 @@ const termSubject = ref({ term_id: '', subject_code: '' })
           )
         "
       >
-        <label>Weekday <input v-model="group.weekday" type="number" required /></label>
+        <label>Weekday <input v-model="group.weekday" type="number" min="1" max="7" required /></label>
         <label>Group type <input v-model="group.g_type" required /></label>
         <label>Number <input v-model="group.number" type="number" required /></label>
-        <label>P/NP/ALL <input v-model="group.pnp" required /></label>
+        <label>P/NP/ALL
+          <select v-model="group.pnp" required>
+            <option value="P">P</option>
+            <option value="NP">NP</option>
+            <option value="ALL">ALL</option>
+          </select>
+        </label>
         <label>Capacity <input v-model="group.capacity" type="number" required /></label>
         <label>Start <input v-model="group.start_time" required /></label>
         <label>End <input v-model="group.end_time" required /></label>

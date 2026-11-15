@@ -478,46 +478,40 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 │   ├── graph_backend
 │   │   ├── auth
 │   │   └── routers
-│   └── schemas
+│   ├── schemas
+│   └── database.py
+├── certificates
+│   ├── app
+│   ├── bolt
+│   └── https
 ├── endpoint_schema
 ├── frontend
+│   ├── Dockerfile
+│   ├── nginx.conf
 │   └── src
-│       ├── api
-│       ├── components
-│       │   └── catalogue
-│       ├── composables
-│       ├── layouts
-│       ├── router
-│       ├── stores
-│       ├── styles
-│       ├── utils
-│       └── views
-│           ├── admin
-│           ├── catalogue
-│           ├── shared
-│           ├── student
-│           └── teacher
 ├── import
 │   ├── edges
 │   └── nodes
 ├── queries
+├── .env.example
+├── certs.sh
 ├── docker-compose.yml
 ├── Dockerfile
-├── Dockerfile.api
 ├── init.sh
-├── requirements.txt
-└── .env.example
+└── requirements.txt
 ```
 
-Klient Vue jest w całości zawarty w katalogu `frontend/`.
+Klient Vue jest w całości zawarty w katalogu `frontend/`, wraz z plikiem `Dockerfile` budującym jego obraz i konfiguracją serwera nginx (`nginx.conf`), który go serwuje.
 
-W katalogu `app/` znajduje się backend, w tym warstwa API. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, a w podkatalogu `graph_backend/` – backend grafowy.
+W katalogu `app/` znajduje się backend, w tym warstwa API. Plik `database.py` tworzy połączenie z bazą Neo4j za pomocą sterownika. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, a w podkatalogu `graph_backend/` – backend grafowy. Punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, a zapytania do bazy danych w pozostałych modułach.
 
 *todo* W tym samym katalogu, w podkatalogu `relation_backend/`, znajdzie się implementacja relacyjna podobnego systemu. Będzie ona działać w ten sam sposób – poprzez sterownik bazy danych zamiast mapowania obiektowo-relacyjnego. Oba backendy będą korzystać z tych samych modeli Pydantic.
 
 Ponieważ eksploracja bazy danych jest szczególnym celem tej pracy, poświęcono jej dużą część repozytorium. Katalog `import/` zawiera dane początkowe, a katalog `queries/` – instrukcje w języku Cypher wykonywane przy inicjalizacji bazy danych przez skrypt `init.sh` (5.3). Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API (5.4).
 
-Dane dostępowe (hasła do bazy danych i klucz podpisujący tokeny) przechowywane są w pliku `.env`, który nie trafia do repozytorium. Wymagane zmienne opisano w pliku `.env.example`.
+Katalog `certificates/` jest tworzony przez skrypt `certs.sh` (5.1.1). Zawiera certyfikaty TLS dla API (`app/`) oraz dla połączeń z bazą danych przez protokół Bolt (`bolt/`) i HTTPS (`https/`).
+
+Dane dostępowe (hasła do bazy danych i klucz podpisujący tokeny) przechowywane są w pliku `.env`.Wymagane zmienne opisano w pliku `.env.example`.
 
 5.3 Inicjalizacja i schemat bazy danych
 
@@ -526,6 +520,106 @@ W katalogu `import/` znajdują się dane w formacie CSV (ang. *Comma-Separated V
 Skrypt `init.sh` wykonuje kolejno instrukcje z katalogu `queries/`: `schema.cypher` narzuca kształt węzłów i krawędzi oraz pozostałe ograniczenia, `nodes.cypher` i `edges.cypher` wczytują pliki CSV z węzłami i krawędziami, a `security.cypher` tworzy konto bazodanowe, którym łączy się API (4.4.3).
 
 Definicja typu grafu w `schema.cypher` jest zapisana w wersji Cypher 25 (`CYPHER 25 ALTER CURRENT GRAPH TYPE SET ...`), ponieważ ta funkcja jest dostępna wyłącznie w tej wersji języka. Pozostałe zapytania, zarówno importujące, jak i wykonywane przez API, korzystają z domyślnej wersji języka skonfigurowanej w bazie.
+
+5.3.1 Schema
+
+Plik `schema.cypher` jest ładowany do bazy danych jako pierwszy, poleceniem `cypher-shell` opisanym w 5.1.4. Definiuje on typ grafu (ang. *graph type*), czyli opis dopuszczalnego kształtu węzłów i krawędzi. Typ grafu pozwala określić typy danych właściwości, wymagać ich istnienia oraz narzucić inne ograniczenia, takie jak klucze i unikalność. Funkcja ta jest dostępna wyłącznie w wersji Enterprise Neo4j, co było jednym z powodów wyboru obrazu `neo4j:2026.07.1-enterprise` (5.1.3).
+
+Dla każdego przewidzianego typu węzła powstało w tym pliku odpowiadające mu ograniczenie. Jako przykład posłuży definicja węzła grupy (Group):
+
+```
+	(g:Group => {
+		id :: STRING,
+		weekday :: INTEGER NOT NULL,
+		number :: INTEGER NOT NULL,
+		pnp :: STRING NOT NULL,
+		capacity :: INTEGER NOT NULL,
+		start_time :: ZONED TIME NOT NULL,
+		end_time :: ZONED TIME NOT NULL
+	}) REQUIRE g.id IS KEY,
+```
+
+Zgodnie z projektem systemu węzeł grupy przechowuje identyfikator, dzień tygodnia, numer grupy, parzystość tygodni, w których odbywają się zajęcia, pojemność grupy oraz godziny rozpoczęcia i zakończenia zajęć.
+
+Identyfikator (`id`) jest typu `STRING`, nie bardziej intuicyjnego `INTEGER`, ponieważ Neo4j nie obsługuje autoinkrementacji. Identyfikatory liczbowe wymagałyby osobnego, globalnego mechanizmu ich nadawania, z którego korzystałyby wszystkie zapytania tworzące nowe węzły. Alternatywą byłoby wyszukanie w grafie największego istniejącego identyfikatora i zwiększenie go o 1, lecz takie rozwiązanie jest podatne na wyścigi – dwie równoległe transakcje mogą odczytać tę samą wartość i nadać ten sam identyfikator. O wbudowaną autoinkrementację użytkownicy Neo4j proszą co najmniej od 2013 roku [CYTOWANIE: https://gist.github.com/tekiegirl/8012859].
+
+Do tego celu nie nadaje się również wewnętrzny identyfikator elementu, zwracany przez funkcję `elementId()`. Dokumentacja Neo4j zastrzega, że poza pojedynczą transakcją nie ma żadnych gwarancji co do powiązania identyfikatorów z elementami, a identyfikatory usuniętych węzłów i krawędzi są ponownie wykorzystywane [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]:
+
+> *Neo4j reuses its internal IDs when nodes and relationships are deleted. Applications relying on internal Neo4j IDs are, as a result, brittle and can be inaccurate. It is therefore recommended to use application-generated IDs.*
+
+(tłum.: Neo4j ponownie wykorzystuje wewnętrzne identyfikatory po usunięciu węzłów i krawędzi. W związku z tym aplikacje polegające na wewnętrznych identyfikatorach Neo4j są kruche i mogą działać niepoprawnie. Dlatego zaleca się stosowanie identyfikatorów generowanych przez aplikację.)
+
+Problemy te rozwiązuje zastąpienie identyfikatorów liczbowych identyfikatorami UUID (ang. *Universally Unique Identifier*). Wygenerowanie UUID nie wymaga przechowywania stanu ani znajomości identyfikatorów istniejących już w bazie. Cypher udostępnia do tego funkcję `randomUUID()`, która według dokumentacji zwraca „128-bitową wartość z silnymi gwarancjami unikalności” (ang. *a 128-bit value with strong guarantees of uniqueness*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]. W tym projekcie UUID jest identyfikatorem prawie wszystkich typów węzłów. Podobne stanowisko pojawia się na forum społeczności Neo4j, gdzie jeden z użytkowników, odradzając liczbową autoinkrementację, pisze [CYTOWANIE: https://community.neo4j.com/t/how-to-auto-increment-to-get-unique-value-for-a-new-nodes-field/12815/7]:
+
+> *Database engines must prioritize performance and stability first, flexibility second, and convenience third. Your solution puts convenience first.*
+
+(tłum.: Silniki baz danych muszą stawiać na pierwszym miejscu wydajność i stabilność, na drugim elastyczność, a dopiero na trzecim wygodę. Twoje rozwiązanie stawia wygodę na pierwszym miejscu.)
+
+Właściwości `weekday`, `number` i `capacity` są liczbami całkowitymi. W przypadku `number` i `capacity` nie budzi to wątpliwości, natomiast `weekday` naturalniej byłoby zapisać jako typ wyliczeniowy (ang. *enum*), dostępny w większości współczesnych języków programowania, a także w relacyjnych bazach danych, np. PostgreSQL [CYTOWANIE: https://www.postgresql.org/docs/current/datatype-enum.html]. Neo4j nie obsługuje jednak typów wyliczeniowych i nie pozwala ograniczyć zbioru dopuszczalnych wartości właściwości z poziomu bazy danych, dlatego poprawność dnia tygodnia sprawdzana jest w warstwie aplikacji – model żądania utworzenia grupy (`GroupCreateRequest`) przyjmuje wyłącznie wartości od 1 do 7.
+
+Innym możliwym rozwiązaniem byłoby utworzenie pseudo-typu wyliczeniowego z węzłów. Zamiast właściwości `weekday: 1` powstałoby siedem węzłów odpowiadających dniom tygodnia (`"Monday"`, `"Tuesday"` itd.), połączonych z węzłem Group krawędzią, np. `HAPPENS_ON`. Wadą tego rozwiązania jest to, że odczytanie podstawowych informacji o grupie wymagałoby dodatkowego kroku przejścia po grafie. Ponadto baza danych nie wymusza istnienia krawędzi (4.3.7), więc dopuściłaby utworzenie grupy bez dnia tygodnia.
+
+Uznano, że dzień tygodnia jest zbyt prostą informacją, by wydzielać go do osobnego węzła. Inaczej potraktowano sale, w których odbywają się zajęcia – są one osobnymi węzłami (Room), połączonymi z grupą krawędzią `IN_ROOM`:
+
+```
+	(g)-[:IN_ROOM => {}]->(r),
+```
+
+Sala, w przeciwieństwie do dnia tygodnia, jest samodzielnym bytem: ma własne właściwości (budynek i numer sali), w jednej sali odbywa się wiele grup, a zbiór sal zmienia się w czasie – powstają nowe budynki, a istniejące sale są wyłączane z użytku. Gdyby budynek i numer sali były właściwościami grupy, zmiana danych sali wymagałaby aktualizacji wszystkich odbywających się w niej grup, a literówka w nazwie budynku tworzyłaby w praktyce nową salę. Jako osobny węzeł sala jest zapisana w jednym miejscu, a ograniczenie unikalności pary budynek–numer sali (`REQUIRE (r.building, r.room_num) IS UNIQUE`) chroni przed duplikatami.
+
+Zbiór dni tygodnia natomiast się nie zmieni: jest to siedem kolejnych wartości, zrozumiałych dla każdego. Trzeba jedynie ustalić konwencję numeracji, ponieważ w zależności od kraju i systemu tydzień zaczyna się w poniedziałek albo w niedzielę. W projekcie przyjęto, że 1 oznacza poniedziałek, a 7 – niedzielę. Jest to decyzja autora, zgodna z jednym ze standardów – normą ISO 8601, w której tydzień rozpoczyna się w poniedziałek, oznaczony numerem 1 [CYTOWANIE: ISO 8601-1:2019]. Tę samą numerację stosuje Neo4j: dokumentacja typów czasowych opisuje składową `dayOfWeek` jako wartość od 1 do 7, przy czym „pierwszym dniem tygodnia jest poniedziałek” (ang. *the first day of the week is Monday*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/values-and-types/temporal/].
+
+Właściwość `pnp`, określająca parzystość tygodni, w których odbywają się zajęcia, również skorzystałaby na typie wyliczeniowym. Przyjmuje ona jedną z trzech wartości tekstowych: `"P"` (tygodnie parzyste), `"NP"` (tygodnie nieparzyste) oraz `"ALL"` (co tydzień). Parzystość wyznaczana jest na podstawie numeru tygodnia według normy ISO 8601. Tę samą informację mogłyby przechowywać trzy liczby (`0`, `1`, `2`), jednak bez typu wyliczeniowego byłyby to liczby magiczne (ang. *magic numbers*) – programista rozwijający aplikację łatwo mógłby pomylić, czy 0 oznacza tygodnie parzyste, czy nieparzyste. Wartości tekstowe są czytelne same w sobie, a ich poprawność, podobnie jak w przypadku dnia tygodnia, sprawdza warstwa aplikacji – model `GroupCreateRequest` przyjmuje wyłącznie jedną z trzech wymienionych wartości. Rozwiązanie to nie jest w pełni zadowalające, ponieważ sama baza danych nie chroni się przed niepoprawną wartością, ale jest najlepszym, na jakie pozwala Neo4j.
+
+Poza kształtem samego węzła Group typ grafu określa również, jakie krawędzie mogą łączyć grupę z innymi węzłami: `IN_ROOM` (grupa -> sala), `OF_TYPE` (grupa -> typ grupy), `ABOUT` (opinia -> grupa), `REGISTERED_IN` (student -> grupa), `OPENS` (rejestracja -> grupa) oraz `TEACHES` (prowadzący -> grupa). Krawędź `REGISTERED_IN` przechowuje dodatkowo dwie właściwości: `registered_at` typu `ZONED DATETIME` oraz `grade` typu `FLOAT`. W przypadku zapisu istotna jest zarówno data, jak i godzina, a strefa czasowa pozwala jednoznacznie określić ten moment. Ocena jest liczbą zmiennoprzecinkową, ponieważ w skali ocen występują wartości połówkowe (np. 3,5 i 4,5). Właściwość `grade` nie jest oznaczona jako `NOT NULL`, ponieważ student zostaje zapisany do grupy, zanim otrzyma ocenę – do tego czasu wartość pozostaje pusta.
+
+```
+	(st)-[:REGISTERED_IN => {
+		registered_at :: ZONED DATETIME NOT NULL,
+		grade :: FLOAT
+	}]->(g),
+	(o)-[:ABOUT => {}]->(g),
+	(g)-[:OF_TYPE => {}]->(gt),
+	(reg)-[:OPENS => {}]->(g),
+	(g)-[:IN_ROOM => {}]->(r),
+	(t)-[:TEACHES => {}]->(g)
+```
+
+Graph type, poza typem danych, określa również, które właściwości są wymagane. Sama deklaracja `nazwa :: TYP` jedynie wymusza typ, jeśli właściwość występuje. Jej istnienie wymusza dopiero modyfikator `NOT NULL`. Wpis `REQUIRE g.id IS KEY` sprawia, że identyfikator grupy musi istnieć i dodatkowo musi być unikatowy.
+
+Ograniczenie typu `KEY` jest równoważne połączeniu ograniczenia unikalności (`IS UNIQUE`) z ograniczeniem istnienia (`IS NOT NULL`) na tym samym zbiorze właściwości [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/schema/constraints/]:
+
+```
+CREATE CONSTRAINT group_id_exists FOR (g:Group) REQUIRE g.id IS NOT NULL;
+CREATE CONSTRAINT group_id_unique FOR (g:Group) REQUIRE g.id IS UNIQUE;
+```
+
+Group jest węzłem przechowującym najwięcej informacji. Pozostałe węzły służące do definiowania domeny uczelnianej są skonstruowane w bardzo podobny sposób – typy danych określone w projekcie systemu są tłumaczone na typy danych dostępne w silniku Neo4j, a dodatkowe ograniczenia są nakładane analogicznie. Następnie, jeśli między węzłami mają istnieć krawędzie, są one również definiowane.
+
+Wszystko przebiegłoby zgodnie z założeniami projektowymi, gdyby nie pewne ograniczenie mechanizmu graph type:
+
+```
+	(si:SubjectInstance => {
+		id :: STRING
+	}) REQUIRE si.id IS KEY,
+```
+
+Według dokumentacji (oraz błędu wielokrotnie napotkanego przez autora) nie jest możliwe zdefiniowanie typu węzła, który nie posiada żadnych właściwości ani nie implikuje żadnej etykiety. Oznacza to, że węzeł SubjectInstance, który nie potrzebuje absolutnie żadnej właściwości, musi zostać zdefiniowany ze sztucznym identyfikatorem albo nie być zdefiniowany wcale [CYTOWANIE: https://neo4j.com/docs/cypher-manual/25/schema/graph-types/set-graph-types/]. Próba takiej definicji kończy się błędem 22NC2 – „data exception – node element type has no effect” [CYTOWANIE: https://neo4j.com/docs/status-codes/current/errors/gql-errors/22NC2/].
+
+Właściwość `id` węzła SubjectInstance jest zatem wyłącznie sztucznym sposobem obejścia tego błędu – sama w sobie nie jest do niczego wykorzystywana. Aplikacja jedynie nadaje ją przy tworzeniu węzła i nigdy jej nie odczytuje, a węzeł jest zawsze odnajdywany poprzez krawędzie łączące go z przedmiotem i cyklem akademickim. Jedynym miejscem, w którym identyfikator się pojawia, jest import danych początkowych z plików CSV, gdzie – skoro i tak musi istnieć – posłużył do powiązania wierszy węzłów z wierszami krawędzi. 
+
+Węzeł, którego jedyną rolą jest łączenie innych węzłów krawędziami, jest w pełni poprawnym elementem modelu grafowego, a wymuszenie istnienia w nim właściwości lub implikowanej etykiety nie wnosi do schematu żadnej informacji. 
+
+Surowy komunikat błędu zwracany przez Neo4j (wersja 2026.07.1 Enterprise) przy próbie zdefiniowania węzła bez właściwości:
+
+```
+CYPHER 25 ALTER CURRENT GRAPH TYPE SET { (si:SubjectInstance => {}) }
+```
+
+```
+22NC2: data exception - node element type has no effect. The node element type `SubjectInstance` must contain one or more implied labels, or at least one property type.
+  42001: syntax error or access rule violation - invalid syntax
+```
 
 5.4 Dokumentacja
 
