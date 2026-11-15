@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+**/__pycache__
+**/*.pyc
+.idea
+certificates
+import
+queries
+praca
+frontend
+endpoint_schema

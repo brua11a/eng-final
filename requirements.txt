@@ -1,7 +1,7 @@
-neo4j~=6.2.0
-python-dotenv~=1.2.2
-fastapi
-uvicorn
-bcrypt
-python-jose
-pydantic
+neo4j==6.2.0
+python-dotenv==1.2.4
+fastapi==0.162.2
+uvicorn==0.54.0
+bcrypt==5.0.0
+pyjwt==2.15.1
+pydantic==2.14.3

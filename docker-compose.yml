@@ -54,6 +54,7 @@ services:
       SSL_CERT_FILE: /ca.pem
     volumes:
       - ./certificates/ca.pem:/ca.pem:ro
+      - ./certificates/app:/certs:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -71,9 +72,25 @@ services:
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
     ports:
-      - "5173:443"
+      - "127.0.0.1:5173:443"
     volumes:
-      - ./certificates:/certificates:ro
+      - ./certificates/public.crt:/certificates/public.crt:ro
+      - ./certificates/private.key:/certificates/private.key:ro
+      - ./certificates/ca.pem:/certificates/ca.pem:ro
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - app
 

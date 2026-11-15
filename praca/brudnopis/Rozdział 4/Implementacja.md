@@ -1,13 +1,13 @@
 5.1 Technologie i środowisko
 Środowisko jest stworzone z kontenerów Dockerowych. Częśc z nich to gotowy obraz, część wymagała własnego Dockerfile. Całość jest zorchiestrowana poprzez Docker Compose. 
 
-W celu zabezpieczenia ruchu pomiędzy kontenerami, wprowadzono szyfrowanie zgodnie z dokumentacją: https://neo4j.com/docs/operations-manual/current/security/ssl-framework/. Dotyczy ona konsoli Neo4j i połączenia Bolt wystawianego przez bazę. Z racji tego, że projekt nie zakłada produkcyjnego wdrożenia, nie wdrożono pełnoprawnego CA.
+W celu zabezpieczenia ruchu pomiędzy kontenerami, wprowadzono szyfrowanie zgodnie z dokumentacją: https://neo4j.com/docs/operations-manual/current/security/ssl-framework/. Dotyczy ona konsoli Neo4j i połączenia Bolt wystawianego przez bazę. Szyfrowane są również połączenia przeglądarki z serwerem nginx oraz serwera nginx z API. Z racji tego, że projekt nie zakłada produkcyjnego wdrożenia, nie wdrożono pełnoprawnego CA.
 
-5.1.2 Certyfikaty
+5.1.1 Certyfikaty
 
-Szyfrowanie TLS w projekcie obejmuje trzy połączenia: protokół Bolt bazy Neo4j (port 7687), konsolę Neo4j wystawioną po HTTPS (port 7473) oraz serwer nginx serwujący klienta webowego (port 443 w kontenerze, 5173 na hoście). Wszystkie korzystają z jednego certyfikatu, podpisanego lokalnym urzędem certyfikacji.
+Szyfrowanie TLS w projekcie obejmuje cztery połączenia: protokół Bolt bazy Neo4j (port 7687), konsolę Neo4j wystawioną po HTTPS (port 7473), serwer nginx serwujący klienta webowego (port 443 w kontenerze, 5173 na hoście) oraz API, do którego nginx przekazuje żądania (port 8000). Wykorzystywane są dwa certyfikaty, oba podpisane tym samym lokalnym urzędem certyfikacji: jeden współdzielony przez Neo4j i nginx, drugi przeznaczony wyłącznie dla API.
 
-Do wygenerowania certyfikatów wykorzystano narzędzie mkcert [CYTOWANIE: https://github.com/FiloSottile/mkcert]. Tworzy ono na maszynie developera lokalny urząd certyfikacji (CA), a polecenie `mkcert -install` dodaje jego certyfikat główny do systemowego magazynu zaufanych certyfikatów oraz do magazynów przeglądarek. Certyfikaty podpisane przez to CA są przez nie akceptowane bez ostrzeżeń, w przeciwieństwie do certyfikatów self-signed, które każda przeglądarka oznacza jako niezaufane. Jednocześnie, w odróżnieniu od certyfikatów self-signed, możliwa jest pełna weryfikacja certyfikatu po stronie klientów, łącznie ze sprawdzeniem nazwy hosta.
+Do wygenerowania certyfikatów wykorzystano narzędzie mkcert [CYTOWANIE: https://github.com/FiloSottile/mkcert]. Tworzy ono na maszynie developera lokalny urząd certyfikacji (CA), a polecenie `mkcert -install` dodaje jego certyfikat główny do systemowego magazynu zaufanych certyfikatów oraz do magazynów przeglądarek. Certyfikaty podpisane przez to CA są przez przeglądarkę akceptowane bez ostrzeżeń, w przeciwieństwie do certyfikatów self-signed, które każda przeglądarka oznacza jako niezaufane. Jednocześnie, w odróżnieniu od certyfikatów self-signed, możliwa jest pełna weryfikacja certyfikatu po stronie klientów, łącznie ze sprawdzeniem nazwy hosta.
 
 Certyfikaty generowane są skryptem `certs.sh`, który należy uruchomić przed pierwszym `docker compose up`:
 
@@ -22,6 +22,10 @@ mkdir -p certificates
 cp "$(mkcert -CAROOT)/rootCA.pem" certificates/ca.pem
 mkcert -cert-file certificates/public.crt -key-file certificates/private.key neo4j localhost
 chmod 644 certificates/private.key
+
+mkdir -p certificates/app
+mkcert -cert-file certificates/app/public.crt -key-file certificates/app/private.key app localhost
+chmod 644 certificates/app/private.key
 ```
 
 Polecenie `cd "$(dirname "$0")"` przenosi skrypt do katalogu, w którym się znajduje, dzięki czemu certyfikaty trafiają do katalogu projektu niezależnie od tego, skąd skrypt został wywołany.
@@ -33,6 +37,14 @@ Następnie generowana jest para: certyfikat `public.crt` i klucz prywatny `priva
 - `localhost` – nazwa używana przy dostępie z maszyny hosta: przez przeglądarkę do klienta webowego i konsoli Neo4j oraz przez narzędzia developerskie łączące się z przekierowanym portem 7687.
 
 Nazwy plików `public.crt` i `private.key` są domyślnymi nazwami oczekiwanymi przez politykę SSL Neo4j w katalogu wskazanym przez `base_directory` [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/security/ssl-framework/]. Ponieważ polityki `bolt` i `https` wskazują ten sam katalog `/certificates`, oba połączenia korzystają z tej samej pary kluczy.
+
+Druga para, zapisywana w katalogu `certificates/app/`, należy do API. Jej certyfikat zawiera nazwy:
+- `app` – nazwa serwisu w Docker Compose, pod którą nginx przekazuje żądania do API (`https://app:8000`),
+- `localhost` – nazwa używana przez developera przy bezpośrednim dostępie do API z hosta oraz przez serwer deweloperski Vite.
+
+Osobny certyfikat dla API wynika z zasady najmniejszych uprawnień: kontener `app` otrzymuje wyłącznie własny klucz prywatny i nie ma dostępu do klucza Neo4j. Przejęcie kontenera API nie pozwala więc podszyć się pod bazę danych i odwrotnie.
+
+Polecenia `chmod 644` nadają kluczom prywatnym prawo odczytu dla wszystkich użytkowników. Jest to konieczne, ponieważ procesy w kontenerach działają z innym UID niż właściciel plików na hoście (np. API działa jako użytkownik `api` o UID 10001, opisany w 5.1.5), a katalogi z certyfikatami są montowane w trybie tylko do odczytu.
 
 We wdrożeniu produkcyjnym certyfikat serwera webowego zostałby zastąpiony certyfikatem publicznego CA (np. Let's Encrypt).
 
@@ -96,6 +108,7 @@ services:
       SSL_CERT_FILE: /ca.pem
     volumes:
       - ./certificates/ca.pem:/ca.pem:ro
+      - ./certificates/app:/certs:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -113,9 +126,25 @@ services:
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
     ports:
-      - "5173:443"
+      - "127.0.0.1:5173:443"
     volumes:
-      - ./certificates:/certificates:ro
+      - ./certificates/public.crt:/certificates/public.crt:ro
+      - ./certificates/private.key:/certificates/private.key:ro
+      - ./certificates/ca.pem:/certificates/ca.pem:ro
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - app
 
@@ -184,7 +213,7 @@ cypher-shell -d neo4j -f /queries/edges.cypher
 
 cypher-shell -d system -f /queries/security.cypher \
     --param "user => '$NEO4J_APP_USER'" \
-    --param "pw => '${NEO4J_APP_PASSWORD//\'/\\\'}'"
+    --param "pw => '$NEO4J_APP_PASSWORD'"
 
 ```
 
@@ -194,9 +223,252 @@ Narzędzie cypher-shell jest aplikacją napisaną w Javie, a JVM nie korzysta z 
 
 Problem nie wystąpiłby w przypadku certyfikatu wystawionego przez publiczny urząd certyfikacji, ponieważ jego certyfikat główny znajduje się już w domyślnym magazynie `cacerts`. Zniknąłby również po zamianie schematu `bolt+s` na `bolt+ssc`. Takie rozwiązanie wprowadza jednak nowy problem: `bolt+ssc`, mimo skrótu od *self-signed certificate* w nazwie, w ogóle nie weryfikuje ani certyfikatu serwera, ani jego podpisu, ani nazwy hosta. Połączenie pozostaje szyfrowane, ale klient nie ma pewności, z kim się łączy. Atakujący w pozycji pośrednika (ang. *Man-in-the-Middle*), posługujący się dowolnym certyfikatem, mógłby podszyć się pod serwer bazy danych, a tym samym odczytać i modyfikować ruch, w tym przesyłane dane uwierzytelniające.
 
-Ostatnim elementem inicjalizacji są cztery polecenia `cypher-shell`. 
+Ostatnim etapem inicjalizacji są cztery wywołania `cypher-shell`: trzy pierwsze ładują dane, a ostatnie konfiguruje dostęp do bazy. Wykonywane skrypty znajdują się w zamontowanym katalogu `queries`. `cypher-shell` odczytuje automatycznie adres, nazwę użytkownika i hasło ze zmiennych środowiskowych `NEO4J_ADDRESS`, `NEO4J_USERNAME` i `NEO4J_PASSWORD` [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/cypher-shell/].
+
+Działanie skryptów ładujących dane zostało opisane w rozdziale 5.3.
+
+Ostatnie polecenie tworzy użytkownika bazy danych z ograniczonymi uprawnieniami, wykorzystywanego przez API. Rola `app_rw` pozwala na odczyt i zapis danych w grafie `neo4j`, ale nie obejmuje zarządzania schematem ani użytkownikami. Neo4j przyznaje wyłącznie jawnie nadane uprawnienia, więc te operacje są niedostępne bez dodatkowej konfiguracji. Inaczej jest z uprawnieniem `LOAD`, pozwalającym m.in. na wczytywanie plików poleceniem `LOAD CSV`: każdy użytkownik posiada rolę `PUBLIC`, która domyślnie ma nadane `LOAD ON ALL DATA`. Dlatego zostało ono jawnie odebrane poleceniem `DENY`, które ma pierwszeństwo przed `GRANT`. Ograniczenie uprawnień zmniejsza skutki ewentualnego przejęcia lub błędnej konfiguracji warstwy API.
+
+```cypher
+CREATE OR REPLACE USER $user SET PASSWORD $pw CHANGE NOT REQUIRED;
+CREATE ROLE app_rw IF NOT EXISTS;
+GRANT ACCESS ON DATABASE neo4j TO app_rw;
+GRANT MATCH {*} ON GRAPH neo4j TO app_rw;
+GRANT WRITE ON GRAPH neo4j TO app_rw;
+
+DENY LOAD ON ALL DATA TO app_rw;
+GRANT ROLE app_rw TO $user;
+```
+
+Wracając do samego polecenia `cypher-shell`, nazwa i hasło użytkownika są przekazywane jako parametry `$user` i `$pw` flagą `--param`, z wartościami pobieranymi ze zmiennych środowiskowych. Wartość flagi `--param` nie jest jednak zwykłym tekstem, lecz wyrażeniem Cypher. Zgodnie z dokumentacją, wartością parametru może być dowolne wyrażenie Cypher, obliczane jednorazowo po stronie serwera [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/cypher-shell/]. Umożliwia to przekazywanie wartości dowolnego typu, np. dat, ale oznacza też, że wartość zmiennej środowiskowej, wstawiona przez powłokę bash do treści wyrażenia, staje się fragmentem kodu Cypher. Dlatego wartości zmiennych zostały objęte apostrofami, tworząc literał tekstowy Cypher.
+
+Przekazywanie parametrów jako wyrażeń Cypher sprawia, że inicjalizacja jest podatna na wstrzyknięcie kodu Cypher (ang. *Cypher injection*), a wartości zawierające znaki o specjalnym znaczeniu, takie jak `'` czy `\`, powodują błąd inicjalizacji lub ciche zapisanie innego hasła niż podane w `.env`.
+
+*Wartość parametru `pw` w zależności od zawartości zmiennej `NEO4J_APP_PASSWORD`*
+
+| Wartość w `.env`     | Apostrofy w `init.sh` | Wyrażenie otrzymane przez cypher-shell | Wynik                                               |
+| -------------------- | --------------------- | -------------------------------------- | --------------------------------------------------- |
+| `hunter2`            | nie                   | `pw => hunter2`                        | błąd: niezdefiniowana zmienna `hunter2`             |
+| `s3cr3t-pass`        | nie                   | `pw => s3cr3t-pass`                    | błąd: niezdefiniowana zmienna `s3cr3t`              |
+| `12345`              | nie                   | `pw => 12345`                          | `12345` (INTEGER)                                   |
+| `1+1`                | nie                   | `pw => 1+1`                            | `2` (INTEGER)                                       |
+| `hunter2`            | tak                   | `pw => 'hunter2'`                      | `"hunter2"` (STRING), poprawnie                     |
+| `it's`               | tak                   | `pw => 'it's'`                         | błąd: apostrof kończy literał                       |
+| `ends\`              | tak                   | `pw => 'ends\'`                        | błąd: niezamknięty literał                          |
+| `a\nb`               | tak                   | `pw => 'a\nb'`                         | `"a⏎b"` (STRING), znak nowej linii zamiast `\n`     |
+| `' + datetime() + '` | tak                   | `pw => '' + datetime() + ''`           | `"2026-11-14T18:53:46.592Z"` (STRING), wykonany kod |
+
+Z poziomu samego Cypher nie da się tego obejść, ponieważ problem występuje już na etapie parsowania wyrażenia, zanim jakakolwiek funkcja mogłaby przetworzyć wartość. Przyjęto więc założenie, że nazwa użytkownika i hasło nie zawierają znaków `'` ani `\`. Pełnym rozwiązaniem byłby dodatkowy skrypt, który odczytuje zmienne środowiskowe i wykonuje polecenia z `security.cypher` przy pomocy drivera Neo4j, przekazując nazwę użytkownika i hasło jako parametry zapytania. Parametry przesyłane przez driver nie są interpretowane jako kod, więc nie wymagają żadnego przetwarzania.
+
+Skrypt jest uruchamiany przy każdym starcie środowiska, a dane bazy, w tym użytkownicy, są zachowywane w wolumenie `neo4j_data`. Dlatego musi on działać poprawnie także wtedy, gdy użytkownik już istnieje, i jednocześnie uwzględniać ewentualną zmianę hasła w `.env`. Rozważono trzy warianty:
+
+- `CREATE USER … IF NOT EXISTS` – przy istniejącym użytkowniku polecenie jest pomijane, więc nowe hasło z `.env` nie zostałoby zastosowane.
+- `ALTER USER … SET PASSWORD` – Neo4j odrzuca ustawienie hasła identycznego z dotychczasowym (błąd `22N89: new password cannot be the same as the old password`), więc każde ponowne uruchomienie bez zmiany hasła kończyłoby się błędem.
+- `CREATE OR REPLACE USER` – użytkownik jest usuwany i tworzony od nowa z hasłem z `.env`.
+
+Wybrano trzeci wariant, żeby móc zmienić hasło użytkownika bez przebudowy wszystkich elementów compose'a.
+
+5.1.5 Serwis app
+Odpowiada on za backend aplikacji, czyli API dające klientom wygodny dostęp do zawartości grafowej bazy danych.
+
+Serwis `app` jest budowany z `Dockerfile` bazującym na obrazie `python:3.14-slim`.
+
+```dockerfile
+FROM python:3.14-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+
+RUN useradd --system --no-create-home --uid 10001 api
+USER api
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--ssl-certfile", "/certs/public.crt", "--ssl-keyfile", "/certs/private.key"]
+```
+
+Zmienne środowiskowe wyłączają buforowanie, by stdout i stderr pisały od razu, oraz zapisywanie plików `.pyc` z kodem bajtowym, które w kontenerze tylko do odczytu i tak nie byłoby możliwe [CYTOWANIE: https://docs.python.org/3/using/cmdline.html#environment-variables].
+
+Instrukcja `WORKDIR` ustawia katalog roboczy `/app`, dzięki czemu kolejne instrukcje, a także uruchomiona aplikacja, działają w katalogu `/app` w środku kontenera. Dzięki temu aplikacja jest w swoim własnym katalogu, oddzielona od plików systemowych obrazu, a `uvicorn` może odnaleźć w nim pakiet `app` [CYTOWANIE: https://docs.docker.com/reference/dockerfile/].
+
+Poprzez `COPY` jest kopiowana lista wymaganych bibliotek Pythonowych do kontenera, konkretnie do `/app/requirements.txt`. Następnie poprzez instrukcję `RUN` są one pobierane i instalowane.
+
+Gdy wymagane pakiety są już zainstalowane, do `/app/app` jest kopiowany lokalny katalog z zawartością aplikacji, też nazwany `app`. Znajduje się tam kod potrzebny do uruchomienia backendu. Kopiowanie kodu dopiero po instalacji zależności sprawia, że przy zmianie samego kodu Docker ponownie wykorzystuje warstwę z zainstalowanymi pakietami, zamiast instalować je od nowa.
+
+Instrukcje `RUN useradd --system --no-create-home --uid 10001 api` i `USER api` tworzą nowego użytkownika systemowego bez własnego katalogu domowego o UID 10001, a następnie przełączają się na niego, więc to z jego uprawnieniami działa aplikacja. Dzięki temu, gdyby komuś udało się przejąć proces aplikacji, wykonywałby polecenia z poziomu użytkownika `api`, a nie `root`.
+
+Ostatnia instrukcja, `CMD`, uruchamia aplikację zamieszczoną w `/app/app` na porcie 8000 w kontenerze. Adres `0.0.0.0` sprawia, że jest ona osiągalna z innych kontenerów, np. z serwera nginx. Aplikacja działa, dopóki kontener nie zostanie zatrzymany.
+
+Flagi `--ssl-certfile` i `--ssl-keyfile` sprawiają, że uvicorn serwuje API wyłącznie po HTTPS [CYTOWANIE: https://www.uvicorn.org/settings/#https]. Certyfikat i klucz pochodzą z katalogu `certificates/app/` (5.1.1), montowanego w compose jako `/certs` w trybie tylko do odczytu. Klucz nie jest kopiowany do obrazu, więc nie trafia do żadnej z jego warstw.
+
+Bez tego ruch między serwerem nginx a API odbywałby się zwykłym HTTP. Szyfrowanie TLS kończyłoby się na nginx, a token JWT, dane logowania i odpowiedzi API przechodziłyby przez sieć Dockera jawnym tekstem. Choć sieć ta jest izolowana od hosta, każdy kontener w niej podłączony mógłby taki ruch podsłuchać lub podszyć się pod API.
+
+Konfiguracja połączenia po stronie nginx, w tym weryfikacja certyfikatu API, została opisana w 5.1.6.
+
+Konfiguracja serwisu w `docker-compose.yml`:
+
+```yml
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      NEO4J_URI: bolt+s://neo4j:7687
+      NEO4J_USER: ${NEO4J_APP_USER}
+      NEO4J_PASSWORD: ${NEO4J_APP_PASSWORD:?set NEO4J_APP_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SSL_CERT_FILE: /ca.pem
+    volumes:
+      - ./certificates/ca.pem:/ca.pem:ro
+      - ./certificates/app:/certs:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      init:
+        condition: service_completed_successfully
+```
+
+`build: .` buduje obraz z opisanego wyżej `Dockerfile`, znajdującego się w katalogu głównym projektu.
+
+Aplikacja wystawiona na porcie 8000 jest również przekierowywana na port 8000 localhost, dzięki czemu API jest widoczne dla developera pod adresem `https://localhost:8000`. Zwykłe żądanie HTTP na ten port nie otrzymuje odpowiedzi.
+
+![[Pasted image 20261115020127.png]]
+
+*API widoczne z przeglądarki*
+
+W produkcyjnym wdrożeniu port 8000 w tym kontenerze nie powinien być wystawiony na hosta. Nie jest on potrzebny do działania systemu: z bazą danych połączenie jest wykonywane po `bolt+s://neo4j:7687`, a aplikacja kliencka widzi API poprzez serwer nginx w kontenerze `frontend`, pełniący rolę odwrotnego proxy (ang. *reverse proxy*). Przeglądarka komunikuje się wyłącznie z nginx po HTTPS, w ramach tego samego *origin* co aplikacja kliencka, a nginx przekazuje żądania kierowane do ścieżek API pod adres `https://app:8000` w wewnętrznej sieci Dockera (5.1.6).
+
+Zmienne środowiskowe przekazują aplikacji konfigurację w postaci adresu bazy danych (`NEO4J_URI`) i danych uwierzytelniających użytkownika systemowego stworzonego przez serwis `init` (`NEO4J_USER` i `NEO4J_PASSWORD`). Dodatkowo przekazywany jest `JWT_SECRET` potrzebny do podpisywania tokenów wydawanych przez API oraz `SSL_CERT_FILE`, czyli ścieżka do certyfikatu. Dzięki tej fladze, certyfikat zostaje załadowany do zaufanych certyfikatów, co pozwala później z nich korzystać.
+
+Składnia `${ZMIENNA:?komunikat}` sprawia, że Docker Compose odmawia uruchomienia, jeśli zmienna nie jest ustawiona w `.env` [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/].
+
+Wolumeny montują certyfikat CA (`/ca.pem`) oraz certyfikat i klucz API (`/certs`), oba w trybie tylko do odczytu.
+
+Pozostałe opcje ograniczają możliwości kontenera na wypadek przejęcia aplikacji [CYTOWANIE: https://docs.docker.com/reference/compose-file/services/]:
+- `read_only: true` – system plików kontenera jest tylko do odczytu, więc atakujący nie może podmienić kodu aplikacji ani zapisać własnych plików wykonywalnych.
+- `tmpfs: /tmp` – jedyny zapisywalny katalog, przechowywany w pamięci RAM i znikający po zatrzymaniu kontenera. Jest potrzebny bibliotekom, które zapisują pliki tymczasowe.
+- `cap_drop: ALL` – odbiera procesowi wszystkie uprawnienia jądra Linux (ang. *capabilities*), np. możliwość zmiany właściciela plików czy obsługi surowych gniazd sieciowych. Aplikacja nasłuchuje na porcie 8000, powyżej 1024, więc żadne z nich nie jest jej potrzebne.
+- `no-new-privileges:true` – uniemożliwia procesowi uzyskanie nowych uprawnień, np. przez uruchomienie programu z bitem setuid. Uzupełnia to działanie jako nieuprzywilejowany użytkownik `api`.
+
+`depends_on` z warunkiem `service_completed_successfully` sprawia, że API startuje dopiero po pomyślnym zakończeniu serwisu `init`, czyli gdy baza zawiera już schemat, dane i konto `app_rw`. Gdyby inicjalizacja się nie powiodła, API w ogóle nie zostanie uruchomione.
 
 
+5.1.6 Serwis frontend
+
+Serwis `frontend` jest punktem wejścia do systemu dla użytkownika. Działający w nim serwer nginx serwuje aplikację kliencką Vue (5.6) i pełni rolę odwrotnego proxy dla API. Przeglądarka komunikuje się z jednym adresem (`https://localhost:5173`), więc aplikacja kliencka i API dzielą ten sam *origin* i nie jest potrzebna konfiguracja CORS.
+
+Serwis jest budowany z `Dockerfile` znajdującego się w katalogu `frontend/`:
+
+```dockerfile
+FROM node:22-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY package.json ./
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+RUN npm config set registry "${NPM_REGISTRY}" && npm install
+
+COPY . .
+
+ARG VITE_API_URL=
+ENV VITE_API_URL=$VITE_API_URL
+
+RUN npm run build
+
+FROM nginx:1.27-alpine
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+```
+
+Wykorzystano budowanie wieloetapowe (ang. *multi-stage build*) [CYTOWANIE: https://docs.docker.com/build/building/multi-stage/]. Etap `build` z obrazem Node.js buduje aplikację kliencką, a do końcowego obrazu `nginx:1.27-alpine` trafiają wyłącznie gotowe pliki statyczne z katalogu `dist`. Środowisko Node.js, npm i `node_modules` nie znajdują się więc w działającym kontenerze, co zmniejsza jego rozmiar i powierzchnię ataku. Kolejność instrukcji, podobnie jak w 5.1.5, pozwala ponownie wykorzystać warstwę z zależnościami przy zmianie samego kodu.
+
+Argument `NPM_REGISTRY` pozwala wskazać inny rejestr pakietów npm, np. w sieci z ograniczonym dostępem do publicznego rejestru. Zmienna `VITE_API_URL` jest wstawiana przez Vite do kodu na etapie budowania [CYTOWANIE: https://vite.dev/guide/env-and-mode] i celowo pozostaje pusta, dzięki czemu aplikacja wysyła żądania pod ścieżki względne, czyli do tego samego serwera nginx.
+
+Konfiguracja serwera nginx, kopiowana do obrazu jako `/etc/nginx/conf.d/default.conf`:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name localhost;
+    ssl_certificate /certificates/public.crt;
+    ssl_certificate_key /certificates/private.key;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json;
+
+    location ~ ^/(login|teachers|subjects|curricula|organizational-units|me|opinions|students|groups|admin)(/|$) {
+        proxy_pass https://app:8000;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /certificates/ca.pem;
+        proxy_ssl_name app;
+        proxy_ssl_server_name on;
+        proxy_ssl_protocols TLSv1.3;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+Serwer nasłuchuje wyłącznie na porcie 443 z TLS, a blok dla portu 80 nie istnieje, więc nie ma nieszyfrowanej wersji aplikacji. Zwykłe żądanie HTTP jest odrzucane odpowiedzią `400 Bad Request`.
+
+![[Pasted image 20261115022335.png]]
+
+*Odpowiedź nginx na żądanie HTTP*
+
+Certyfikat i klucz to para wygenerowana dla Neo4j (5.1.1), zawierająca nazwę `localhost`. Ponieważ jest podpisana lokalnym CA z mkcert, przeglądarka wyświetla stronę bez ostrzeżeń.
+
+![[Pasted image 20261115022652.png]]
+*Aplikacja kliencka pod adresem https://localhost:5173 z informacją o poprawnym certyfikacie*
+
+Pierwszy blok `location` obejmuje ścieżki API. Końcówka `(/|$)` dopasowuje samą ścieżkę (`/teachers`) i jej podścieżki (`/teachers/42`), ale nie np. `/teachersXYZ`. Blok z wyrażeniem regularnym ma pierwszeństwo przed prefiksem `/` [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_core_module.html#location], więc żądania API zawsze trafiają do proxy.
+
+Samo `https` w `proxy_pass` włącza szyfrowanie, ale nginx domyślnie nie weryfikuje certyfikatu serwera docelowego [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify]. Byłaby to sytuacja analogiczna do `bolt+ssc` z 5.1.4: połączenie szyfrowane, ale bez pewności, z kim. Dlatego `proxy_ssl_verify` włącza weryfikację, `proxy_ssl_trusted_certificate` wskazuje lokalne CA, a `proxy_ssl_name` i `proxy_ssl_server_name` określają i przekazują w SNI nazwę `app` sprawdzaną w certyfikacie API. Połączenie ograniczono do TLS 1.3, ponieważ obie strony są pod kontrolą projektu. Nagłówki `proxy_set_header` przekazują do API dane oryginalnego żądania (host, adres IP klienta, protokół), które inaczej zostałyby utracone na proxy.
+
+Drugi blok obsługuje aplikację jednostronicową (ang. *Single Page Application*, SPA), w której routing odbywa się w przeglądarce. Adresy widoków, np. `/student/plan`, nie odpowiadają plikom na serwerze, więc `try_files` zwraca w takim przypadku `index.html` [CYTOWANIE: https://router.vuejs.org/guide/essentials/history-mode.html]. Bez tego odświeżenie strony kończyłoby się błędem 404.
+
+W `docker-compose.yml` argument `NPM_REGISTRY` korzysta ze składni `${ZMIENNA:-domyślna}`. W przeciwieństwie do `:?` z 5.1.5 brak zmiennej nie blokuje uruchomienia, tylko powoduje użycie publicznego rejestru [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/].
+
+Port 443 jest przekierowany na port 5173 hosta, domyślny port serwera deweloperskiego Vite, i tak jak w pozostałych serwisach powiązany wyłącznie z `127.0.0.1`. Bez tego Docker opublikowałby port na wszystkich interfejsach, z pominięciem zapory hosta [CYTOWANIE: https://docs.docker.com/engine/network/packet-filtering-firewalls/], a i tak certyfikat obejmuje tylko `localhost`.
+
+Montowane są wyłącznie trzy potrzebne pliki: `public.crt`, `private.key` i `ca.pem`. Zamontowanie całego katalogu `certificates` dałoby kontenerowi dostęp do klucza prywatnego API, wbrew zasadzie najmniejszych uprawnień z 5.1.1.
+
+```shell
+(.venv) ➜  INZYNIERKA_FINAL git:(master) ✗ docker compose exec frontend ls /certificates
+ca.pem       private.key  public.crt
+```
+
+*Wynik `docker compose exec frontend ls /certificates`*
+
+`depends_on: app` oznacza jedynie, że kontener `app` musi być utworzony, ponieważ nginx przy starcie rozwiązuje jego nazwę. Żądania wysłane, zanim uvicorn zacznie nasłuchiwać, otrzymają `502 Bad Gateway`.
+
+Kontener ma nałożone ograniczenia analogiczne do serwisu `app`, dostosowane do nginx, którego proces główny działa jako `root`, a procesy obsługujące żądania jako użytkownik `nginx`:
+- `read_only: true` – atakujący nie może podmienić konfiguracji ani plików aplikacji klienckiej, np. by wstrzyknąć złośliwy skrypt.
+- `tmpfs` – nginx wymaga zapisywalnych katalogów `/var/cache/nginx` (bufory proxy) i `/var/run` (plik PID).
+- `cap_drop: ALL` z `cap_add` – przywrócone są tylko uprawnienia niezbędne nginx [CYTOWANIE: https://man7.org/linux/man-pages/man7/capabilities.7.html]: `NET_BIND_SERVICE` (port 443), `SETUID` i `SETGID` (przełączenie na użytkownika `nginx`) oraz `CHOWN` (własność katalogów tymczasowych). Bez `CHOWN` nginx nie uruchamia się.
+- `no-new-privileges:true` – jak w 5.1.5.
+
+We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`, działającego w całości jako zwykły użytkownik na porcie powyżej 1024, co pozwoliłoby odebrać wszystkie uprawnienia jądra.
 
 5.2 Struktura repozytorium
 

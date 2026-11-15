@@ -6,7 +6,7 @@ from typing import Literal
 import bcrypt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt
 
 Role = Literal["Student", "Teacher", "Admin"]
 _bearer = HTTPBearer(auto_error=False)
@@ -69,7 +69,7 @@ async def get_caller(
         if not roles:
             raise HTTPException(status_code=401, detail="Invalid token")
         return Caller(email=payload["sub"], idx=payload.get("idx"), roles=roles)
-    except (JWTError, KeyError):
+    except (jwt.PyJWTError, KeyError):
         raise HTTPException(status_code=401, detail="Invalid token") from None
 
 

@@ -8,8 +8,9 @@ export default defineConfig({
     host: true,
     proxy: {
       '^/(login|teachers|subjects|curricula|organizational-units|me|opinions|students|groups|admin)(/|$)': {
-        target: process.env.VITE_DEV_API_PROXY ?? 'http://127.0.0.1:8000',
+        target: process.env.VITE_DEV_API_PROXY ?? 'https://localhost:8000',
         changeOrigin: true,
+        secure: true,
       },
     },
   },
