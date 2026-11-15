@@ -35,9 +35,6 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/subjects.csv" AS row
 MERGE (su:Subject {code: row.code})
 SET su.name = row.name, su.ects = toInteger(nullif(row.ects, ""));
 
-LOAD CSV WITH HEADERS FROM "file:///nodes/subject_instances.csv" AS row
-MERGE (si:SubjectInstance {id: row.id});
-
 LOAD CSV WITH HEADERS FROM "file:///nodes/terms.csv" AS row
 MERGE (ct:CurriculumTerm {id: row.id})
 SET ct.sem = toInteger(row.sem);
@@ -46,6 +43,11 @@ LOAD CSV WITH HEADERS FROM "file:///nodes/academic_cycles.csv" AS row
 MERGE (ac:AcademicCycle {id: row.id})
 SET ac.year = row.year, ac.season = row.season,
     ac.start_date = date(row.start_date), ac.end_date = date(row.end_date);
+
+LOAD CSV WITH HEADERS FROM "file:///nodes/subject_instances.csv" AS row
+MATCH (su:Subject {code: row.subject_code})
+MATCH (ac:AcademicCycle {id: row.cycle_id})
+MERGE (su)<-[:INSTANCE_OF]-(:SubjectInstance)-[:OFFERED_IN]->(ac);
 
 LOAD CSV WITH HEADERS FROM "file:///nodes/rooms.csv" AS row
 MERGE (r:Room {id: row.id})

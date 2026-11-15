@@ -28,18 +28,8 @@ MATCH (g:Group {id: row.group_id})
 MATCH (r:Room {id: row.room_id})
 MERGE (g)-[:IN_ROOM]->(r);
 
-LOAD CSV WITH HEADERS FROM "file:///edges/subject_instance_of.csv" AS row
-MATCH (si:SubjectInstance {id: row.instance_id})
-MATCH (su:Subject {code: row.subject_code})
-MERGE (si)-[:INSTANCE_OF]->(su);
-
-LOAD CSV WITH HEADERS FROM "file:///edges/subject_instance_offered_in.csv" AS row
-MATCH (si:SubjectInstance {id: row.instance_id})
-MATCH (ac:AcademicCycle {id: row.cycle_id})
-MERGE (si)-[:OFFERED_IN]->(ac);
-
 LOAD CSV WITH HEADERS FROM "file:///edges/instance_group_types.csv" AS row
-MATCH (si:SubjectInstance {id: row.instance_id})
+MATCH (:Subject {code: row.subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: row.cycle_id})
 MATCH (gt:GroupType {id: row.group_type_id})
 MERGE (si)-[:HAS_TYPE]->(gt);
 

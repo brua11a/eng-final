@@ -596,19 +596,7 @@ CREATE CONSTRAINT group_id_unique FOR (g:Group) REQUIRE g.id IS UNIQUE;
 
 Group jest węzłem przechowującym najwięcej informacji. Pozostałe węzły służące do definiowania domeny uczelnianej są skonstruowane w bardzo podobny sposób – typy danych określone w projekcie systemu są tłumaczone na typy danych dostępne w silniku Neo4j, a dodatkowe ograniczenia są nakładane analogicznie. Następnie, jeśli między węzłami mają istnieć krawędzie, są one również definiowane.
 
-Wszystko przebiegłoby zgodnie z założeniami projektowymi, gdyby nie pewne ograniczenie mechanizmu graph type:
-
-```
-	(si:SubjectInstance => {
-		id :: STRING
-	}) REQUIRE si.id IS KEY,
-```
-
-Według dokumentacji (oraz błędu wielokrotnie napotkanego przez autora) nie jest możliwe zdefiniowanie typu węzła, który nie posiada żadnych właściwości ani nie implikuje żadnej etykiety. Oznacza to, że węzeł SubjectInstance, który nie potrzebuje absolutnie żadnej właściwości, musi zostać zdefiniowany ze sztucznym identyfikatorem albo nie być zdefiniowany wcale [CYTOWANIE: https://neo4j.com/docs/cypher-manual/25/schema/graph-types/set-graph-types/]. Próba takiej definicji kończy się błędem 22NC2 – „data exception – node element type has no effect” [CYTOWANIE: https://neo4j.com/docs/status-codes/current/errors/gql-errors/22NC2/].
-
-Właściwość `id` węzła SubjectInstance jest zatem wyłącznie sztucznym sposobem obejścia tego błędu – sama w sobie nie jest do niczego wykorzystywana. Aplikacja jedynie nadaje ją przy tworzeniu węzła i nigdy jej nie odczytuje, a węzeł jest zawsze odnajdywany poprzez krawędzie łączące go z przedmiotem i cyklem akademickim. Jedynym miejscem, w którym identyfikator się pojawia, jest import danych początkowych z plików CSV, gdzie – skoro i tak musi istnieć – posłużył do powiązania wierszy węzłów z wierszami krawędzi. 
-
-Węzeł, którego jedyną rolą jest łączenie innych węzłów krawędziami, jest w pełni poprawnym elementem modelu grafowego, a wymuszenie istnienia w nim właściwości lub implikowanej etykiety nie wnosi do schematu żadnej informacji. 
+Wszystko przebiegłoby zgodnie z założeniami projektowymi, gdyby nie pewne ograniczenie mechanizmu graph type. Według dokumentacji (oraz błędu wielokrotnie napotkanego przez autora) nie jest możliwe zdefiniowanie typu węzła, który nie posiada żadnych właściwości ani nie implikuje żadnej etykiety [CYTOWANIE: https://neo4j.com/docs/cypher-manual/25/schema/graph-types/set-graph-types/]. Węzeł SubjectInstance, który zgodnie z projektem nie potrzebuje absolutnie żadnej właściwości, nie może więc otrzymać własnego typu węzła. Próba takiej definicji kończy się błędem 22NC2 – „data exception – node element type has no effect” [CYTOWANIE: https://neo4j.com/docs/status-codes/current/errors/gql-errors/22NC2/].
 
 Surowy komunikat błędu zwracany przez Neo4j (wersja 2026.07.1 Enterprise) przy próbie zdefiniowania węzła bez właściwości:
 
@@ -621,9 +609,87 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET { (si:SubjectInstance => {}) }
   42001: syntax error or access rule violation - invalid syntax
 ```
 
+Pierwszym obejściem, jakie się nasuwa, jest nadanie węzłowi sztucznego identyfikatora, np. `id :: STRING` z ograniczeniem `IS KEY`. Taka właściwość nie byłaby jednak do niczego wykorzystywana – węzeł i tak jest zawsze odnajdywany poprzez krawędzie łączące go z przedmiotem i cyklem akademickim – a wprowadzałaby do modelu informację, której projekt nie przewiduje. Węzeł, którego jedyną rolą jest łączenie innych węzłów krawędziami, jest w pełni poprawnym elementem modelu grafowego, a wymuszenie istnienia w nim właściwości lub implikowanej etykiety nie wnosi do schematu żadnej informacji.
+
+Zamiast tego SubjectInstance nie otrzymała typu węzła wcale. Etykieta pojawia się w typie grafu wyłącznie jako początek krawędzi, które z niej wychodzą:
+
+```
+	(:SubjectInstance)-[:INSTANCE_OF => {}]->(su),
+	(:SubjectInstance)-[:OFFERED_IN => {}]->(ac),
+	(:SubjectInstance)-[:HAS_TYPE => {}]->(gt),
+```
+
+Pozostałe węzły i krawędzie opisujące model uczelni nie napotkały podobnego problemu, ponieważ każdy z nich miał uzasadnione właściwości. Jeszcze inny problem pojawił się jednak w modelowaniu ludzi korzystających z platformy.
+
+Jak wspomniano wcześniej, wykorzystano etykiety implikowane i wieloetykietowość, żeby każda osoba pracująca na uczelniioraz student musieli być człowiekiem.
+
+```
+	(t:Teacher => :Person {
+		degree :: STRING NOT NULL,
+		working_since :: DATE NOT NULL
+	}),
+
+	(st:Student => :Person {
+		joined :: ZONED DATETIME NOT NULL
+	}),
+
+	(u:User => :Person {
+		email :: STRING,
+		passwd_hash :: STRING NOT NULL
+	}) REQUIRE u.email IS KEY,
+
+	(a:Admin => :Person),
+
+	(i:Inactive => :Person {
+		deactivated_at :: ZONED DATETIME NOT NULL
+	}),
+```
+
+Jak widać, w etykietach Teacher, Student, User i Inactive są przechowywane jedynie właściwości ekskluzywne dla tej roli. Admin nie niesie ze sobą żadnych dodatkowych informacji, zatem jedynie implikuje Person. Jest to dozwolony zabieg.
+
+Problem pojawia się dopiero w samej definicji etykiety Person. Wygodne i oczywiste byłoby zdefiniowanie jej jako na przykład:
+
+```
+ (p:Person => {
+	 idx :: STRING,
+	 name :: STRING NOT NULL,
+	 surname :: STRING NOT NULL,
+	 phone :: STRING NOT NULL,
+	 photo :: STRING
+ }) REQUIRE p.idx IS KEY,
+```
+
+Okazuje się, że próba zdefiniowania etykiet w ten sposób powoduje błąd 22NC4 [CYTOWANIE: https://neo4j.com/docs/status-codes/current/errors/gql-errors/22NC4/], dokładnie: 
+
+```
+  22NC4: data exception - a label cannot be both identifying and implied. The label(s) `Person` are defined as both identifying and implied. (line 
+  2, column 20 (offset: 60))                                                       "    (t:Teacher => :Person {"                                                                                                                
+                      ^                                                              42001: syntax error or access rule violation - invalid syntax
+```
+
+Jeśli w poleceniu graph type etykieta jest w ogóle zdefiniowana, to staje się ona identyfikująca. Jeśli jest ona identyfikująca, to jednocześnie nie może być implikowana, co zupełnie psuje mechanizm zaplanowany wcześniej.
+
+Sposobem na ominięcie tego mechanizmu proponowanym przez Neo4j w opisie tego błędu jest zastąpienie definicji z graph type zwykłymi instrukcjami CONSTRAINT. Z racji tego, że wspólna etykieta, pseudo-klasa bazowa była potrzebna, etykieta Person jest zdefiniowana w postaci listy ograniczeń.
+
+```
+	CONSTRAINT person_idx FOR (pe:Person) REQUIRE pe.idx IS KEY,
+	CONSTRAINT person_identity FOR (pe:Person) REQUIRE (pe.name, pe.surname, pe.phone) IS UNIQUE,
+	CONSTRAINT person_idx_type FOR (pe:Person) REQUIRE pe.idx IS :: STRING,
+	CONSTRAINT person_name FOR (pe:Person) REQUIRE pe.name IS NOT NULL,
+	CONSTRAINT person_name_type FOR (pe:Person) REQUIRE pe.name IS :: STRING,
+	CONSTRAINT person_surname FOR (pe:Person) REQUIRE pe.surname IS NOT NULL,
+	CONSTRAINT person_surname_type FOR (pe:Person) REQUIRE pe.surname IS :: STRING,
+	CONSTRAINT person_phone FOR (pe:Person) REQUIRE pe.phone IS NOT NULL,
+	CONSTRAINT person_phone_type FOR (pe:Person) REQUIRE pe.phone IS :: STRING,
+	CONSTRAINT person_photo FOR (pe:Person) REQUIRE pe.photo IS :: STRING,
+
+```
+
+
+
 5.4 Dokumentacja
 
-Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API: dozwolone role, kształt żądań i odpowiedzi oraz wykonywane zapytania. Ponadto API generuje interaktywną dokumentację w standardzie OpenAPI [CYTOWANIE: https://fastapi.tiangolo.com/reference/openapi/docs/], na podstawie tych samych modeli, które służą do walidacji.
+Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API: dozwolone role, kształt żądań i odpowiedzi oraz wykonywane zapytania bazodanowe. Ponadto API generuje interaktywną dokumentację w standardzie OpenAPI [CYTOWANIE: https://fastapi.tiangolo.com/reference/openapi/docs/], na podstawie tych samych modeli, które służą do walidacji.
 
 5.5 API
 

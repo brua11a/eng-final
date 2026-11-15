@@ -382,7 +382,6 @@ MATCH (ac:AcademicCycle {id: $cycle_id})
 WHERE EXISTS { (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac) }
 SET su.code = su.code
 MERGE (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
-  ON CREATE SET si.id = $instance_id
 WITH su, ac, si
 OPTIONAL MATCH (si)-[:HAS_TYPE]->(old:GroupType {g_type: $g_type})
 FOREACH (_ IN CASE WHEN old IS NULL THEN [1] ELSE [] END |

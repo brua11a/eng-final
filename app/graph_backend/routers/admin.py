@@ -440,7 +440,6 @@ async def create_group_type(
     caller=Depends(_admin),
 ) -> GroupTypeCreateResponse:
     type_id = await next_id(session, "GroupType")
-    instance_id = await next_id(session, "SubjectInstance")
 
     def failed(err: str, id: str = type_id) -> GroupTypeCreateResponse:
         return GroupTypeCreateResponse(
@@ -472,7 +471,6 @@ async def create_group_type(
             // the subject instance nor the group type can be created twice.
             SET su.code = su.code
             MERGE (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac)
-              ON CREATE SET si.id = $instance_id
             WITH su, ac, si
             OPTIONAL MATCH (si)-[:HAS_TYPE]->(old:GroupType {g_type: $g_type})
             FOREACH (_ IN CASE WHEN old IS NULL THEN [1] ELSE [] END |
@@ -485,7 +483,6 @@ async def create_group_type(
             """,
             subject_code=body.subject_code,
             cycle_id=body.cycle_id,
-            instance_id=instance_id,
             id=type_id,
             g_type=body.g_type,
             weight=body.weight,
