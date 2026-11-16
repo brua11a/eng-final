@@ -31,9 +31,9 @@ const backTo = () => {
     </p>
 
     <h1 class="teacher-page-title">Student</h1>
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
 
-    <div v-if="api.result && !api.result.err" class="teacher-detail-card">
+    <div v-if="api.result" class="teacher-detail-card">
       <p>
         <strong>{{ api.result.surname }}, {{ api.result.name }}</strong>
       </p>

@@ -3,6 +3,7 @@ from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
+from app.graph_backend.errors import invalid
 from app.graph_backend.cycles import cycle_sort_key
 from app.graph_backend.query import one, run
 from app.graph_backend.teaching import teacher_groups
@@ -11,22 +12,18 @@ from app.schemas.curriculum import (
     CurriculumCatalogueResponse,
 )
 from app.schemas.generic import TeacherNameRef
-from app.schemas.group import GroupDetailRequest, GroupDetailResponse, GroupTracked
-from app.schemas.opinion import OpinionItem, OpinionListRequest, OpinionListResponse
+from app.schemas.group import GroupDetailResponse, GroupTracked
+from app.schemas.opinion import OpinionItem, OpinionListResponse
 from app.schemas.subject import (
     SubjectCatalogueItem,
     SubjectCatalogueResponse,
-    SubjectCycleCell,
-    SubjectDetailRequest,
     SubjectDetailResponse,
-    SubjectGroupsRequest,
     SubjectGroupsResponse,
     SubjectOfferingItem,
 )
 from app.schemas.teacher import (
     TeacherCatalogueItem,
     TeacherCatalogueResponse,
-    TeacherDetailRequest,
     TeacherDetailResponse,
 )
 from app.schemas.faculty import FacultyItem, FacultyListResponse
@@ -69,6 +66,7 @@ MATCH (ac:AcademicCycle)
 RETURN ac.id AS id, ac.year AS year, ac.season AS season
 """
 
+# One row per subject; `cycles` holds one cell per id in $cycle_ids, in the same order.
 _SUBJECTS = """
 MATCH (su:Subject)
 WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
@@ -80,25 +78,21 @@ RETURN
   COLLECT {
     MATCH (su)<-[:INCLUDES]-(:CurriculumTerm)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
     RETURN DISTINCT fa.name
-  } AS faculties
+  } AS faculties,
+  [cycle_id IN $cycle_ids | {
+    offered: EXISTS {
+      (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(:AcademicCycle {id: cycle_id})
+    },
+    group_count: COUNT {
+      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
+      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
+    },
+    registration_open: EXISTS {
+      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
+      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(:Registration)
+    }
+  }] AS cycles
 ORDER BY su.name
-"""
-
-_SUBJECT_OFFERINGS = """
-MATCH (su:Subject)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(ac:AcademicCycle)
-WHERE su.code IN $codes
-RETURN DISTINCT su.code AS subject, ac.id AS cycle
-"""
-
-_SUBJECT_GROUP_COUNTS = """
-MATCH (su:Subject)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(ac:AcademicCycle)
-MATCH (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(g:Group)
-WHERE su.code IN $codes
-RETURN
-  su.code AS subject,
-  ac.id AS cycle,
-  count(g) AS group_count,
-  sum(CASE WHEN EXISTS { (:Registration)-[:OPENS]->(g) } THEN 1 ELSE 0 END) > 0 AS registration_open
 """
 
 _ORGANIZATIONAL_UNITS = """
@@ -135,39 +129,6 @@ def _faculty_label(names: list | None) -> str:
     return ", ".join(parts)
 
 
-def _subject_catalogue(
-    cycle_ids: list[str],
-    subjects: list[dict],
-    offerings: list[dict],
-    group_counts: list[dict],
-) -> list[SubjectCatalogueItem]:
-    offered = {(row["subject"], row["cycle"]) for row in offerings}
-    counts = {(row["subject"], row["cycle"]): row for row in group_counts}
-    items = []
-    for subject in subjects:
-        cells = []
-        for cycle_id in cycle_ids:
-            key = (subject["code"], cycle_id)
-            count = counts.get(key, {})
-            cells.append(
-                SubjectCycleCell(
-                    offered=key in offered,
-                    group_count=count.get("group_count", 0),
-                    registration_open=bool(count.get("registration_open")),
-                )
-            )
-        items.append(
-            SubjectCatalogueItem(
-                code=subject["code"],
-                name=subject["name"],
-                ects=subject["ects"],
-                faculty=_faculty_label(subject["faculties"]),
-                cycles=cells,
-            )
-        )
-    return items
-
-
 @router.get("/teachers", response_model=TeacherCatalogueResponse)
 async def teacher_catalogue(
     name: str | None = None,
@@ -193,15 +154,14 @@ async def subject_catalogue(
         await run(session, _ACADEMIC_CYCLES),
         key=lambda row: cycle_sort_key(row["year"], row["season"]),
     )
-    subjects = await run(session, _SUBJECTS, name=name, code=code)
-    codes = [row["code"] for row in subjects]
-    offerings = await run(session, _SUBJECT_OFFERINGS, codes=codes)
-    group_counts = await run(session, _SUBJECT_GROUP_COUNTS, codes=codes)
+    rows = await run(
+        session, _SUBJECTS, name=name, code=code, cycle_ids=[row["id"] for row in cycle_rows]
+    )
+    for row in rows:
+        row["faculty"] = _faculty_label(row.pop("faculties"))
     return SubjectCatalogueResponse(
         cycle_columns=[_cycle_column(row["year"], row["season"]) for row in cycle_rows],
-        subjects=_subject_catalogue(
-            [row["id"] for row in cycle_rows], subjects, offerings, group_counts
-        ),
+        subjects=[SubjectCatalogueItem(**row) for row in rows],
     )
 
 
@@ -227,9 +187,9 @@ async def curriculum_catalogue(
     )
 
 
-@router.post("/subjects/detail", response_model=SubjectDetailResponse)
+@router.get("/subjects/{code}", response_model=SubjectDetailResponse)
 async def subject_detail(
-    body: SubjectDetailRequest,
+    code: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> SubjectDetailResponse:
@@ -246,7 +206,7 @@ async def subject_detail(
             RETURN DISTINCT {id: t.idx, name: t.name + " " + t.surname}
           } AS taught_by
         """,
-        code=body.code,
+        code=code,
     )
     if subject is None:
         raise HTTPException(status_code=404, detail="Subject not found")
@@ -264,7 +224,7 @@ async def subject_detail(
             (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
           } AS group_count
         """,
-        code=body.code,
+        code=code,
     )
     offering_rows.sort(key=lambda row: cycle_sort_key(row["cycle_year"], row["cycle_season"]))
     return SubjectDetailResponse(
@@ -283,9 +243,10 @@ async def subject_detail(
     )
 
 
-@router.post("/subjects/groups", response_model=SubjectGroupsResponse)
+@router.get("/subjects/{subject_code}/groups", response_model=SubjectGroupsResponse)
 async def subject_groups(
-    body: SubjectGroupsRequest,
+    subject_code: str,
+    cycle_id: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> SubjectGroupsResponse:
@@ -314,8 +275,8 @@ async def subject_groups(
           COUNT { (g)<-[:REGISTERED_IN]-(:Student) } AS filled
         ORDER BY gt.g_type, g.weekday, g.start_time, g.number
         """,
-        subject_code=body.subject_code,
-        cycle_id=body.cycle_id,
+        subject_code=subject_code,
+        cycle_id=cycle_id,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="No groups for this subject in this cycle")
@@ -344,9 +305,9 @@ async def subject_groups(
     )
 
 
-@router.post("/groups/detail", response_model=GroupDetailResponse)
+@router.get("/groups/{group_id}", response_model=GroupDetailResponse)
 async def group_detail(
-    body: GroupDetailRequest,
+    group_id: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> GroupDetailResponse:
@@ -377,7 +338,7 @@ async def group_detail(
             RETURN {id: t.idx, name: t.name + " " + t.surname}
           } AS teachers
         """,
-        group_id=body.group_id,
+        group_id=group_id,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -400,9 +361,9 @@ async def group_detail(
     )
 
 
-@router.post("/teachers/detail", response_model=TeacherDetailResponse)
+@router.get("/teachers/{idx}", response_model=TeacherDetailResponse)
 async def teacher_detail(
-    body: TeacherDetailRequest,
+    idx: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> TeacherDetailResponse:
@@ -412,7 +373,7 @@ async def teacher_detail(
         MATCH (t:Teacher {idx: $idx})
         RETURN t.degree AS degree, t.name AS name, t.surname AS surname, t.email AS email, t.phone AS phone
         """,
-        idx=body.idx,
+        idx=idx,
     )
     if profile is None:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -421,7 +382,7 @@ async def teacher_detail(
         name=f"{profile['name']} {profile['surname']}",
         phone=profile["phone"],
         email=profile["email"],
-        groups=await teacher_groups(session, body.idx),
+        groups=await teacher_groups(session, idx),
     )
 
 
@@ -448,15 +409,16 @@ ORDER BY o.submit DESC
 """
 
 
-@router.post("/opinions/list", response_model=OpinionListResponse)
+@router.get("/opinions", response_model=OpinionListResponse)
 async def list_opinions(
-    body: OpinionListRequest,
+    teacher_idx: str | None = None,
+    group_id: str | None = None,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_logged_in),
 ) -> OpinionListResponse:
-    if not body.teacher_idx and not body.group_id:
-        raise HTTPException(status_code=400, detail="teacher_idx or group_id is required")
-    rows = await run(session, _OPINIONS, teacher_idx=body.teacher_idx, group_id=body.group_id)
+    if not teacher_idx and not group_id:
+        raise invalid("teacher_idx or group_id is required")
+    rows = await run(session, _OPINIONS, teacher_idx=teacher_idx, group_id=group_id)
     opinions = [OpinionItem(**row) for row in rows]
     avg = sum(o.grade for o in opinions) / len(opinions) if opinions else None
     return OpinionListResponse(opinions=opinions, avg_grade=avg)

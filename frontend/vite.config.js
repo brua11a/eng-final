@@ -7,7 +7,8 @@ export default defineConfig({
     port: 5173,
     host: true,
     proxy: {
-      '^/(login|teachers|subjects|curricula|organizational-units|me|opinions|students|groups|admin)(/|$)': {
+      // The whole API is under /api; every other path is a page of the frontend.
+      '/api': {
         target: process.env.VITE_DEV_API_PROXY ?? 'https://localhost:8000',
         changeOrigin: true,
         secure: true,

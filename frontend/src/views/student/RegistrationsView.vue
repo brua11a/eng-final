@@ -156,13 +156,9 @@ async function setRegistered(courseId, group, register) {
   registerStatus.value = { ...registerStatus.value, [key]: { saving: true, err: '' } }
   try {
     const call = register ? student.register : student.deregister
-    const res = await call(courseId, group.id)
-    if (res?.err || res?.ok === false) {
-      registerStatus.value[key] = { saving: false, err: res?.err || 'Request failed' }
-    } else {
-      registerStatus.value[key] = { saving: false, err: '' }
-      await refreshCourseGroups(courseId)
-    }
+    await call(group.id)
+    registerStatus.value[key] = { saving: false, err: '' }
+    await refreshCourseGroups(courseId)
   } catch (e) {
     registerStatus.value[key] = { saving: false, err: errorMessage(e) }
   }

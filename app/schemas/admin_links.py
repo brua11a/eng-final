@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel, Field
 
@@ -9,10 +9,9 @@ class ProgrammeCreateRequest(BaseModel):
 
 
 class ProgrammeCreateResponse(BaseModel):
-    id: Optional[str] = None
+    id: str
     name: str
     faculty_id: str
-    err: Optional[str] = None
 
 
 class AdminCreateRequest(BaseModel):
@@ -23,11 +22,10 @@ class AdminCreateRequest(BaseModel):
 
 
 class AdminCreateResponse(BaseModel):
-    idx: Optional[str] = None
+    idx: str
     name: str
     surname: str
     phone: str
-    err: Optional[str] = None
 
 
 class TermSubjectRequest(BaseModel):
@@ -38,18 +36,15 @@ class TermSubjectRequest(BaseModel):
 class TermSubjectResponse(BaseModel):
     term_id: str
     subject_code: str
-    err: Optional[str] = None
 
 
 class EnrolStudentRequest(BaseModel):
-    student_idx: str
     term_id: str
 
 
 class EnrolStudentResponse(BaseModel):
     student_idx: str
     term_id: str
-    err: Optional[str] = None
 
 
 class AssignTurnRequest(BaseModel):
@@ -60,7 +55,6 @@ class AssignTurnRequest(BaseModel):
 class AssignTurnResponse(BaseModel):
     turn_id: str
     assigned: List[str] = []
-    err: Optional[str] = None
 
 
 class DeanRegisterRequest(BaseModel):
@@ -73,7 +67,6 @@ class DeanRegisterResponse(BaseModel):
     student_idx: str
     group_id: str
     ignore_capacity: bool = False
-    err: Optional[str] = None
 
 
 class NextIdxResponse(BaseModel):

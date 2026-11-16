@@ -34,7 +34,7 @@ watch(selectedCycleId, loadGroups)
     <p class="catalogue-hint">
       <RouterLink to="/catalogue/przedmioty">← Subjects</RouterLink>
     </p>
-    <ApiMessages :error="detailApi.error" :api-message="detailApi.apiMessage" />
+    <ApiMessages :error="detailApi.error" />
     <div v-if="detailApi.result" class="catalogue-detail-card">
       <p><strong>{{ detailApi.result.name }}</strong></p>
       <p v-if="detailApi.result.ects != null">ECTS: {{ detailApi.result.ects }}</p>
@@ -60,7 +60,7 @@ watch(selectedCycleId, loadGroups)
     <p v-else class="catalogue-hint">Not offered in any cycle.</p>
 
     <h2 class="catalogue-subsection-title">Groups</h2>
-    <ApiMessages :error="groupsApi.error" :api-message="groupsApi.apiMessage" />
+    <ApiMessages :error="groupsApi.error" />
     <div v-if="groupsApi.result?.groups?.length" class="catalogue-results-table-wrap">
       <table class="catalogue-results-table">
         <thead>

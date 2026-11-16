@@ -79,8 +79,8 @@ function rolesText(res) {
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="assignApi.loading">Save</button>
       </form>
-      <ApiMessages :error="assignApi.error" :api-message="assignApi.apiMessage" />
-      <p v-if="assignApi.result && !assignApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="assignApi.error" />
+      <p v-if="assignApi.result" class="admin-ok">
         {{ assignApi.result.email }}, roles: {{ rolesText(assignApi.result) || 'none' }}
       </p>
     </section>
@@ -116,16 +116,16 @@ function rolesText(res) {
           </template>
         </div>
       </div>
-      <ApiMessages :error="deactivateApi.error" :api-message="deactivateApi.apiMessage" />
-      <ApiMessages :error="activateApi.error" :api-message="activateApi.apiMessage" />
-      <p v-if="deactivateApi.result && !deactivateApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="deactivateApi.error" />
+      <ApiMessages :error="activateApi.error" />
+      <p v-if="deactivateApi.result" class="admin-ok">
         Deactivated {{ deactivateApi.result.idx }}
       </p>
-      <p v-if="activateApi.result && !activateApi.apiMessage" class="admin-ok">
+      <p v-if="activateApi.result" class="admin-ok">
         Activated {{ activateApi.result.idx }}
       </p>
-      <ApiMessages :error="removeApi.error" :api-message="removeApi.apiMessage" />
-      <p v-if="removeApi.result && !removeApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="removeApi.error" />
+      <p v-if="removeApi.result" class="admin-ok">
         Removed login of {{ removeApi.result.idx }}
       </p>
     </section>
@@ -163,16 +163,16 @@ function rolesText(res) {
         </template>
         <button type="submit" class="teacher-btn-save" :disabled="roleApi.loading">Add role</button>
       </form>
-      <ApiMessages :error="roleApi.error" :api-message="roleApi.apiMessage" />
-      <p v-if="roleApi.result && !roleApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="roleApi.error" />
+      <p v-if="roleApi.result" class="admin-ok">
         Roles: {{ rolesText(roleApi.result) }}
       </p>
 
       <form class="admin-form admin-form--divided" @submit.prevent="removeRole">
         <button type="submit" class="teacher-btn-secondary" :disabled="removeRoleApi.loading">Remove selected role</button>
       </form>
-      <ApiMessages :error="removeRoleApi.error" :api-message="removeRoleApi.apiMessage" />
-      <p v-if="removeRoleApi.result && !removeRoleApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="removeRoleApi.error" />
+      <p v-if="removeRoleApi.result" class="admin-ok">
         Roles: {{ rolesText(removeRoleApi.result) }}
       </p>
     </section>

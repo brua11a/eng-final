@@ -39,7 +39,7 @@ async function suggestIdx() {
 onMounted(suggestIdx)
 
 async function afterCreate(api) {
-  if (api.result && !api.apiMessage && !api.error) {
+  if (api.result && !api.error) {
     reloadRefs()
     await suggestIdx()
   }
@@ -123,8 +123,8 @@ async function createStudent() {
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="teacherApi.loading">Create</button>
       </form>
-      <ApiMessages :error="teacherApi.error" :api-message="teacherApi.apiMessage" />
-      <p v-if="teacherApi.result?.idx && !teacherApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="teacherApi.error" />
+      <p v-if="teacherApi.result?.idx" class="admin-ok">
         Created teacher {{ teacherApi.result.idx }}
       </p>
     </section>
@@ -149,8 +149,8 @@ async function createStudent() {
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="studentApi.loading">Create</button>
       </form>
-      <ApiMessages :error="studentApi.error" :api-message="studentApi.apiMessage" />
-      <p v-if="studentApi.result?.idx && !studentApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="studentApi.error" />
+      <p v-if="studentApi.result?.idx" class="admin-ok">
         Created student {{ studentApi.result.idx }}
       </p>
     </section>
@@ -176,8 +176,8 @@ async function createStudent() {
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="enrolApi.loading">Enrol</button>
       </form>
-      <ApiMessages :error="enrolApi.error" :api-message="enrolApi.apiMessage" />
-      <p v-if="enrolApi.result && !enrolApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="enrolApi.error" />
+      <p v-if="enrolApi.result" class="admin-ok">
         Enrolled {{ enrolApi.result.student_idx }}
       </p>
     </section>
@@ -191,8 +191,8 @@ async function createStudent() {
         <label>Phone <input v-model="a.phone" required /></label>
         <button type="submit" class="teacher-btn-save" :disabled="adminApi.loading">Create</button>
       </form>
-      <ApiMessages :error="adminApi.error" :api-message="adminApi.apiMessage" />
-      <p v-if="adminApi.result?.idx && !adminApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="adminApi.error" />
+      <p v-if="adminApi.result?.idx" class="admin-ok">
         Created administrator {{ adminApi.result.idx }}. Assign a login in User accounts.
       </p>
     </section>

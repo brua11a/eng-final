@@ -28,12 +28,6 @@ class OpinionCreateResponse(BaseModel):
     submit: Optional[datetime] = None  # set by the server when the opinion is created
     group_id: str
     teacher_idx: str
-    err: Optional[str] = None
-
-
-class OpinionListRequest(BaseModel):
-    teacher_idx: Optional[str] = None
-    group_id: Optional[str] = None
 
 
 class OpinionItem(BaseModel):

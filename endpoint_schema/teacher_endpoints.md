@@ -4,17 +4,19 @@ See `user_endpoints.md` for conventions. Admins can use every endpoint here with
 
 ---
 
-## POST /students/detail
+## GET /students/{student_idx}
 
 **Allowed:** Admin; Teacher, only for students registered in one of their groups (403 otherwise)
 
 **Request**
 
-```json
-{
-	"student_idx": String
-}
+No body; parameters go in the URL:
+
+```http
+GET /students/279413
 ```
+
+- `student_idx` (path): student idx.
 
 **Response**
 
@@ -27,8 +29,7 @@ See `user_endpoints.md` for conventions. Admins can use every endpoint here with
 	"photo": String?,
 	"joined": DateTime,
 	"avg_grade": Float?,
-	"term_ids": List[String],
-	"err": String?
+	"term_ids": List[String]
 }
 ```
 
@@ -39,6 +40,10 @@ See `user_endpoints.md` for conventions. Admins can use every endpoint here with
 - The attempt grade is the weighted average of its group-type grades, using the group-type weights.
 - Each subject uses its latest complete attempt, so a passed retake replaces the earlier failed attempt.
 - `avg_grade` is the ECTS-weighted average of those subject grades. It is null when no subject has a complete attempt.
+
+**Status**
+
+`404` if the student does not exist.
 
 **Query**
 
@@ -84,15 +89,15 @@ RETURN
 
 **Request**
 
-Query string:
+No body; parameters go in the URL:
 
-```json
-{
-	"teacher_idx": String?
-}
+```http
+GET /me/groups?teacher_idx=T001
 ```
 
-`teacher_idx` is only used for admins. Teachers always get their own groups.
+- `teacher_idx` (query, optional).
+
+`teacher_idx` is only used for admins (`422` if an admin leaves it out). Teachers always get their own groups.
 
 **Response**
 
@@ -146,17 +151,19 @@ ORDER BY ac.year DESC, ac.season, su.name, gt.g_type, g.number
 
 ---
 
-## POST /groups/students
+## GET /groups/{group_id}/students
 
 **Allowed:** Admin; Teacher, only for groups they teach (403 otherwise)
 
 **Request**
 
-```json
-{
-	"group_id": String
-}
+No body; parameters go in the URL:
+
+```http
+GET /groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f/students
 ```
+
+- `group_id` (path): group id.
 
 **Response**
 
@@ -199,11 +206,25 @@ ORDER BY st.surname, st.name
 
 ---
 
-## POST /groups/students/grade
+## PUT /groups/{group_id}/students/{student_idx}/grade
 
 **Allowed:** Admin; Teacher, only for groups they teach (403 otherwise)
 
 **Request**
+
+```http
+PUT /groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f/students/279413/grade
+```
+
+```json
+{
+	"grade": Float
+}
+```
+
+The grade belongs to the student's place in the group, so both ids go in the path. `PUT` sets the grade, replacing a previous one. `grade` must be one of `2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0`; any other value is rejected with `422`.
+
+**Response**
 
 ```json
 {
@@ -213,18 +234,9 @@ ORDER BY st.surname, st.name
 }
 ```
 
-`grade` must be one of `2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0`; any other value is rejected with HTTP 422.
+**Status**
 
-**Response**
-
-```json
-{
-	"group_id": String,
-	"student_idx": String,
-	"grade": Float,
-	"err": String?
-}
-```
+`200` with the saved grade. `404` if the student is not registered in the group.
 
 **Query**
 

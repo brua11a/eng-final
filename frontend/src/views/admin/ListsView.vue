@@ -63,7 +63,7 @@ onMounted(loadAll)
 
     <section v-for="list in lists" :key="list.key" class="teacher-panel admin-panel-spaced">
       <h2 class="admin-section-title">{{ list.title }}</h2>
-      <ApiMessages :error="list.api.error" :api-message="list.api.apiMessage" />
+      <ApiMessages :error="list.api.error" />
       <table v-if="list.api.result?.[list.key]?.length" class="teacher-groups-table">
         <thead>
           <tr>

@@ -1,15 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
-from neo4j.exceptions import Neo4jError
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
-from app.graph_backend.errors import db_err
+from app.graph_backend.errors import conflict, forbidden, invalid, not_found
 from app.graph_backend.query import next_id, one, run
 from app.schemas.academic_cycle import (
     CycleSubject,
     CycleSubjectGroup,
-    MyAcademicCycleDetailRequest,
     MyAcademicCycleDetailResponse,
     MyAcademicCycleItem,
     MyAcademicCyclesResponse,
@@ -19,17 +17,11 @@ from app.schemas.opinion import OpinionCreateRequest, OpinionCreateResponse
 from app.schemas.registration import (
     ClassInfo,
     CourseInRegistration,
-    DeregisterFromGroupRequest,
-    DeregisterFromGroupResponse,
     Enrolment,
     MyEnrolmentsResponse,
     OpenGroup,
-    OpenGroupsRequest,
     OpenGroupsResponse,
-    RegisterToGroupRequest,
-    RegisterToGroupResponse,
     RegistrationItem,
-    ShowCoursesInRegistrationRequest,
     ShowCoursesInRegistrationResponse,
     ShowRegistrationsResponse,
 )
@@ -55,7 +47,7 @@ _REGISTER = """
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
 // Turn time window, disabled for testing: uncomment to allow registering only during the student's turn.
 // WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
-MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)
 WITH DISTINCT st, g, gt
 SET st.idx = st.idx
 SET g.capacity = g.capacity
@@ -88,7 +80,7 @@ async def _require_registration(session: AsyncSession, student_idx: str, registr
         registration_id=registration_id,
     )
     if row is None:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise forbidden()
 
 
 @router.get("/me/registrations", response_model=ShowRegistrationsResponse)
@@ -121,13 +113,13 @@ async def show_registrations(
     )
 
 
-@router.post("/me/registrations/courses", response_model=ShowCoursesInRegistrationResponse)
+@router.get("/me/registrations/{registration_id}/courses", response_model=ShowCoursesInRegistrationResponse)
 async def show_courses(
-    body: ShowCoursesInRegistrationRequest,
+    registration_id: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
 ) -> ShowCoursesInRegistrationResponse:
-    await _require_registration(session, caller.idx, body.registration_id)
+    await _require_registration(session, caller.idx, registration_id)
     rows = await run(
         session,
         """
@@ -141,7 +133,7 @@ async def show_courses(
           ac.year AS cycle_year,
           ac.season AS cycle_season
         """,
-        registration_id=body.registration_id,
+        registration_id=registration_id,
     )
     grouped: dict[str, CourseInRegistration] = {}
     counts: dict[str, dict[str, int]] = {}
@@ -161,13 +153,17 @@ async def show_courses(
     return ShowCoursesInRegistrationResponse(courses=list(grouped.values()))
 
 
-@router.post("/me/registrations/groups", response_model=OpenGroupsResponse)
+@router.get(
+    "/me/registrations/{registration_id}/subjects/{subject_code}/groups",
+    response_model=OpenGroupsResponse,
+)
 async def show_groups(
-    body: OpenGroupsRequest,
+    registration_id: str,
+    subject_code: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
 ) -> OpenGroupsResponse:
-    await _require_registration(session, caller.idx, body.registration_id)
+    await _require_registration(session, caller.idx, registration_id)
     rows = await run(
         session,
         """
@@ -192,42 +188,39 @@ async def show_groups(
         ORDER BY gt.g_type, g.number
         """,
         student_idx=caller.idx,
-        registration_id=body.registration_id,
-        subject_code=body.subject_code,
+        registration_id=registration_id,
+        subject_code=subject_code,
     )
     return OpenGroupsResponse(groups=[OpenGroup(**row) for row in rows])
 
 
-@router.post("/me/registrations/register", response_model=RegisterToGroupResponse)
+# The student's place in a group. PUT is idempotent: registering again in the same group
+# changes nothing and succeeds.
+@router.put("/me/registered-groups/{group_id}", status_code=204)
 async def register_to_group(
-    body: RegisterToGroupRequest,
+    group_id: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
-) -> RegisterToGroupResponse:
-    row = await one(session, _REGISTER, student_idx=caller.idx, group_id=body.group_id, subject_code=body.subject_code)
+) -> None:
+    row = await one(session, _REGISTER, student_idx=caller.idx, group_id=group_id)
     if row is None:
-        return RegisterToGroupResponse(ok=False, err="Forbidden")
+        raise forbidden()
     if row["status"] == "conflict":
-        return RegisterToGroupResponse(
-            ok=False,
-            err="You are already registered in another group of this type for this subject",
-        )
+        raise conflict("You are already registered in another group of this type for this subject")
     if row["status"] == "full":
-        return RegisterToGroupResponse(ok=False, err="Group is full")
-    return RegisterToGroupResponse(ok=True)
+        raise conflict("Group is full")
 
 
-@router.post("/me/registrations/deregister", response_model=DeregisterFromGroupResponse)
+@router.delete("/me/registered-groups/{group_id}", status_code=204)
 async def deregister_from_group(
-    body: DeregisterFromGroupRequest,
+    group_id: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
-) -> DeregisterFromGroupResponse:
+) -> None:
     row = await one(
         session,
         """
         MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-        MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
         MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
         // Turn time window, disabled for testing: uncomment to allow deregistering only during the student's turn.
         // WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
@@ -235,12 +228,10 @@ async def deregister_from_group(
         RETURN g.id AS group_id
         """,
         student_idx=caller.idx,
-        group_id=body.group_id,
-        subject_code=body.subject_code,
+        group_id=group_id,
     )
     if row is None:
-        return DeregisterFromGroupResponse(ok=False, err="Not registered or registration closed")
-    return DeregisterFromGroupResponse(ok=True)
+        raise not_found("Registration in this group, or its registration period")
 
 
 @router.get("/me/enrolments", response_model=MyEnrolmentsResponse)
@@ -286,9 +277,9 @@ async def my_cycles(
     return MyAcademicCyclesResponse(cycles=[MyAcademicCycleItem(**row) for row in rows])
 
 
-@router.post("/me/academic-cycles/detail", response_model=MyAcademicCycleDetailResponse)
+@router.get("/me/academic-cycles/{cycle_id}", response_model=MyAcademicCycleDetailResponse)
 async def my_cycle_detail(
-    body: MyAcademicCycleDetailRequest,
+    cycle_id: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
 ) -> MyAcademicCycleDetailResponse:
@@ -299,10 +290,10 @@ async def my_cycle_detail(
         RETURN ac.id AS id, ac.year AS year, ac.season AS season
         """,
         student_idx=caller.idx,
-        cycle_id=body.cycle_id,
+        cycle_id=cycle_id,
     )
     if row is None:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise forbidden()
 
     subject_rows = await run(
         session,
@@ -312,7 +303,7 @@ async def my_cycle_detail(
         RETURN DISTINCT su.code AS code, su.name AS name, su.ects AS ects
         """,
         student_idx=caller.idx,
-        cycle_id=body.cycle_id,
+        cycle_id=cycle_id,
     )
     group_rows = await run(
         session,
@@ -338,7 +329,7 @@ async def my_cycle_detail(
         ORDER BY su.name, gt.g_type, g.number
         """,
         student_idx=caller.idx,
-        cycle_id=body.cycle_id,
+        cycle_id=cycle_id,
     )
 
     subjects: dict[str, CycleSubject] = {}
@@ -409,7 +400,7 @@ async def dashboard(
     return DashboardResponse(groups=[RegisteredGroup(**row) for row in rows])
 
 
-@router.post("/opinions", response_model=OpinionCreateResponse)
+@router.post("/opinions", response_model=OpinionCreateResponse, status_code=201)
 async def create_opinion(
     body: OpinionCreateRequest,
     session: AsyncSession = Depends(get_session),
@@ -422,13 +413,7 @@ async def create_opinion(
     else:
         student_idx = body.student_idx
     if not student_idx:
-        return OpinionCreateResponse(
-            grade=body.grade,
-            content=body.content,
-            group_id=body.group_id,
-            teacher_idx=body.teacher_idx,
-            err="student_idx is required",
-        )
+        raise invalid("student_idx is required")
     check = await one(
         session,
         """
@@ -443,63 +428,42 @@ async def create_opinion(
         teacher_idx=body.teacher_idx,
     )
     if check is None or not check["registered"]:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise forbidden()
     if not check["teaches"]:
-        raise HTTPException(status_code=403, detail="Teacher does not teach this group")
+        raise forbidden("Teacher does not teach this group")
     if check["duplicate"]:
-        return OpinionCreateResponse(
-            grade=body.grade,
-            content=body.content,
-            group_id=body.group_id,
-            teacher_idx=body.teacher_idx,
-            err="Opinion already exists",
-        )
+        raise conflict("Opinion already exists")
     opinion_id = await next_id(session, "Opinion")
-    try:
-        row = await one(
-            session,
-            """
-            MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
-            MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
-            // Write lock on the student: concurrent opinions by the same student wait here,
-            // so the duplicate check below sees an opinion committed a moment earlier.
-            SET st.idx = st.idx
-            WITH st, g, t
-            WHERE NOT EXISTS { (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t) }
-            CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime()})
-            CREATE (st)-[:WRITES]->(o)
-            CREATE (o)-[:ABOUT]->(g)
-            CREATE (o)-[:ABOUT_TEACHER]->(t)
-            RETURN
-              o.id AS id,
-              o.grade AS grade,
-              o.content AS content,
-              o.submit AS submit,
-              g.id AS group_id,
-              t.idx AS teacher_idx
-            """,
-            student_idx=student_idx,
-            group_id=body.group_id,
-            teacher_idx=body.teacher_idx,
-            id=opinion_id,
-            grade=body.grade,
-            content=body.content,
-        )
-    except Neo4jError as exc:
-        return OpinionCreateResponse(
-            grade=body.grade,
-            content=body.content,
-            group_id=body.group_id,
-            teacher_idx=body.teacher_idx,
-            err=db_err(exc),
-        )
+    row = await one(
+        session,
+        """
+        MATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(g:Group {id: $group_id})
+        MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
+        // Write lock on the student: concurrent opinions by the same student wait here,
+        // so the duplicate check below sees an opinion committed a moment earlier.
+        SET st.idx = st.idx
+        WITH st, g, t
+        WHERE NOT EXISTS { (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t) }
+        CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime()})
+        CREATE (st)-[:WRITES]->(o)
+        CREATE (o)-[:ABOUT]->(g)
+        CREATE (o)-[:ABOUT_TEACHER]->(t)
+        RETURN
+          o.id AS id,
+          o.grade AS grade,
+          o.content AS content,
+          o.submit AS submit,
+          g.id AS group_id,
+          t.idx AS teacher_idx
+        """,
+        student_idx=student_idx,
+        group_id=body.group_id,
+        teacher_idx=body.teacher_idx,
+        id=opinion_id,
+        grade=body.grade,
+        content=body.content,
+    )
     if row is None:
         # Another request created the same opinion between the check above and this write.
-        return OpinionCreateResponse(
-            grade=body.grade,
-            content=body.content,
-            group_id=body.group_id,
-            teacher_idx=body.teacher_idx,
-            err="Opinion already exists",
-        )
+        raise conflict("Opinion already exists")
     return OpinionCreateResponse(**row)

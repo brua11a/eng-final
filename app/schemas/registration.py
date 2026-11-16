@@ -1,8 +1,7 @@
 from datetime import date, time
 from typing import List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from .generic import OkResponse
 
 RegType = Literal["zapisowa"]
 
@@ -34,35 +33,8 @@ class CourseInRegistration(BaseModel):
     academic_cycle: str
 
 
-class ShowCoursesInRegistrationRequest(BaseModel):
-    registration_id: str
-
-
 class ShowCoursesInRegistrationResponse(BaseModel):
     courses: List[CourseInRegistration]
-
-
-class RegisterToGroupRequest(BaseModel):
-    subject_code: str
-    group_id: str
-
-
-class RegisterToGroupResponse(OkResponse):
-    pass
-
-
-class DeregisterFromGroupRequest(BaseModel):
-    subject_code: str
-    group_id: str
-
-
-class DeregisterFromGroupResponse(OkResponse):
-    pass
-
-
-class OpenGroupsRequest(BaseModel):
-    registration_id: str
-    subject_code: str
 
 
 class OpenGroup(BaseModel):
@@ -116,9 +88,8 @@ class StartRegistrationsRequest(BaseModel):
 
 
 class StartRegistrationsResponse(BaseModel):
-    id: str | None = None
-    name: str | None = None
-    reg_type: RegType | None = None
-    turns: List[RegistrationTurnInput] = Field(default_factory=list)
-    group_ids: List[str] = Field(default_factory=list)
-    err: str | None = None
+    id: str
+    name: str
+    reg_type: RegType
+    turns: List[RegistrationTurnInput]
+    group_ids: List[str]

@@ -25,7 +25,7 @@ function submit() {
       <label>grade <input v-model="grade" type="number" step="0.5" min="2" max="5" required /></label>
       <button type="submit" :disabled="api.loading">POST /groups/students/grade</button>
     </form>
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
     <JsonPreview :data="api.result" />
   </div>
 </template>

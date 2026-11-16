@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from neo4j import AsyncSession
-from neo4j.exceptions import Neo4jError
 
 from app.database import get_session
 from app.graph_backend.auth import create_token, roles_from_flags, verify_password
 from app.graph_backend.auth.deps import Caller
-from app.graph_backend.errors import db_err
+from app.graph_backend.errors import forbidden
 from app.graph_backend.query import one
 from app.schemas.auth import LoginRequest, LoginResponse
 
@@ -26,20 +25,16 @@ RETURN
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)) -> LoginResponse:
-    try:
-        row = await one(session, _LOGIN, email=body.email)
-    except Neo4jError as exc:
-        return LoginResponse(ok=False, err=db_err(exc))
+    row = await one(session, _LOGIN, email=body.email)
     if row is None or not verify_password(body.password, row["passwd_hash"]):
-        return LoginResponse(ok=False, err="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     if row["inactive"]:
-        return LoginResponse(ok=False, err="Account inactive")
+        raise forbidden("Account inactive")
     roles = roles_from_flags(row["admin"], row["teacher"], row["student"])
     if not roles:
-        return LoginResponse(ok=False, err="Account has no role")
+        raise forbidden("Account has no role")
     caller = Caller(email=row["email"], idx=row["idx"], roles=roles)
     return LoginResponse(
-        ok=True,
         email=caller.email,
         idx=caller.idx,
         roles=list(caller.roles),

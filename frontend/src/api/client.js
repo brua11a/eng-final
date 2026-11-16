@@ -1,4 +1,5 @@
-const BASE = import.meta.env.VITE_API_URL ?? ''
+// The API is served under /api. VITE_API_URL can point at another host (e.g. http://localhost:8000).
+const BASE = `${import.meta.env.VITE_API_URL ?? ''}/api`
 
 export class ApiError extends Error {
   constructor(message, { status, detail, body } = {}) {
@@ -10,11 +11,13 @@ export class ApiError extends Error {
   }
 }
 
-function normalizeDetail(body) {
+// Errors come as {"detail": "..."}; validation errors (422 from FastAPI) as {"detail": [{msg, loc}, ...]}.
+function errorDetail(body) {
   if (!body || typeof body !== 'object') return null
   if (typeof body.detail === 'string') return body.detail
-  if (typeof body.err === 'string') return body.err
-  if (body.ok === false && typeof body.err === 'string') return body.err
+  if (Array.isArray(body.detail)) {
+    return body.detail.map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join('; ')
+  }
   return null
 }
 
@@ -60,6 +63,9 @@ async function parseJsonResponse(res) {
   }
 }
 
+// Escapes a value used as one segment of a URL path.
+const seg = (value) => encodeURIComponent(String(value))
+
 export async function apiRequest(path, opts = {}) {
   const { method = 'GET', body, auth = true, query } = opts
   let url = `${BASE}${path}`
@@ -87,46 +93,36 @@ export async function apiRequest(path, opts = {}) {
 
   const data = await parseJsonResponse(res)
 
-  if (res.status === 401) {
+  // 401 on a call with a token means the session expired; on login it means wrong credentials.
+  if (res.status === 401 && auth) {
     setAuthToken(null)
     sessionStorage.removeItem(STORAGE_KEY)
     onUnauthorized?.()
-    throw new ApiError(data.detail || 'Unauthorized', {
+    throw new ApiError(errorDetail(data) || 'Unauthorized', {
       status: 401,
-      detail: data.detail,
+      detail: errorDetail(data),
       body: data,
     })
   }
 
   if (!res.ok) {
-    throw new ApiError(data.detail || res.statusText || 'Request failed', {
+    const detail = errorDetail(data)
+    throw new ApiError(detail || res.statusText || 'Request failed', {
       status: res.status,
-      detail: data.detail,
+      detail,
       body: data,
     })
-  }
-
-  const inlineErr = normalizeDetail(data)
-  if (inlineErr && data.ok === false) {
-    return { ...data, _apiMessage: inlineErr }
-  }
-  if (typeof data.err === 'string' && data.err) {
-    return { ...data, _apiMessage: data.err }
   }
 
   return data
 }
 
 export async function login(email, password) {
-  const data = await apiRequest('/login', {
+  return apiRequest('/login', {
     method: 'POST',
     body: { email, password },
     auth: false,
   })
-  if (!data.ok) {
-    return { ok: false, err: data.err || 'Login failed' }
-  }
-  return data
 }
 
 export const catalogue = {
@@ -134,45 +130,37 @@ export const catalogue = {
   subjects: (name, code) => apiRequest('/subjects', { query: { name, code } }),
   curricula: (name) => apiRequest('/curricula', { query: { name } }),
   organizationalUnits: (name) => apiRequest('/organizational-units', { query: { name } }),
-  subjectDetail: (code) => apiRequest('/subjects/detail', { method: 'POST', body: { code } }),
+  subjectDetail: (code) => apiRequest(`/subjects/${seg(code)}`),
   subjectGroups: (subject_code, cycle_id) =>
-    apiRequest('/subjects/groups', { method: 'POST', body: { subject_code, cycle_id } }),
-  groupDetail: (group_id) => apiRequest('/groups/detail', { method: 'POST', body: { group_id } }),
-  teacherDetail: (idx) => apiRequest('/teachers/detail', { method: 'POST', body: { idx } }),
-  opinions: (query) => apiRequest('/opinions/list', { method: 'POST', body: query }),
+    apiRequest(`/subjects/${seg(subject_code)}/groups`, { query: { cycle_id } }),
+  groupDetail: (group_id) => apiRequest(`/groups/${seg(group_id)}`),
+  teacherDetail: (idx) => apiRequest(`/teachers/${seg(idx)}`),
+  opinions: (query) => apiRequest('/opinions', { query }),
 }
 
 export const student = {
   registrations: () => apiRequest('/me/registrations'),
   registrationCourses: (registration_id) =>
-    apiRequest('/me/registrations/courses', { method: 'POST', body: { registration_id } }),
+    apiRequest(`/me/registrations/${seg(registration_id)}/courses`),
   registrationGroups: (registration_id, subject_code) =>
-    apiRequest('/me/registrations/groups', {
-      method: 'POST',
-      body: { registration_id, subject_code },
-    }),
-  register: (subject_code, group_id) =>
-    apiRequest('/me/registrations/register', { method: 'POST', body: { subject_code, group_id } }),
-  deregister: (subject_code, group_id) =>
-    apiRequest('/me/registrations/deregister', { method: 'POST', body: { subject_code, group_id } }),
+    apiRequest(`/me/registrations/${seg(registration_id)}/subjects/${seg(subject_code)}/groups`),
+  register: (group_id) => apiRequest(`/me/registered-groups/${seg(group_id)}`, { method: 'PUT' }),
+  deregister: (group_id) => apiRequest(`/me/registered-groups/${seg(group_id)}`, { method: 'DELETE' }),
   enrolments: () => apiRequest('/me/enrolments'),
   academicCycles: () => apiRequest('/me/academic-cycles'),
-  academicCycleDetail: (cycle_id) =>
-    apiRequest('/me/academic-cycles/detail', { method: 'POST', body: { cycle_id } }),
+  academicCycleDetail: (cycle_id) => apiRequest(`/me/academic-cycles/${seg(cycle_id)}`),
   dashboard: () => apiRequest('/me/dashboard'),
   createOpinion: (body) => apiRequest('/opinions', { method: 'POST', body }),
 }
 
 export const teacher = {
   myGroups: (query) => apiRequest('/me/groups', { query }),
-  studentDetail: (student_idx) =>
-    apiRequest('/students/detail', { method: 'POST', body: { student_idx } }),
-  groupStudents: (group_id) =>
-    apiRequest('/groups/students', { method: 'POST', body: { group_id } }),
+  studentDetail: (student_idx) => apiRequest(`/students/${seg(student_idx)}`),
+  groupStudents: (group_id) => apiRequest(`/groups/${seg(group_id)}/students`),
   setGrade: (group_id, student_idx, grade) =>
-    apiRequest('/groups/students/grade', {
-      method: 'POST',
-      body: { group_id, student_idx, grade },
+    apiRequest(`/groups/${seg(group_id)}/students/${seg(student_idx)}/grade`, {
+      method: 'PUT',
+      body: { grade },
     }),
 }
 
@@ -181,11 +169,13 @@ export const admin = {
   createStudent: (body) => apiRequest('/admin/students', { method: 'POST', body }),
   assignUser: (body) => apiRequest('/admin/users', { method: 'POST', body }),
   deactivateUser: (idx) =>
-    apiRequest('/admin/users/deactivate', { method: 'POST', body: { idx } }),
+    apiRequest(`/admin/users/${seg(idx)}`, { method: 'PATCH', body: { active: false } }),
   activateUser: (idx) =>
-    apiRequest('/admin/users/activate', { method: 'POST', body: { idx } }),
-  addRole: (body) => apiRequest('/admin/users/roles', { method: 'POST', body }),
-  removeRole: (body) => apiRequest('/admin/users/roles/remove', { method: 'POST', body }),
+    apiRequest(`/admin/users/${seg(idx)}`, { method: 'PATCH', body: { active: true } }),
+  addRole: ({ idx, role, ...details }) =>
+    apiRequest(`/admin/users/${seg(idx)}/roles/${seg(role)}`, { method: 'PUT', body: details }),
+  removeRole: ({ idx, role }) =>
+    apiRequest(`/admin/users/${seg(idx)}/roles/${seg(role)}`, { method: 'DELETE' }),
   createFaculty: (body) => apiRequest('/admin/faculties', { method: 'POST', body }),
   listFaculties: () => apiRequest('/organizational-units'),
   listProgrammes: () => apiRequest('/admin/programmes'),
@@ -197,7 +187,8 @@ export const admin = {
   listGroups: () => apiRequest('/admin/groups'),
   createRoom: (body) => apiRequest('/admin/rooms', { method: 'POST', body }),
   createAcademicCycle: (body) => apiRequest('/admin/academic-cycles', { method: 'POST', body }),
-  createSubject: (body) => apiRequest('/admin/subjects', { method: 'POST', body }),
+  createSubject: ({ code, ...body }) =>
+    apiRequest(`/admin/subjects/${seg(code)}`, { method: 'PUT', body }),
   createCurriculumTerm: (body) => apiRequest('/admin/curriculum-terms', { method: 'POST', body }),
   createCurriculum: (body) => apiRequest('/admin/curricula', { method: 'POST', body }),
   createGroupType: (body) => apiRequest('/admin/group-types', { method: 'POST', body }),
@@ -206,10 +197,13 @@ export const admin = {
   startRegistrations: (body) => apiRequest('/admin/registrations', { method: 'POST', body }),
   createOpinion: (body) => apiRequest('/opinions', { method: 'POST', body }),
   createAdmin: (body) => apiRequest('/admin/admins', { method: 'POST', body }),
-  removeUser: (idx) => apiRequest('/admin/users/remove', { method: 'POST', body: { idx } }),
+  // 204 No Content: return the idx so the view can say whose login was removed.
+  removeUser: (idx) =>
+    apiRequest(`/admin/users/${seg(idx)}`, { method: 'DELETE' }).then(() => ({ idx })),
   createProgramme: (body) => apiRequest('/admin/programmes', { method: 'POST', body }),
   addSubjectToTerm: (body) => apiRequest('/admin/curriculum-terms/subjects', { method: 'POST', body }),
-  enrolStudent: (body) => apiRequest('/admin/students/enrol', { method: 'POST', body }),
+  enrolStudent: ({ student_idx, term_id }) =>
+    apiRequest(`/admin/students/${seg(student_idx)}/enrolments`, { method: 'POST', body: { term_id } }),
   assignStudentsToTurn: (body) =>
     apiRequest('/admin/registrations/turns/students', { method: 'POST', body }),
   deanRegister: (body) => apiRequest('/admin/groups/students', { method: 'POST', body }),

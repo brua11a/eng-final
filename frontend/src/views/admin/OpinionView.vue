@@ -38,8 +38,8 @@ function send() {
         <label>Content <textarea maxlength="1000" v-model="content" rows="3" /></label>
         <button type="submit" class="teacher-btn-save" :disabled="api.loading">Submit</button>
       </form>
-      <ApiMessages :error="api.error" :api-message="api.apiMessage" />
-      <p v-if="api.result?.id && !api.apiMessage" class="admin-ok">Opinion {{ api.result.id }}</p>
+      <ApiMessages :error="api.error" />
+      <p v-if="api.result?.id" class="admin-ok">Opinion {{ api.result.id }}</p>
     </section>
   </div>
 </template>

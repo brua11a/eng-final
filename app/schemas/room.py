@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from pydantic import BaseModel
 
 
@@ -11,7 +11,6 @@ class RoomCreateResponse(BaseModel):
     id: str
     building: str
     room_num: str
-    err: Optional[str] = None
 
 
 class RoomItem(BaseModel):

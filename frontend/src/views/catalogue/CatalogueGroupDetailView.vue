@@ -56,7 +56,7 @@ function load() {
       </RouterLink>
     </h1>
 
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
 
     <div v-if="api.result" class="group-detail__panel">
       <GroupFacts :group="api.result" />

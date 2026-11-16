@@ -41,7 +41,7 @@ function searchAgain({ name }) {
       @search="searchAgain"
     />
 
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
 
     <div v-if="api.result?.teachers?.length" class="catalogue-results-table-wrap">
       <table class="catalogue-results-table">

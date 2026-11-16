@@ -63,9 +63,11 @@ export const useAuthStore = defineStore('auth', {
   },
   actions: {
     async login(email, password) {
-      const data = await apiLogin(email, password)
-      if (!data.ok) {
-        return { ok: false, err: data.err || 'Login failed' }
+      let data
+      try {
+        data = await apiLogin(email, password)
+      } catch (e) {
+        return { ok: false, err: e.detail || e.message || 'Login failed' }
       }
       this.token = data.token
       this.idx = data.idx

@@ -23,7 +23,6 @@ class TeacherCreateResponse(BaseModel):
     photo: Optional[str] = None
     working_since: date
     faculty_id: str
-    err: Optional[str] = None
 
 
 class TeacherCatalogueItem(BaseModel):
@@ -39,10 +38,6 @@ class TeacherCatalogueItem(BaseModel):
 
 class TeacherCatalogueResponse(BaseModel):
     teachers: List[TeacherCatalogueItem]
-
-
-class TeacherDetailRequest(BaseModel):
-    idx: str
 
 
 class TeachingGroupItem(BaseModel):

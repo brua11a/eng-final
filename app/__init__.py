@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import close_driver, verify_connectivity
 from app.graph_backend.errors import register_exception_handlers
@@ -19,17 +18,19 @@ async def lifespan(app: FastAPI):
     await close_driver()
 
 
-app = FastAPI(title="eng-final", lifespan=lifespan)
-register_exception_handlers(app)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# The whole API lives under /api, so it never shares a path with a page of the frontend.
+API_PREFIX = "/api"
+
+app = FastAPI(
+    title="eng-final",
+    lifespan=lifespan,
+    docs_url=f"{API_PREFIX}/docs",
+    redoc_url=f"{API_PREFIX}/redoc",
+    openapi_url=f"{API_PREFIX}/openapi.json",
 )
-app.include_router(public_router)
-app.include_router(catalogue_router)
-app.include_router(student_router)
-app.include_router(teacher_router)
-app.include_router(admin_router)
+register_exception_handlers(app)
+app.include_router(public_router, prefix=API_PREFIX)
+app.include_router(catalogue_router, prefix=API_PREFIX)
+app.include_router(student_router, prefix=API_PREFIX)
+app.include_router(teacher_router, prefix=API_PREFIX)
+app.include_router(admin_router, prefix=API_PREFIX)

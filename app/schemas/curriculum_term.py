@@ -13,4 +13,3 @@ class CurriculumTermCreateResponse(BaseModel):
     sem: int
     curriculum_id: str
     cycle_id: Optional[str] = None
-    err: Optional[str] = None

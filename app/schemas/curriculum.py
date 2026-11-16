@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from pydantic import BaseModel
 
 
@@ -11,7 +11,6 @@ class CurriculumCreateResponse(BaseModel):
     id: str
     programme_id: str
     intake_year: str
-    err: Optional[str] = None
 
 
 class CurriculumCatalogueItem(BaseModel):

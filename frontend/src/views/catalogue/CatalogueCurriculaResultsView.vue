@@ -41,7 +41,7 @@ function searchAgain({ name }) {
       @search="searchAgain"
     />
 
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
 
     <ul v-if="api.result?.curricula?.length" class="result-list">
       <li v-for="c in api.result.curricula" :key="c.id">

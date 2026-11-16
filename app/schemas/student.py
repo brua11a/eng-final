@@ -23,11 +23,6 @@ class StudentCreateResponse(BaseModel):
     phone: str
     photo: Optional[str] = None
     joined: datetime
-    err: Optional[str] = None
-
-
-class StudentDetailRequest(BaseModel):
-    student_idx: str
 
 
 class StudentDetailResponse(BaseModel):
@@ -39,7 +34,6 @@ class StudentDetailResponse(BaseModel):
     joined: datetime
     avg_grade: Optional[float] = None
     term_ids: list[str] = Field(default_factory=list)
-    err: Optional[str] = None
 
 
 class StudentInGroup(BaseModel):
@@ -52,17 +46,11 @@ class StudentInGroup(BaseModel):
     grade: Optional[float] = None
 
 
-class StudentsInGroupRequest(BaseModel):
-    group_id: str
-
-
 class StudentsInGroupResponse(BaseModel):
     students: List[StudentInGroup]
 
 
 class SetGroupGradeRequest(BaseModel):
-    group_id: str
-    student_idx: str
     grade: float
 
     @field_validator("grade")
@@ -75,4 +63,3 @@ class SetGroupGradeResponse(BaseModel):
     group_id: str
     student_idx: str
     grade: float
-    err: Optional[str] = None

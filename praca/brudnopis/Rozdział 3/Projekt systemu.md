@@ -4,8 +4,8 @@ System składa się z trzech warstw: klienta webowego, interfejsu programistyczn
 
 ```mermaid
 flowchart LR
-    P[Przeglądarka] -- HTTP --> K[Klient webowy]
-    P -- "żądania REST/JSON z tokenem" --> A[API]
+    P[Przeglądarka] -- HTTPS --> N[nginx: klient webowy]
+    N -- "/api/*: żądania REST/JSON z tokenem" --> A[API]
     A -- "konto API: odczyt i zapis danych" --> D[(Baza danych)]
     I[Proces inicjalizacji] -- "konto administratora: schemat, import" --> D
 ```
@@ -268,7 +268,13 @@ Kontrola dostępu polega na uwierzytelnianiu i autoryzacji: najpierw ustala się
 
 Użytkownik loguje się adresem e-mail i hasłem z etykiety User. Hasła są przechowywane jako skrót wyznaczony algorytmem bcrypt. Jest to funkcja celowo kosztowna obliczeniowo i z wbudowaną solą (ang. *salt*), dzięki czemu nawet wyciek bazy nie pozwala łatwo odtworzyć haseł, a dwóch użytkowników o tym samym haśle ma różne skróty. [CYTOWANIE: https://www.usenix.org/legacy/events/usenix99/provos/provos.pdf]
 
-Logowanie powiedzie się tylko wtedy, gdy istnieje użytkownik o podanym adresie, hasło zgadza się ze skrótem oraz konto nie jest dezaktywowane etykietą Inactive.
+Logowanie powiedzie się tylko wtedy, gdy:
+- istnieje użytkownik o podanym adresie,
+- hasło zgadza się ze skrótem,
+- konto nie jest dezaktywowane etykietą Inactive,
+- osoba ma co najmniej jedną rolę (Student, Teacher lub Admin) - bez niej token nie dawałby dostępu do żadnego modułu API.
+
+Błędny adres i błędne hasło dają tę samą odpowiedź (401). Komunikat jest ten sam, żeby nie zdradzać, czy konto o danym adresie istnieje. Konto nieaktywne lub bez roli jest odrzucane z kodem 403.
 
 Po poprawnym zalogowaniu API wydaje token JWT (ang. *JSON Web Token*) [CYTOWANIE: RFC 7519], podpisany kluczem znanym wyłącznie serwerowi. Token zawiera adres e-mail, identyfikator osoby (`idx`) oraz listę jej ról, a także czas wygaśnięcia. Klient dołącza go do każdego kolejnego żądania w nagłówku `Authorization`. Dzięki temu API jest bezstanowe: nie przechowuje sesji, a do ustalenia tożsamości i ról wystarczy sprawdzić podpis tokenu, bez dodatkowego zapytania do bazy przy każdym żądaniu.
 
@@ -292,7 +298,7 @@ Dodatkowy mechanizm blokujący tego typu sytuacje nazywa się kontrolą dostępu
 
 Drugi etap autoryzacji polega więc na sprawdzeniu w bazie, czy odpowiednia ścieżka w grafie istnieje, np. czy od prowadzącego do grupy prowadzi krawędź TEACHES albo czy student jest połączony z grupą krawędzią REGISTERED_IN. Ponownie, w tej platformie krawędzie uprawniające do dostępu są tymi samymi krawędziami, które opisują domenę - nie trzeba utrzymywać osobnych list uprawnień, które mogłyby się rozjechać z danymi. Gdyby przypadkiem dodać prowadzącego do grupy, po czym usunąc powstałą krawędź TEACHES, wraz z nią znikłaby możliwość oceniania studentów w tej grupie przez tego nauczyciela.
 
-Operacje na własnych danych użytkownika, na przykład plan zajęć studenta czy lista jego zapisów, nie przyjmują identyfikatora osoby z treści (ang. *body*) zapytania. Zamiast tego, identyfikator jest brany z tokenu JWT. Dzięki temu student nie może podejrzeć danych innego studenta, podmieniając identyfikator w żądaniu. 
+Operacje na własnych danych użytkownika, na przykład plan zajęć studenta czy lista jego zapisów, nie przyjmują identyfikatora osoby z treści (ang. *body*) zapytania. Zamiast tego, identyfikator jest brany z tokenu JWT. Dzięki temu student nie może podejrzeć danych innego studenta, podmieniając identyfikator w żądaniu. Takie operacje mają w ścieżce prefiks `/me/` (np. `GET /me/enrolments`), a identyfikator osoby nie występuje ani w treści, ani w ścieżce żądania.
 
 Administrator ma dostęp do wszystkich operacji potrzebnych do zarządzania uczelnią i tworzenia wszystkich niezbędnych krawędzi i węzłów bez potrzeby pisania kwerend w Cypher. Może wykonywać operacje prowadzącego w imieniu dowolnego prowadzącego (np. poprawić ocenę), bez sprawdzania relacji. 
 
@@ -323,7 +329,7 @@ flowchart LR
     T -- tak --> R{Rola dozwolona<br/>dla punktu końcowego?}
     R -- nie --> E403a[403]
     R -- tak --> G{Wymagana ścieżka<br/>w grafie istnieje?<br/>np. TEACHES, REGISTERED_IN}
-    G -- nie --> E403b[odmowa]
+    G -- nie --> E403b[403 / 404]
     G -- tak --> DB[(Neo4j<br/>konto API: tylko odczyt<br/>i zapis danych)]
     subgraph API
         T
@@ -356,16 +362,19 @@ Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: 
 
 Wszystkie żądania i odpowiedzi są opisane modelami danych, wspólnymi dla obu backendów (4.2). Na ich podstawie API sprawdza poprawność danych wejściowych, zanim wykona jakiekolwiek zapytanie do bazy: brakujące pola, niewłaściwe typy czy wartości spoza dozwolonego zakresu, np. ocena spoza skali 2,0–5,0, są odrzucane z kodem HTTP 422 (ang. *Unprocessable Content*) [CYTOWANIE: RFC 9110], wraz z informacją, które pole jest niepoprawne. Walidacja dotyczy również odpowiedzi - API nie zwróci klientowi danych o innym kształcie, niż zadeklarował.
 
-| Kod | Znaczenie |
-|---|---|
-| 200 | żądanie obsłużone; ewentualna odmowa wynikająca z reguł domeny w polu `err` |
-| 400 | nieoczekiwany błąd wykonania zapytania |
-| 401 | brak tokenu albo token nieważny lub wygasły |
-| 403 | brak wymaganej roli lub relacji z zasobem (4.4.2) |
-| 404 | żądany zasób nie istnieje |
-| 422 | dane wejściowe niezgodne z modelem |
+Wynik operacji przekazuje kod odpowiedzi HTTP [CYTOWANIE: RFC 9110, sekcja 15]. Sukces oznacza kod 200, utworzenie zasobu kod 201 wraz z nagłówkiem `Location` wskazującym nowy zasób, a pomyślna operacja bez treści odpowiedzi kod 204. Błędy mają zawsze postać `{"detail": "<komunikat>"}`, a ich rodzaj określa kod:
+
+| Kod | Znaczenie                                                                     |
+| --- | ----------------------------------------------------------------------------- |
+| 400 | baza danych odrzuciła parametr zapytania, np. niepoprawną datę                |
+| 401 | brak lub nieważny token, błędny e-mail lub hasło                              |
+| 403 | rola lub relacje użytkownika nie pozwalają na operację                        |
+| 404 | zasób wskazany w ścieżce lub treści żądania nie istnieje                      |
+| 409 | konflikt z bieżącym stanem danych, np. duplikat, pełna grupa, ostatnia rola   |
+| 422 | niepoprawne wartości, np. zły format lub data końca wcześniejsza niż początek |
+| 500 | nieoczekiwany błąd serwera lub bazy danych                                    |
 *Kody HTTP zwracane przez API*
 
-Odmowy wynikające z reguł domeny, np. brak wolnych miejsc w grupie lub ponowna opinia o tym samym prowadzącym, nie są błędami - zwracane są z kodem 200, a ich przyczynę podaje pole `err` odpowiedzi. Kod 403 oznacza natomiast brak uprawnienia. Wyjątkiem są zapis na grupę i wypis z niej: uprawnienie sprawdzane jest tam w tym samym zapytaniu co zapis (4.3.4), dlatego jego brak również zgłaszany jest w polu `err`.
+Dzięki temu klient nie musi przeglądać treści odpowiedzi, by rozpoznać błąd. Wystarczy sam kod, a komunikat w polu `detail` służy jedynie do wyświetlenia użytkownikowi.
 
-Punkty końcowe bez parametrów używają metody GET, a pozostałe - metody POST z parametrami w treści żądania. Dzięki temu wszystkie parametry walidowane są w ten sam sposób, a identyfikatory nie trafiają do adresów URL.
+Metoda HTTP określa rodzaj operacji. Punkty końcowe, które jedynie odczytują dane, korzystają z metody `GET` i nie mają treści żądania: identyfikator konkretnego zasobu jest częścią ścieżki (np. `GET /groups/{group_id}`), a opcjonalne filtry są przekazywane jako parametry zapytania (np. `GET /subjects?name=sieci`). Nowe zasoby są tworzone metodą `POST`, ustawienie zasobu o znanym identyfikatorze (np. oceny lub miejsca studenta w grupie) metodą `PUT`, częściowa zmiana metodą `PATCH`, a usunięcie metodą `DELETE`. Dzięki temu już sama metoda mówi, czy żądanie może zmienić stan systemu i czy można je bezpiecznie powtórzyć - `GET`, `PUT` i `DELETE` są idempotentne [CYTOWANIE: RFC 9110, sekcja 9.2.2].

@@ -16,7 +16,6 @@ class AcademicCycleCreateResponse(BaseModel):
     season: str
     start_date: date
     end_date: date
-    err: Optional[str] = None
 
 class MyAcademicCycleItem(BaseModel):
     id: str
@@ -32,10 +31,6 @@ class MyAcademicCyclesResponse(BaseModel):
 
 class AcademicCycleListResponse(BaseModel):
     cycles: List[MyAcademicCycleItem]
-
-
-class MyAcademicCycleDetailRequest(BaseModel):
-    cycle_id: str
 
 
 class CycleSubjectGroup(BaseModel):

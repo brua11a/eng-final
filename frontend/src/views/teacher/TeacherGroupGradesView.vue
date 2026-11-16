@@ -64,9 +64,8 @@ async function saveGrades() {
       const grade = parseGrade(drafts[st.idx])
       if (grade == null) continue
       try {
-        const res = await teacher.setGrade(groupId.value, st.idx, grade)
-        if (res?.err) errors.push(`${st.idx}: ${res.err}`)
-        else original[st.idx] = drafts[st.idx]
+        await teacher.setGrade(groupId.value, st.idx, grade)
+        original[st.idx] = drafts[st.idx]
       } catch (e) {
         errors.push(`${st.idx}: ${e.message}`)
       }

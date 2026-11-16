@@ -3,15 +3,14 @@ from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
+from app.graph_backend.errors import invalid, not_found
 from app.graph_backend.grades import average_grade
 from app.graph_backend.query import one, run
 from app.schemas.student import (
     SetGroupGradeRequest,
     SetGroupGradeResponse,
-    StudentDetailRequest,
     StudentDetailResponse,
     StudentInGroup,
-    StudentsInGroupRequest,
     StudentsInGroupResponse,
 )
 from app.graph_backend.teaching import teacher_groups
@@ -27,7 +26,7 @@ def _resolve_teacher_idx(caller: Caller, teacher_idx: str | None) -> str:
     if "Teacher" in caller.roles and caller.idx:
         return caller.idx
     if "Admin" in caller.roles:
-        raise HTTPException(status_code=400, detail="teacher_idx is required")
+        raise invalid("teacher_idx is required")
     raise HTTPException(status_code=403, detail="Forbidden")
 
 _STUDENT = """
@@ -60,9 +59,9 @@ RETURN
 """
 
 
-@router.post("/students/detail", response_model=StudentDetailResponse)
+@router.get("/students/{student_idx}", response_model=StudentDetailResponse)
 async def student_detail(
-    body: StudentDetailRequest,
+    student_idx: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_staff),
 ) -> StudentDetailResponse:
@@ -74,21 +73,14 @@ async def student_detail(
             RETURN st.idx AS idx
             """,
             teacher_idx=caller.idx,
-            student_idx=body.student_idx,
+            student_idx=student_idx,
         )
         if allowed is None:
             raise HTTPException(status_code=403, detail="Forbidden")
-    row = await one(session, _STUDENT, student_idx=body.student_idx)
+    row = await one(session, _STUDENT, student_idx=student_idx)
     if row is None:
-        return StudentDetailResponse(
-            idx=body.student_idx,
-            name="",
-            surname="",
-            phone="",
-            joined="1970-01-01T00:00:00+00:00",
-            err="Student not found",
-        )
-    grade_rows = await run(session, _STUDENT_GRADES, student_idx=body.student_idx)
+        raise not_found("Student")
+    grade_rows = await run(session, _STUDENT_GRADES, student_idx=student_idx)
     return StudentDetailResponse(**row, avg_grade=average_grade(grade_rows))
 
 
@@ -102,9 +94,9 @@ async def my_teaching_groups(
     return MyTeachingGroupsResponse(groups=await teacher_groups(session, idx))
 
 
-@router.post("/groups/students", response_model=StudentsInGroupResponse)
+@router.get("/groups/{group_id}/students", response_model=StudentsInGroupResponse)
 async def students_in_group(
-    body: StudentsInGroupRequest,
+    group_id: str,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_staff),
 ) -> StudentsInGroupResponse:
@@ -116,7 +108,7 @@ async def students_in_group(
             RETURN g.id AS id
             """,
             teacher_idx=caller.idx,
-            group_id=body.group_id,
+            group_id=group_id,
         )
         if allowed is None:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -135,13 +127,15 @@ async def students_in_group(
           r.grade AS grade
         ORDER BY st.surname, st.name
         """,
-        group_id=body.group_id,
+        group_id=group_id,
     )
     return StudentsInGroupResponse(students=[StudentInGroup(**row) for row in rows])
 
 
-@router.post("/groups/students/grade", response_model=SetGroupGradeResponse)
+@router.put("/groups/{group_id}/students/{student_idx}/grade", response_model=SetGroupGradeResponse)
 async def set_group_grade(
+    group_id: str,
+    student_idx: str,
     body: SetGroupGradeRequest,
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_staff),
@@ -154,7 +148,7 @@ async def set_group_grade(
             RETURN g.id AS id
             """,
             teacher_idx=caller.idx,
-            group_id=body.group_id,
+            group_id=group_id,
         )
         if allowed is None:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -165,15 +159,10 @@ async def set_group_grade(
         SET r.grade = $grade
         RETURN g.id AS group_id, st.idx AS student_idx, r.grade AS grade
         """,
-        student_idx=body.student_idx,
-        group_id=body.group_id,
+        student_idx=student_idx,
+        group_id=group_id,
         grade=body.grade,
     )
     if row is None:
-        return SetGroupGradeResponse(
-            group_id=body.group_id,
-            student_idx=body.student_idx,
-            grade=body.grade,
-            err="Student is not registered in this group",
-        )
+        raise not_found("Student registered in this group")
     return SetGroupGradeResponse(**row)

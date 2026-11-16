@@ -36,7 +36,7 @@ const teacherDetailApi = useApiCall()
         <input v-model="teacherName" placeholder="name filter" />
         <button type="submit" :disabled="teachersApi.loading">Search</button>
       </form>
-      <ApiMessages :error="teachersApi.error" :api-message="teachersApi.apiMessage" />
+      <ApiMessages :error="teachersApi.error" />
       <JsonPreview :data="teachersApi.result" />
     </section>
 
@@ -50,7 +50,7 @@ const teacherDetailApi = useApiCall()
         <input v-model="subjectCode" placeholder="code" />
         <button type="submit" :disabled="subjectsApi.loading">Search</button>
       </form>
-      <ApiMessages :error="subjectsApi.error" :api-message="subjectsApi.apiMessage" />
+      <ApiMessages :error="subjectsApi.error" />
       <JsonPreview :data="subjectsApi.result" />
     </section>
 
@@ -63,12 +63,12 @@ const teacherDetailApi = useApiCall()
         <input v-model="curriculumName" placeholder="programme name" />
         <button type="submit" :disabled="curriculaApi.loading">Search</button>
       </form>
-      <ApiMessages :error="curriculaApi.error" :api-message="curriculaApi.apiMessage" />
+      <ApiMessages :error="curriculaApi.error" />
       <JsonPreview :data="curriculaApi.result" />
     </section>
 
     <section class="block">
-      <h2>Subject detail (POST /subjects/detail)</h2>
+      <h2>Subject detail (GET /subjects/{code})</h2>
       <form
         class="row"
         @submit.prevent="subjectDetailApi.run(() => catalogue.subjectDetail(subjectDetailCode))"
@@ -78,13 +78,12 @@ const teacherDetailApi = useApiCall()
       </form>
       <ApiMessages
         :error="subjectDetailApi.error"
-        :api-message="subjectDetailApi.apiMessage"
       />
       <JsonPreview :data="subjectDetailApi.result" />
     </section>
 
     <section class="block">
-      <h2>Subject groups (POST /subjects/groups)</h2>
+      <h2>Subject groups (GET /subjects/{code}/groups)</h2>
       <form
         class="row"
         @submit.prevent="subjectGroupsApi.run(() => catalogue.subjectGroups(subjectGroupsCode))"
@@ -94,13 +93,12 @@ const teacherDetailApi = useApiCall()
       </form>
       <ApiMessages
         :error="subjectGroupsApi.error"
-        :api-message="subjectGroupsApi.apiMessage"
       />
       <JsonPreview :data="subjectGroupsApi.result" />
     </section>
 
     <section class="block">
-      <h2>Group detail (POST /groups/detail)</h2>
+      <h2>Group detail (GET /groups/{group_id})</h2>
       <form
         class="row"
         @submit.prevent="groupDetailApi.run(() => catalogue.groupDetail(groupId))"
@@ -110,13 +108,12 @@ const teacherDetailApi = useApiCall()
       </form>
       <ApiMessages
         :error="groupDetailApi.error"
-        :api-message="groupDetailApi.apiMessage"
       />
       <JsonPreview :data="groupDetailApi.result" />
     </section>
 
     <section class="block">
-      <h2>Teacher detail (POST /teachers/detail)</h2>
+      <h2>Teacher detail (GET /teachers/{idx})</h2>
       <form
         class="row"
         @submit.prevent="teacherDetailApi.run(() => catalogue.teacherDetail(teacherIdx))"
@@ -126,7 +123,6 @@ const teacherDetailApi = useApiCall()
       </form>
       <ApiMessages
         :error="teacherDetailApi.error"
-        :api-message="teacherDetailApi.apiMessage"
       />
       <JsonPreview :data="teacherDetailApi.result" />
     </section>

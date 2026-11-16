@@ -60,14 +60,13 @@ async function submitForTarget(item) {
   const draft = drafts[key]
   Object.assign(st, { saving: true, error: '', ok: '' })
   try {
-    const res = await student.createOpinion({
+    await student.createOpinion({
       grade: Number(draft.grade),
       content: draft.content.trim() || null,
       group_id: item.group_id,
       teacher_idx: item.teacher.idx,
     })
-    if (res?.err) st.error = res.err
-    else st.ok = 'Saved'
+    st.ok = 'Saved'
   } catch (e) {
     st.error = errorMessage(e)
   } finally {

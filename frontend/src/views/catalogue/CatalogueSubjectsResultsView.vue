@@ -60,7 +60,7 @@ function cellLabel(cell) {
       @search="searchAgain"
     />
 
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
 
     <div v-if="pageRows.length" class="catalogue-results-table-wrap">
       <table class="catalogue-results-table catalogue-results-table--subjects">

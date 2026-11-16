@@ -15,7 +15,7 @@ onMounted(() => api.run(() => student.dashboard()))
     <button type="button" :disabled="api.loading" @click="api.run(() => student.dashboard())">
       GET /me/dashboard
     </button>
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
     <JsonPreview :data="api.result" />
   </div>
 </template>

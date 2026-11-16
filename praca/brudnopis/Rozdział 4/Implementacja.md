@@ -171,13 +171,11 @@ W trakcie developmentu wystawiany był port 7474 - HTTP. Wdrożono jednak certyf
 
 Port TCP 7687 to domyślny port połączenia Bolt. Jest on wykorzystywany przez Cypher Shell, pokazaną wyżej konsolę Neo4j oraz przez oficjalne drivery Neo4j. Z racji tego, że API będzie wykorzystywało driver Neo4j do komunikacji z bazą, port 7687 jest konieczny.
 
-Żeby połączenie między bazą a API było odporne na podsłuch, wprowadzono szyfrowanie poprzez TLS/SSL. W związku z tym, że SSL jest włączony z Bolt, URI zmienia się z `bolt` na `bolt+s`. Gdyby certyfikat był self-signed, to zamiast tego URI zaczynałoby się od `bolt+ssc`. Ta opcja włącza szyfrowanie bez dodatkowego sprawdzania certyfikatu, co jest akceptowalne na potrzeby lokalnego developmentu. Przeglądarka ostrzegałaby przed wejściem na stronę zabezpieczoną self-signed certyfikatem.
-
-Postanowiono jednak użyć mkcert (https://github.com/FiloSottile/mkcert), co daje wygodę self-signed certyfikatów z "poprawnością" pełnoprawnych certyfikatów. We wdrożeniu produkcyjnym, te certyfikaty zostałyby zastąpione certyfiaktami od publicznie znanego CA
+Żeby połączenie między bazą a API było odporne na podsłuch, wprowadzono szyfrowanie poprzez TLS/SSL. W związku z tym, że SSL jest włączony z Bolt, URI zmienia się z `bolt` na `bolt+s`. Certyfikaty opisano w 5.1.1, a wady alternatywnego schematu `bolt+ssc` w 5.1.4.
 
 Pozostałe porty domyślnie włączone na instancjach Neo4j, takie jak "Cluster routing connector" czy "Remote debugging" uznano za niepotrzebne. W związku z tym, że nie są one potrzebne, to nie powinny być wystawiane.
 
-Konfiguracja bazowego obrazu Neo4j odbywa się poprzez ustawianie zmiennych środowiskowych. Poza wcześniej wymienioną zmienną potrzebną do akceptowania licencji enterprise, należało włączyć szyfrowanie (https i bolt+s), wyłączyć domyślnie włączone, niebezpieczne protokoły (https), przekazać katalog z zaufanymi certyfikatami, a także przekazać dane do inicjalizacji konta administratora, wyciągane z `.env`.
+Konfiguracja bazowego obrazu Neo4j odbywa się poprzez ustawianie zmiennych środowiskowych. Poza wcześniej wymienioną zmienną potrzebną do akceptowania licencji enterprise, należało włączyć szyfrowanie (https i bolt+s), wyłączyć domyślnie włączone, niebezpieczne protokoły (http), przekazać katalog z zaufanymi certyfikatami, a także przekazać dane do inicjalizacji konta administratora, wyciągane z `.env`.
 
 Wolumeny zamontowane w ramach tego serwisu to `neo4j_data`, `import` i `certificates`. Certyfikaty są konieczne do wdrożenia szyfrowania SSL/TLS. Import zawiera dane, które będą importowane do bazy danych po tym, jak ta wstanie. neo4j_data służy do przechowywania danych w samej bazie już po inicjalizacji, w tym zmian wprowadzonych na żywej instancji pomiędzy uruchomieniami kontenera.
 
@@ -191,7 +189,7 @@ Polega on na tym samym obrazie, co serwis neo4j. Zdecydowano się na takie rozwi
 
 Serwis init polega na serwisie neo4j, czyli uruchomi się dopiero, gdy tamten będzie w stanie "zdrowym" (ang. *healthy*). Zdrowie serwisu jest sprawdzane healthcheck opisanym wcześniej.
 
-Zmienne przekazane do kontenera to adres bazy danych (port 7687 po `bolt+s` dla adresu kontenera `neo4j`) oraz dane do logowania administratora i użytkownika. Dane administratora są potrzebne do inicjalizacji schemy, w tym ograniczeń, a także zapełnienia bazy danymi przygotowanymi w plikach .csv. Login i hasło użytkownika są potrzebne do stworzenia konta z ograniczonymi uprawnieniami, którym baza danych będzie się komunikowała z API. To konto będzie miało możliwość zapisu i odczytu, ale nie będzie w stanie modyfikować schemy i uprawnień.
+Zmienne przekazane do kontenera to adres bazy danych (port 7687 po `bolt+s` dla adresu kontenera `neo4j`) oraz dane do logowania administratora i użytkownika. Dane administratora są potrzebne do inicjalizacji schemy, w tym ograniczeń, a także zapełnienia bazy danymi przygotowanymi w plikach .csv. Login i hasło użytkownika są potrzebne do stworzenia konta z ograniczonymi uprawnieniami, którym baza danych będzie się komunikowała z API.
 
 Wolumeny montowane w ramach tego kontenera to `queries`, `init.sh` i `certificates`. Wszystkie są ustawione na tryb `ro` - read only, ponieważ nie istnieje powód, dla którego `init` powinien kiedykolwiek modyfikować te pliki.
 
@@ -311,43 +309,20 @@ Bez tego ruch między serwerem nginx a API odbywałby się zwykłym HTTP. Szyfro
 
 Konfiguracja połączenia po stronie nginx, w tym weryfikacja certyfikatu API, została opisana w 5.1.6.
 
-Konfiguracja serwisu w `docker-compose.yml`:
-
-```yml
-  app:
-    build: .
-    ports:
-      - "127.0.0.1:8000:8000"
-    environment:
-      NEO4J_URI: bolt+s://neo4j:7687
-      NEO4J_USER: ${NEO4J_APP_USER}
-      NEO4J_PASSWORD: ${NEO4J_APP_PASSWORD:?set NEO4J_APP_PASSWORD in .env}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      SSL_CERT_FILE: /ca.pem
-    volumes:
-      - ./certificates/ca.pem:/ca.pem:ro
-      - ./certificates/app:/certs:ro
-    read_only: true
-    tmpfs:
-      - /tmp
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    depends_on:
-      init:
-        condition: service_completed_successfully
-```
+Konfiguracja serwisu w `docker-compose.yml` znajduje się w 5.1.2.
 
 `build: .` buduje obraz z opisanego wyżej `Dockerfile`, znajdującego się w katalogu głównym projektu.
 
-Aplikacja wystawiona na porcie 8000 jest również przekierowywana na port 8000 localhost, dzięki czemu API jest widoczne dla developera pod adresem `https://localhost:8000`. Zwykłe żądanie HTTP na ten port nie otrzymuje odpowiedzi.
+Aplikacja wystawiona na porcie 8000 jest również przekierowywana na port 8000 localhost, dzięki czemu API jest widoczne dla developera pod adresem `https://localhost:8000/api`. Zwykłe żądanie HTTP na ten port nie otrzymuje odpowiedzi.
 
 ![[Pasted image 20261115020127.png]]
 
 *API widoczne z przeglądarki*
 
-W produkcyjnym wdrożeniu port 8000 w tym kontenerze nie powinien być wystawiony na hosta. Nie jest on potrzebny do działania systemu: z bazą danych połączenie jest wykonywane po `bolt+s://neo4j:7687`, a aplikacja kliencka widzi API poprzez serwer nginx w kontenerze `frontend`, pełniący rolę odwrotnego proxy (ang. *reverse proxy*). Przeglądarka komunikuje się wyłącznie z nginx po HTTPS, w ramach tego samego *origin* co aplikacja kliencka, a nginx przekazuje żądania kierowane do ścieżek API pod adres `https://app:8000` w wewnętrznej sieci Dockera (5.1.6).
+> [!todo] [A6] Nowy zrzut ekranu, np. `https://localhost:8000/api/docs`
+> Stary zrzut pokazuje API sprzed dodania prefiksu `/api`.
+
+W produkcyjnym wdrożeniu port 8000 w tym kontenerze nie powinien być wystawiony na hosta. Nie jest on potrzebny do działania systemu: z bazą danych połączenie jest wykonywane po `bolt+s://neo4j:7687`, a aplikacja kliencka widzi API poprzez serwer nginx w kontenerze `frontend`, pełniący rolę odwrotnego proxy (ang. *reverse proxy*). Przeglądarka komunikuje się wyłącznie z nginx po HTTPS, w ramach tego samego *origin* co aplikacja kliencka, a nginx przekazuje żądania kierowane do ścieżek zaczynających się od `/api` pod adres `https://app:8000` w wewnętrznej sieci Dockera (5.1.6).
 
 Zmienne środowiskowe przekazują aplikacji konfigurację w postaci adresu bazy danych (`NEO4J_URI`) i danych uwierzytelniających użytkownika systemowego stworzonego przez serwis `init` (`NEO4J_USER` i `NEO4J_PASSWORD`). Dodatkowo przekazywany jest `JWT_SECRET` potrzebny do podpisywania tokenów wydawanych przez API oraz `SSL_CERT_FILE`, czyli ścieżka do certyfikatu. Dzięki tej fladze, certyfikat zostaje załadowany do zaufanych certyfikatów, co pozwala później z nich korzystać.
 
@@ -394,7 +369,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 Wykorzystano budowanie wieloetapowe (ang. *multi-stage build*) [CYTOWANIE: https://docs.docker.com/build/building/multi-stage/]. Etap `build` z obrazem Node.js buduje aplikację kliencką, a do końcowego obrazu `nginx:1.27-alpine` trafiają wyłącznie gotowe pliki statyczne z katalogu `dist`. Środowisko Node.js, npm i `node_modules` nie znajdują się więc w działającym kontenerze, co zmniejsza jego rozmiar i powierzchnię ataku. Kolejność instrukcji, podobnie jak w 5.1.5, pozwala ponownie wykorzystać warstwę z zależnościami przy zmianie samego kodu.
 
-Argument `NPM_REGISTRY` pozwala wskazać inny rejestr pakietów npm, np. w sieci z ograniczonym dostępem do publicznego rejestru. Zmienna `VITE_API_URL` jest wstawiana przez Vite do kodu na etapie budowania [CYTOWANIE: https://vite.dev/guide/env-and-mode] i celowo pozostaje pusta, dzięki czemu aplikacja wysyła żądania pod ścieżki względne, czyli do tego samego serwera nginx.
+Argument `NPM_REGISTRY` pozwala wskazać inny rejestr pakietów npm, np. w sieci z ograniczonym dostępem do publicznego rejestru. Zmienna `VITE_API_URL` jest wstawiana przez Vite do kodu na etapie budowania [CYTOWANIE: https://vite.dev/guide/env-and-mode] i celowo pozostaje pusta, dzięki czemu aplikacja wysyła żądania pod ścieżki względne z prefiksem `/api`, czyli do tego samego serwera nginx.
 
 Konfiguracja serwera nginx, kopiowana do obrazu jako `/etc/nginx/conf.d/default.conf`:
 
@@ -410,7 +385,7 @@ server {
     gzip on;
     gzip_types text/css application/javascript application/json;
 
-    location ~ ^/(login|teachers|subjects|curricula|organizational-units|me|opinions|students|groups|admin)(/|$) {
+    location /api/ {
         proxy_pass https://app:8000;
         proxy_ssl_verify on;
         proxy_ssl_trusted_certificate /certificates/ca.pem;
@@ -441,7 +416,9 @@ Certyfikat i klucz to para wygenerowana dla Neo4j (5.1.1), zawierająca nazwę `
 ![[Pasted image 20261115022652.png]]
 *Aplikacja kliencka pod adresem https://localhost:5173 z informacją o poprawnym certyfikacie*
 
-Pierwszy blok `location` obejmuje ścieżki API. Końcówka `(/|$)` dopasowuje samą ścieżkę (`/teachers`) i jej podścieżki (`/teachers/42`), ale nie np. `/teachersXYZ`. Blok z wyrażeniem regularnym ma pierwszeństwo przed prefiksem `/` [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_core_module.html#location], więc żądania API zawsze trafiają do proxy.
+Pierwszy blok `location` obejmuje ścieżki API. Wszystkie punkty końcowe API są udostępniane pod wspólnym prefiksem `/api`, a nginx wybiera blok o najdłuższym pasującym prefiksie [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_core_module.html#location], więc każde żądanie zaczynające się od `/api/` trafia do proxy, a każde inne do aplikacji klienckiej. Ponieważ `proxy_pass` nie zawiera ścieżki, adres jest przekazywany do API bez zmian, łącznie z prefiksem.
+
+Wcześniejsza wersja konfiguracji wymieniała ścieżki API w wyrażeniu regularnym (`/login`, `/teachers`, `/admin` itd.). Takie rozwiązanie wymagało pamiętania o aktualizacji listy przy każdym nowym zasobie, a przede wszystkim powodowało kolizję adresów: widoki aplikacji klienckiej `/login` i `/admin/...` pasowały do wyrażenia, więc po odświeżeniu strony lub wejściu na nią z linku przeglądarka dostawała odpowiedź API w formacie JSON zamiast aplikacji. Wspólny prefiks rozdziela obie przestrzenie adresów raz na zawsze.
 
 Samo `https` w `proxy_pass` włącza szyfrowanie, ale nginx domyślnie nie weryfikuje certyfikatu serwera docelowego [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify]. Byłaby to sytuacja analogiczna do `bolt+ssc` z 5.1.4: połączenie szyfrowane, ale bez pewności, z kim. Dlatego `proxy_ssl_verify` włącza weryfikację, `proxy_ssl_trusted_certificate` wskazuje lokalne CA, a `proxy_ssl_name` i `proxy_ssl_server_name` określają i przekazują w SNI nazwę `app` sprawdzaną w certyfikacie API. Połączenie ograniczono do TLS 1.3, ponieważ obie strony są pod kontrolą projektu. Nagłówki `proxy_set_header` przekazują do API dane oryginalnego żądania (host, adres IP klienta, protokół), które inaczej zostałyby utracone na proxy.
 
@@ -481,9 +458,7 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 │   ├── schemas
 │   └── database.py
 ├── certificates
-│   ├── app
-│   ├── bolt
-│   └── https
+│   └── app
 ├── endpoint_schema
 ├── frontend
 │   ├── Dockerfile
@@ -503,13 +478,13 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 
 Klient Vue jest w całości zawarty w katalogu `frontend/`, wraz z plikiem `Dockerfile` budującym jego obraz i konfiguracją serwera nginx (`nginx.conf`), który go serwuje.
 
-W katalogu `app/` znajduje się backend, w tym warstwa API. Plik `database.py` tworzy połączenie z bazą Neo4j za pomocą sterownika. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, a w podkatalogu `graph_backend/` – backend grafowy. Punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, a zapytania do bazy danych w pozostałych modułach.
+W katalogu `app/` znajduje się backend, w tym warstwa API. Plik `database.py` tworzy połączenie z bazą Neo4j za pomocą sterownika. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, a w podkatalogu `graph_backend/` – backend grafowy. Punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, wspólna obsługa błędów w `errors.py`, a zapytania do bazy danych w pozostałych modułach.
 
 *todo* W tym samym katalogu, w podkatalogu `relation_backend/`, znajdzie się implementacja relacyjna podobnego systemu. Będzie ona działać w ten sam sposób – poprzez sterownik bazy danych zamiast mapowania obiektowo-relacyjnego. Oba backendy będą korzystać z tych samych modeli Pydantic.
 
 Ponieważ eksploracja bazy danych jest szczególnym celem tej pracy, poświęcono jej dużą część repozytorium. Katalog `import/` zawiera dane początkowe, a katalog `queries/` – instrukcje w języku Cypher wykonywane przy inicjalizacji bazy danych przez skrypt `init.sh` (5.3). Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API (5.4).
 
-Katalog `certificates/` jest tworzony przez skrypt `certs.sh` (5.1.1). Zawiera certyfikaty TLS dla API (`app/`) oraz dla połączeń z bazą danych przez protokół Bolt (`bolt/`) i HTTPS (`https/`).
+Katalog `certificates/` jest tworzony przez skrypt `certs.sh` (5.1.1). Zawiera certyfikat lokalnego CA (`ca.pem`), certyfikat i klucz współdzielone przez Neo4j i nginx oraz certyfikat i klucz API (`app/`).
 
 Dane dostępowe (hasła do bazy danych i klucz podpisujący tokeny) przechowywane są w pliku `.env`.Wymagane zmienne opisano w pliku `.env.example`.
 
@@ -541,7 +516,7 @@ Dla każdego przewidzianego typu węzła powstało w tym pliku odpowiadające mu
 
 Zgodnie z projektem systemu węzeł grupy przechowuje identyfikator, dzień tygodnia, numer grupy, parzystość tygodni, w których odbywają się zajęcia, pojemność grupy oraz godziny rozpoczęcia i zakończenia zajęć.
 
-Identyfikator (`id`) jest typu `STRING`, nie bardziej intuicyjnego `INTEGER`, ponieważ Neo4j nie obsługuje autoinkrementacji. Identyfikatory liczbowe wymagałyby osobnego, globalnego mechanizmu ich nadawania, z którego korzystałyby wszystkie zapytania tworzące nowe węzły. Alternatywą byłoby wyszukanie w grafie największego istniejącego identyfikatora i zwiększenie go o 1, lecz takie rozwiązanie jest podatne na wyścigi – dwie równoległe transakcje mogą odczytać tę samą wartość i nadać ten sam identyfikator. O wbudowaną autoinkrementację użytkownicy Neo4j proszą co najmniej od 2013 roku [CYTOWANIE: https://gist.github.com/tekiegirl/8012859].
+Identyfikator (`id`) jest typu `STRING`, nie bardziej intuicyjnego `INTEGER`, ponieważ Neo4j nie obsługuje autoinkrementacji. Identyfikatory liczbowe wymagałyby osobnego, globalnego mechanizmu ich nadawania, z którego korzystałyby wszystkie zapytania tworzące nowe węzły. Alternatywą byłoby wyszukanie w grafie największego istniejącego identyfikatora i zwiększenie go o 1, lecz takie rozwiązanie jest podatne na wyścigi – dwie równoległe transakcje mogą odczytać tę samą wartość i nadać ten sam identyfikator. O wbudowaną autoinkrementację użytkownicy Neo4j proszą co najmniej od 2013 roku [CYTOWANIE: https://gist.github.com/tekiegirl/8012859]. Ten sposób wykorzystano jedynie w punkcie końcowym `GET /admin/people/next-idx`, który podpowiada administratorowi kolejny numer osoby (`idx`). Jest to wyłącznie podpowiedź: jeśli dwóch administratorów otrzyma ten sam numer, drugą próbę utworzenia osoby odrzuci ograniczenie `idx IS KEY`, a API zwróci kod 409.
 
 Do tego celu nie nadaje się również wewnętrzny identyfikator elementu, zwracany przez funkcję `elementId()`. Dokumentacja Neo4j zastrzega, że poza pojedynczą transakcją nie ma żadnych gwarancji co do powiązania identyfikatorów z elementami, a identyfikatory usuniętych węzłów i krawędzi są ponownie wykorzystywane [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]:
 
@@ -549,7 +524,7 @@ Do tego celu nie nadaje się również wewnętrzny identyfikator elementu, zwrac
 
 (tłum.: Neo4j ponownie wykorzystuje wewnętrzne identyfikatory po usunięciu węzłów i krawędzi. W związku z tym aplikacje polegające na wewnętrznych identyfikatorach Neo4j są kruche i mogą działać niepoprawnie. Dlatego zaleca się stosowanie identyfikatorów generowanych przez aplikację.)
 
-Problemy te rozwiązuje zastąpienie identyfikatorów liczbowych identyfikatorami UUID (ang. *Universally Unique Identifier*). Wygenerowanie UUID nie wymaga przechowywania stanu ani znajomości identyfikatorów istniejących już w bazie. Cypher udostępnia do tego funkcję `randomUUID()`, która według dokumentacji zwraca „128-bitową wartość z silnymi gwarancjami unikalności” (ang. *a 128-bit value with strong guarantees of uniqueness*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]. W tym projekcie UUID jest identyfikatorem prawie wszystkich typów węzłów. Podobne stanowisko pojawia się na forum społeczności Neo4j, gdzie jeden z użytkowników, odradzając liczbową autoinkrementację, pisze [CYTOWANIE: https://community.neo4j.com/t/how-to-auto-increment-to-get-unique-value-for-a-new-nodes-field/12815/7]:
+Problemy te rozwiązuje zastąpienie identyfikatorów liczbowych identyfikatorami UUID (ang. *Universally Unique Identifier*). Wygenerowanie UUID nie wymaga przechowywania stanu ani znajomości identyfikatorów istniejących już w bazie. Cypher udostępnia do tego funkcję `randomUUID()`, która według dokumentacji zwraca „128-bitową wartość z silnymi gwarancjami unikalności” (ang. *a 128-bit value with strong guarantees of uniqueness*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]. W tym projekcie UUID jest identyfikatorem prawie wszystkich typów węzłów. Nowe identyfikatory generuje API funkcją `uuid4()` z biblioteki standardowej Pythona, a dane początkowe mają je zapisane w plikach CSV. Podobne stanowisko pojawia się na forum społeczności Neo4j, gdzie jeden z użytkowników, odradzając liczbową autoinkrementację, pisze [CYTOWANIE: https://community.neo4j.com/t/how-to-auto-increment-to-get-unique-value-for-a-new-nodes-field/12815/7]:
 
 > *Database engines must prioritize performance and stability first, flexibility second, and convenience third. Your solution puts convenience first.*
 
@@ -621,7 +596,7 @@ Zamiast tego SubjectInstance nie otrzymała typu węzła wcale. Etykieta pojawia
 
 Pozostałe węzły i krawędzie opisujące model uczelni nie napotkały podobnego problemu, ponieważ każdy z nich miał uzasadnione właściwości. Jeszcze inny problem pojawił się jednak w modelowaniu ludzi korzystających z platformy.
 
-Jak wspomniano wcześniej, wykorzystano etykiety implikowane i wieloetykietowość, żeby każda osoba pracująca na uczelniioraz student musieli być człowiekiem.
+Jak wspomniano wcześniej, wykorzystano etykiety implikowane i wieloetykietowość, żeby każda osoba pracująca na uczelni oraz student musieli być człowiekiem.
 
 ```cypher
 	(t:Teacher => :Person {
@@ -777,15 +752,334 @@ Na uwagę zasługuje podzapytanie `CALL (row, st) { ... }`, któremu przekazywan
 Bardzo podobny wzorzec jest wykorzystywany w imporcie nauczycieli (Teacher). Podzapytanie do ustawiania etykiety User wygląda tak samo, jedynie różni się nazwą zmiennej przekazywanej do pod-kwerendy - zamiast `CALL (row, st)` widnieje `CALL (row, t)`, co oczywiście wynika z tego, że modyfikowany jest nauczyciel, nie student.
 
 5.3.3 Import krawędzi
-Mając węzły należy je ze sobą połączyć. Służą ku temu krawędzie, również przechowywane w pliku .csv. 
+Mając węzły należy je ze sobą połączyć. Służą ku temu krawędzie, również przechowywane w plikach .csv. Prawie każdy z nich przechowuje jedynie identyfikatory odpowiednich węzłów, które mają być ze sobą połączone. Przykładem jest `curriculum_terms.csv`, który odpowiada za krawędź `HAS_TERM`
 
+```csv
+curriculum_id,term_id
+69fa951f-504c-5034-ad7c-e301998a6017,f66570ad-4751-5f8e-9f5a-231975f69cd7
+69fa951f-504c-5034-ad7c-e301998a6017,f6af6573-d17f-57c7-a4f2-68e6e089b100
+69fa951f-504c-5034-ad7c-e301998a6017,11bf9d83-0f5a-56b2-b99b-3f706379192e
+```
+
+Krawędź jest tworzona poprzez instrukcję Cypher, w której szukane są węzły odpowiedniego typu o danym id, a następnie jest tworzona wybrana krawędź między nimi, po kolei dla każdego wiersza pliku .csv:
+
+```cypher
+LOAD CSV WITH HEADERS FROM "file:///edges/curriculum_terms.csv" AS row
+MATCH (c:Curriculum {id: row.curriculum_id})
+MATCH (ct:CurriculumTerm {id: row.term_id})
+MERGE (c)-[:HAS_TERM]->(ct);
+```
+
+Jedną krawędzi, która wymagała dodatkowego obsłużenia to `REGISTERED_IN`, która dodatkowo przechowywał właściwość `registered_at`, odczytywaną z dokumentu. Drugą taką specjalną zależnością okazało się połaczenie przedmiotu, instancji przedmiotu i cyklu akademickiego. Ponieważ SubjectInstance nie ma trwałego identyfikatora, jest importowane jako "krok" pomiędzy przedmiotem a cyklem akademickim. 
+
+```cypher
+LOAD CSV WITH HEADERS FROM "file:///edges/instance_group_types.csv" AS row
+MATCH (:Subject {code: row.subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: row.cycle_id})
+MATCH (gt:GroupType {id: row.group_type_id})
+MERGE (si)-[:HAS_TYPE]->(gt);
+```
+
+5.3.4 Udany import
+Po wykonaniu się pliku `init.sh`, bazę danych można obejrzeć chociażby poprzez konsolę Neo4j wystawioną po HTTPS. Z poziomu konta administrskiego `neo4j` wygląda to następująco:
+
+![[Pasted image 20261116175212.png]]
+
+*Konsola Neo4j z zaimportowanymi elementami*
+
+Możliwy jest również login jako konto użytkowe `app` z ograniczonymi uprawnieniami. Jak widać, nie jest możliwe z tego konta między innymi stworzenie węzła o etykiecie, która nie została zdefiniowana w schemie lub nie ma jej jeszcze w bazie danych. Dla porównania, z konta `neo4j` jest to jak najbardziej możliwe. Broni to przed przyszłymi sytuacjami, w których literówka w kwerendzie po stronie aplikacji może spowodować zapis danych w złym miejscu, który się wykona bez ostrzeżenia.
+
+![[Pasted image 20261116175608.png]]
+
+*Udane stworzenie węzła z etykietą Professor jako użytkownik neo4j*
+
+![[Pasted image 20261116175715.png]]
+
+*Nieudana próba stworzenia węzła z etykietą Janitor jako użytkownik app*
+
+Wszystkie zaimportowane węzły i krawędzie są widoczne po użyciu funkcji `db.schema.visualization()`. Niestety, przez wieloetykietowość ten wykres jest mało czytelny.
+
+![[visualisation(1)-cropped.svg]]
+
+*Wynik funkcji CALL db.schema.visualization()*
 
 5.4 Dokumentacja
 
-Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API: dozwolone role, kształt żądań i odpowiedzi oraz wykonywane zapytania bazodanowe. Ponadto API generuje interaktywną dokumentację w standardzie OpenAPI [CYTOWANIE: https://fastapi.tiangolo.com/reference/openapi/docs/], na podstawie tych samych modeli, które służą do walidacji.
+Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API: dozwolone role, kształt żądań i odpowiedzi oraz wykonywane zapytania bazodanowe. Każdy plik odpowiada roli, która może wykonywać dane zapytanie.
+
+Ponadto API generuje interaktywną dokumentację w standardzie OpenAPI [CYTOWANIE: https://fastapi.tiangolo.com/reference/openapi/docs/], na podstawie tych samych modeli, które służą do walidacji. Jest ona dostępna pod adresem `/api/docs`.
+
+5.4.1 Konwencje
+Każdy punkt końcowy jest opisany według tego samego schematu: kto może go wywołać (**Allowed**), kształt żądania (**Request**), kształt odpowiedzi (**Response**) oraz zapytania Cypher, które wykonuje (**Query**). `X?` oznacza pole opcjonalne lub mogące przyjąć wartość `null`, a `List[X]` tablicę JSON. Każdy punkt końcowy poza `POST /login` wymaga nagłówka `Authorization: Bearer <token>`. Ścieżki podawane są względem prefiksu `/api`, np. `GET /subjects` jest dostępny pod adresem `/api/subjects`. Zasady doboru metod HTTP i kodów odpowiedzi opisano w 4.5.2.
+
+Poniżej opisano wybrane, najważniejsze punkty końcowe - po co najmniej jednym dla każdej roli.
+
+5.4.2 Logowanie - POST /login
+Jedyny punkt końcowy dostępny bez tokenu. Przyjmuje adres e-mail i hasło, a w odpowiedzi zwraca token oraz listę ról użytkownika.
+
+```json
+// Request
+{
+	"email": String,
+	"password": String
+}
+
+// Response
+{
+	"email": String,
+	"idx": String?,
+	"roles": List["Admin" | "Teacher" | "Student"],
+	"token": String
+}
+```
+
+Błędny e-mail lub hasło skutkuje kodem 401, a konto zablokowane lub bez żadnej roli kodem 403.
+
+```cypher
+MATCH (u:User {email: $email})
+RETURN
+  u.passwd_hash AS passwd_hash,
+  u.email AS email,
+  u.idx AS idx,
+  u:Inactive AS inactive,
+  u:Admin AS admin,
+  u:Teacher AS teacher,
+  u:Student AS student
+```
+
+Zapytanie dobrze pokazuje zaletę wieloetykietowości. Role są po prostu etykietami tego samego węzła. Wyrażenie `u:Admin` zwraca wartość logiczną, więc jednym odczytem węzła uzyskiwany jest komplet informacji o uprawnieniach. Podobnie działa blokada konta: dezaktywowany użytkownik dostaje etykietę `Inactive`.
+
+5.4.3 Katalog przedmiotów - GET /subjects
+Zwraca listę przedmiotów w postaci siatki: wiersze to przedmioty, a kolumny to cykle akademickie. Każda komórka mówi, czy przedmiot jest w danym cyklu prowadzony, ile ma grup i czy trwają na niego zapisy. Opcjonalne parametry `name` i `code` zawężają wyniki do przedmiotów, których nazwa lub kod zawiera podany tekst:
+
+```http
+GET /subjects?name=sieci&code=SI00
+```
+
+```json
+// Response
+{
+	"cycle_columns": List[String],
+	"subjects": List[SubjectCatalogueItem]
+
+	SubjectCatalogueItem = {
+		"code": String,
+		"name": String,
+		"ects": Integer?,
+		"faculty": String,
+		"cycles": List[SubjectCycleCell]
+	}
+
+	SubjectCycleCell = {
+		"offered": Boolean,
+		"group_count": Integer,
+		"registration_open": Boolean
+	}
+}
+```
+
+Serwer wykonuje dwa zapytania. Pierwsze pobiera wszystkie cykle akademickie, które po posortowaniu chronologicznym stają się kolumnami siatki. Ich identyfikatory trafiają do drugiego zapytania jako lista `$cycle_ids`, a ono zwraca gotowe wiersze:
+
+```cypher
+MATCH (su:Subject)
+WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
+  AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))
+RETURN
+  su.code AS code,
+  su.name AS name,
+  su.ects AS ects,
+  COLLECT {
+    MATCH (su)<-[:INCLUDES]-(:CurriculumTerm)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)
+    RETURN DISTINCT fa.name
+  } AS faculties,
+  [cycle_id IN $cycle_ids | {
+    offered: EXISTS {
+      (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(:AcademicCycle {id: cycle_id})
+    },
+    group_count: COUNT {
+      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
+      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
+    },
+    registration_open: EXISTS {
+      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
+      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(:Registration)
+    }
+  }] AS cycles
+ORDER BY su.name
+```
+
+Warunek `$name IS NULL OR ...` sprawia, że to samo zapytanie obsługuje zarówno wyszukiwanie z filtrem, jak i bez niego, więc nie trzeba składać tekstu zapytania w zależności od parametrów. Podzapytanie `COLLECT { ... }` przechodzi ścieżką od przedmiotu, przez semestr programu i program studiów, aż do wydziału.
+
+Komórki siatki powstają w wyrażeniu listowym `[cycle_id IN $cycle_ids | { ... }]`, w kolejności zgodnej z kolumnami. Każde pole komórki to osobne pytanie o istnienie ścieżki w grafie: `EXISTS { ... }` sprawdza, czy taka ścieżka istnieje, a `COUNT { ... }` liczy jej wystąpienia. Przedmiot jest oferowany w cyklu, jeśli należy do semestru programu studiów realizowanego w tym cyklu. Zapisy są otwarte, jeśli choć jedna grupa przedmiotu z tego cyklu została otwarta przez jakieś zapisy (Registration). Wzorzec zawierający przecinek opisuje dwie ścieżki, które muszą być spełnione jednocześnie i mają wspólny węzeł `si`.
+
+5.4.4 Lista grup w zapisach - GET /me/registrations/{registration_id}/subjects/{subject_code}/groups
+Punkt końcowy studenta, wywoływany po wybraniu przedmiotu w trakcie zapisów. Zwraca wszystkie grupy tego przedmiotu otwarte przez dane zapisy, wraz z liczbą zajętych miejsc i informacją, czy student już jest w danej grupie zapisany. Zarówno zapisy, jak i przedmiot są wskazywane w ścieżce:
+
+```http
+GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/subjects/W04CBE-SI0404G/groups
+```
+
+```json
+// Response
+{
+	"groups": List[OpenGroup]
+
+	OpenGroup = {
+		"id": String,
+		"g_type": String,
+		"number": Integer,
+		"weekday": Integer,
+		"start": Time,
+		"end": Time,
+		"capacity": Integer,
+		"filled": Integer,
+		"room": String?,
+		"teacher": String?,
+		"registered": Boolean
+	}
+}
+```
+
+Najpierw wykonywane jest sprawdzenie dostępu - student musi mieć przydzieloną turę w tych zapisach, w przeciwnym razie API zwraca kod 403:
+
+```cypher
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
+RETURN reg.id AS id
+```
+
+Następnie pobierane są same grupy:
+
+```cypher
+MATCH (st:Student {idx: $student_idx})
+MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
+OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)
+OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)
+OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)
+RETURN
+  g.id AS id,
+  gt.g_type AS g_type,
+  g.number AS number,
+  g.weekday AS weekday,
+  g.start_time AS start,
+  g.end_time AS end,
+  g.capacity AS capacity,
+  size([(g)<-[:REGISTERED_IN]-() | 1]) AS filled,
+  r.building + " " + r.room_num AS room,
+  t.name + " " + t.surname AS teacher,
+  mine IS NOT NULL AS registered
+ORDER BY gt.g_type, g.number
+```
+
+Sala i prowadzący są dołączane przez `OPTIONAL MATCH`, ponieważ nowo utworzona grupa może ich jeszcze nie mieć - wtedy odpowiednie pola mają wartość `null`, a grupa nadal jest zwracana. Liczba zajętych miejsc nie jest przechowywana jako licznik, tylko liczona na bieżąco jako liczba krawędzi `REGISTERED_IN` wchodzących do grupy. Dzięki temu nie istnieje ryzyko rozjechania się licznika z faktycznym stanem.
+
+5.4.5 Zapis do grupy - PUT /me/registered-groups/{group_id}
+Najważniejszy punkt końcowy całego systemu, a zarazem najbardziej obciążony - w momencie otwarcia tury zapisów wywołuje go jednocześnie wielu studentów. Zasobem jest tu miejsce studenta w grupie, wskazane identyfikatorem grupy w ścieżce. Żądanie nie ma treści, a udany zapis zwraca kod 204 bez treści odpowiedzi:
+
+```http
+PUT /me/registered-groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f
+```
+
+Zapis jest odrzucany z kodem 403, gdy student nie ma dostępu do grupy, oraz z kodem 409, gdy jest już zapisany do innej grupy tego samego typu z tego przedmiotu albo grupa jest pełna. Ponowny zapis do grupy, w której student już jest, kończy się sukcesem bez żadnych zmian. Taka idempotentność jest wymagana od metody `PUT`, a w praktyce sprawia, że np. podwójne kliknięcie przycisku nie powoduje błędu. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem.
+
+Wszystkie te warunki są sprawdzane w tym samym zapytaniu, w którym tworzona jest krawędź `REGISTERED_IN`. Nie jest to przypadek - rozbicie sprawdzenia i zapisu na dwa osobne zapytania prowadziłoby do sytuacji wyścigu. Sposób jej rozwiązania został szczegółowo opisany w podrozdziale [TODO: numer podrozdziału o race condition].
+
+5.4.6 Wystawienie oceny - PUT /groups/{group_id}/students/{student_idx}/grade
+Punkt końcowy prowadzącego. Pozwala wystawić ocenę studentowi zapisanemu do grupy. Grupa i student są wskazani w ścieżce, a treść żądania zawiera wyłącznie ocenę. Metoda `PUT` oznacza, że ocena jest ustawiana - ponowne wywołanie nadpisuje poprzednią wartość.
+
+```http
+PUT /groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f/students/279413/grade
+```
+
+```json
+// Request
+{
+	"grade": Float
+}
+
+// Response
+{
+	"group_id": String,
+	"student_idx": String,
+	"grade": Float
+}
+```
+
+Ocena musi być jedną z wartości `2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0`. Jest to sprawdzane już przez model Pydantic, więc każda inna wartość jest odrzucana z kodem 422, zanim żądanie w ogóle dotrze do bazy danych. Nauczyciel może wystawiać oceny tylko w grupach, które prowadzi - administrator w dowolnych:
+
+```cypher
+// 1. Sprawdzenie dostępu (tylko dla nauczyciela)
+MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g:Group {id: $group_id})
+RETURN g.id AS id
+
+// 2. Wystawienie oceny
+MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
+SET r.grade = $grade
+RETURN g.id AS group_id, st.idx AS student_idx, r.grade AS grade
+```
+
+Ocena jest właściwością krawędzi `REGISTERED_IN` (4.3.3). Jeśli student nie jest zapisany do grupy, wzorzec nie zostanie dopasowany, oceny nie da się wystawić, a API odpowiada kodem 404.
+
+5.4.7 Dodanie studenta - POST /admin/students
+Punkt końcowy administratora, tworzący nowego studenta i od razu przypisujący go do semestru programu studiów.
+
+```json
+// Request
+{
+	"idx": String,
+	"name": String,
+	"surname": String,
+	"phone": String,
+	"photo": String?,
+	"joined": DateTime,
+	"programme": String,
+	"term_id": String?
+}
+
+// Response
+{
+	"idx": String,
+	"name": String,
+	"surname": String,
+	"phone": String,
+	"photo": String?,
+	"joined": DateTime
+}
+```
+
+Pole `term_id` jest opcjonalne. Bez niego student trafia na pierwszy semestr najnowszego programu (Curriculum) danego kierunku. Podanie go pozwala zapisać studenta na dowolny semestr, co przydaje się przy przeniesieniach z innej uczelni. Najpierw ustalany jest właściwy semestr:
+
+```cypher
+MATCH (p:Programme {id: $programme})
+RETURN
+  COUNT { (p)-[:HAS_CURRICULUM]->(:Curriculum) } AS curricula,
+  COLLECT {
+    MATCH (p)-[:HAS_CURRICULUM]->(c:Curriculum)-[:HAS_TERM]->(ct:CurriculumTerm)
+    WHERE ($term_id IS NULL AND ct.sem = 1) OR ct.id = $term_id
+    RETURN ct.id ORDER BY c.intake_year DESC
+  } AS terms
+```
+
+Na podstawie wyniku API albo wybiera pierwszy element listy `terms`, albo odrzuca żądanie: z kodem 404, gdy kierunek nie istnieje, z kodem 409, gdy kierunek nie ma jeszcze programu lub pierwszego semestru, oraz z kodem 422, gdy podany semestr nie należy do kierunku. Dopiero potem tworzony jest węzeł:
+
+```cypher
+MATCH (ct:CurriculumTerm {id: $term_id})
+CREATE (st:Student:Person {
+  idx: $idx, name: $name, surname: $surname, phone: $phone,
+  joined: datetime($joined), photo: $photo
+})
+CREATE (st)-[:ENROLLED]->(ct)
+RETURN st.idx AS idx, st.name AS name, st.surname AS surname,
+       st.phone AS phone, st.photo AS photo, st.joined AS joined
+```
+
+Udane utworzenie zwraca kod 201 z nagłówkiem `Location: /api/students/{idx}`, czyli adresem, pod którym można od razu odczytać nowego studenta. Zajęty numer indeksu zostaje wykryty przez ograniczenie `idx IS KEY` w bazie i zwrócony jako 409.
+
+Student jest tworzony bez etykiety `User`, czyli bez możliwości logowania - konto nadaje się osobnym punktem końcowym `POST /admin/users`.
+
+
 
 5.5 API
 
-Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i formatuje dane wyjściowe. Obsługa żądania przebiega następująco: API odbiera żądanie na wybranym punkcie końcowym, weryfikuje token i uprawnienia użytkownika, otwiera sesję bazy danych, a następnie – jeśli wykorzystywany jest backend grafowy – wykonuje zapytanie w języku Cypher, przekształca jego wynik do oczekiwanego kształtu i zwraca go klientowi. Zapytania wykonywane są bezpośrednio przez oficjalny, asynchroniczny sterownik Neo4j dla języka Python [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/].
+Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i formatuje dane wyjściowe. API odbiera żądanie na wybranym punkcie końcowym, weryfikuje token i uprawnienia użytkownika, otwiera sesję bazy danych, a następnie – jeśli wykorzystywany jest backend grafowy – wykonuje zapytanie w języku Cypher, przekształca jego wynik do oczekiwanego kształtu i zwraca go klientowi. Zapytania wykonywane są bezpośrednio przez oficjalny, asynchroniczny sterownik Neo4j dla języka Python [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/].
 
 5.6 Klient

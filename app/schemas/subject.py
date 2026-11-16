@@ -5,8 +5,7 @@ from .generic import TeacherNameRef
 from .group import GroupTracked
 
 
-class SubjectCreateRequest(BaseModel):
-    code: str
+class SubjectUpsertRequest(BaseModel):
     name: str
     ects: Optional[int] = None
 
@@ -15,7 +14,6 @@ class SubjectCreateResponse(BaseModel):
     code: str
     name: str
     ects: Optional[int] = None
-    err: Optional[str] = None
 
 
 class SubjectCycleCell(BaseModel):
@@ -37,10 +35,6 @@ class SubjectCatalogueResponse(BaseModel):
     subjects: List[SubjectCatalogueItem]
 
 
-class SubjectDetailRequest(BaseModel):
-    code: str
-
-
 class SubjectOfferingItem(BaseModel):
     cycle_id: str
     cycle: str
@@ -53,11 +47,6 @@ class SubjectDetailResponse(BaseModel):
     ects: Optional[int] = None
     taught_by: List[TeacherNameRef]
     offerings: List[SubjectOfferingItem]
-
-
-class SubjectGroupsRequest(BaseModel):
-    subject_code: str
-    cycle_id: str
 
 
 class SubjectGroupsResponse(BaseModel):

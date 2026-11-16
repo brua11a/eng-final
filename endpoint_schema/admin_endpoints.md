@@ -4,7 +4,7 @@ See `user_endpoints.md` for conventions. Every endpoint here is allowed for Admi
 
 Time and DateTime inputs without a UTC offset are stored as `+01:00`.
 
-Person idx values (`POST /admin/teachers`, `/admin/students`, `/admin/admins`) are given by the admin; the client prefills them from `GET /admin/people/next-idx`. A taken idx is rejected by the `idx IS KEY` constraint with `err` = `"Person with idx <idx> already exists"`.
+Person idx values (`POST /admin/teachers`, `/admin/students`, `/admin/admins`) are given by the admin; the client prefills them from `GET /admin/people/next-idx`. A taken idx is rejected by the `idx IS KEY` constraint with `409` `"Person with idx <idx> already exists"`.
 
 ---
 
@@ -38,10 +38,13 @@ Person idx values (`POST /admin/teachers`, `/admin/students`, `/admin/admins`) a
 	"degree": String,
 	"photo": String?,
 	"working_since": Date,
-	"faculty_id": String,
-	"err": String?
+	"faculty_id": String
 }
 ```
+
+**Status**
+
+`201` with `Location: /api/teachers/{idx}`. `404` if the faculty does not exist. `409` if the idx is taken.
 
 **Query**
 
@@ -95,17 +98,20 @@ RETURN
 	"surname": String,
 	"phone": String,
 	"photo": String?,
-	"joined": DateTime,
-	"err": String?
+	"joined": DateTime
 }
 ```
+
+**Status**
+
+`201` with `Location: /api/students/{idx}`. `404` if the programme or term does not exist. `409` if the programme has no curriculum or no first semester, or the idx is taken. `422` if `term_id` does not belong to the programme.
 
 **Query**
 
 ```cypher
-// 2. Resolve the term. The server takes the first entry of `terms`, and reports
-//    "Programme not found", "Programme has no curriculum", "Programme has no first semester"
-//    or "Term does not belong to this programme" when it cannot.
+// 2. Resolve the term. The server takes the first entry of `terms`, or responds with
+//    404 "Programme not found", 409 "Programme has no curriculum",
+//    409 "Programme has no first semester" or 422 "Term does not belong to this programme".
 MATCH (p:Programme {id: $programme})
 RETURN
   COUNT { (p)-[:HAS_CURRICULUM]->(:Curriculum) } AS curricula,
@@ -150,10 +156,13 @@ Gives an existing person a login.
 {
 	"email": String,
 	"idx": String,
-	"roles": List["Admin" | "Teacher" | "Student"],
-	"err": String?
+	"roles": List["Admin" | "Teacher" | "Student"]
 }
 ```
+
+**Status**
+
+`201`. `404` if the person does not exist. `409` if the email is already used.
 
 **Query**
 
@@ -169,15 +178,21 @@ RETURN owner.email AS email,
 
 ---
 
-## POST /admin/users/deactivate
+## PATCH /admin/users/{idx}
 
 **Allowed:** Admin
 
+Deactivates (`"active": false`) or reactivates (`"active": true`) a login account. A deactivated account keeps its data but cannot log in.
+
 **Request**
+
+```http
+PATCH /admin/users/279413
+```
 
 ```json
 {
-	"idx": String
+	"active": Boolean
 }
 ```
 
@@ -186,44 +201,23 @@ RETURN owner.email AS email,
 ```json
 {
 	"idx": String,
-	"err": String?
+	"active": Boolean
 }
 ```
+
+**Status**
+
+`200`. `404` if the person has no login account.
 
 **Query**
 
 ```cypher
+// active: false
 MATCH (u:User {idx: $idx})
 SET u:Inactive, u.deactivated_at = datetime()
 RETURN u.idx AS idx
-```
 
----
-
-## POST /admin/users/activate
-
-**Allowed:** Admin
-
-**Request**
-
-```json
-{
-	"idx": String
-}
-```
-
-**Response**
-
-```json
-{
-	"idx": String,
-	"err": String?
-}
-```
-
-**Query**
-
-```cypher
+// active: true
 MATCH (u:User {idx: $idx})
 REMOVE u:Inactive, u.deactivated_at
 RETURN u.idx AS idx
@@ -231,23 +225,25 @@ RETURN u.idx AS idx
 
 ---
 
-## POST /admin/users/roles
+## PUT /admin/users/{idx}/roles/{role}
 
 **Allowed:** Admin
 
 **Request**
 
+```http
+PUT /admin/users/279413/roles/Teacher
+```
+
 ```json
 {
-	"idx": String,
-	"role": "Admin" | "Teacher" | "Student",
 	"degree": String?,
 	"working_since": Date?,
 	"joined": DateTime?
 }
 ```
 
-`degree` and `working_since` are required when adding Teacher. `joined` is required when adding Student.
+`role` is `Admin`, `Teacher` or `Student`. `degree` and `working_since` are required when adding Teacher. `joined` is required when adding Student. The body is `{}` for Admin.
 
 **Response**
 
@@ -255,10 +251,13 @@ RETURN u.idx AS idx
 {
 	"idx": String,
 	"email": String?,
-	"roles": List["Admin" | "Teacher" | "Student"],
-	"err": String?
+	"roles": List["Admin" | "Teacher" | "Student"]
 }
 ```
+
+**Status**
+
+`200` with the person's roles. Idempotent: adding a role the person already has changes nothing. `404` if the person does not exist. `422` if a required property is missing or `role` is not one of the three.
 
 **Query**
 
@@ -285,17 +284,16 @@ RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p
 
 ---
 
-## POST /admin/users/roles/remove
+## DELETE /admin/users/{idx}/roles/{role}
 
 **Allowed:** Admin
 
 **Request**
 
-```json
-{
-	"idx": String,
-	"role": "Admin" | "Teacher" | "Student"
-}
+No body:
+
+```http
+DELETE /admin/users/279413/roles/Admin
 ```
 
 **Response**
@@ -304,12 +302,13 @@ RETURN p.idx AS idx, p.email AS email, p:Admin AS admin, p:Teacher AS teacher, p
 {
 	"idx": String,
 	"email": String?,
-	"roles": List["Admin" | "Teacher" | "Student"],
-	"err": String?
+	"roles": List["Admin" | "Teacher" | "Student"]
 }
 ```
 
-Fails if the person does not have the role, or if it is their last role.
+**Status**
+
+`200` with the remaining roles. `404` if the person does not exist or does not have the role. `409` if it is their last role, or if the graph type still needs the label (see below).
 
 **Query**
 
@@ -332,7 +331,7 @@ FOREACH (_ IN CASE WHEN removed THEN [1] ELSE [] END | REMOVE p:Admin)
 RETURN p.idx AS idx, p.email AS email, admin, teacher, student, removed
 ```
 
-Removing `Teacher` or `Student` is rejected by the graph type while the person still has relationships that require that label (e.g. `WORKS_AT`, `ENROLLED`).
+Removing `Teacher` or `Student` is rejected by the graph type (`409`) while the person still has relationships that require that label (e.g. `WORKS_AT`, `ENROLLED`).
 
 ---
 
@@ -359,12 +358,15 @@ Removing `Teacher` or `Student` is rejected by the graph type while the person s
 	"subject_code": String,
 	"cycle_id": String,
 	"g_type": String,
-	"weight": Float,
-	"err": String?
+	"weight": Float
 }
 ```
 
-Group types belong to a subject in one cycle, so weights can change from cycle to cycle. The subject's instance for the cycle is created with its first group type. Fails if the subject already has a group type with that name in that cycle, or if no curriculum term taught in the cycle includes the subject.
+Group types belong to a subject in one cycle, so weights can change from cycle to cycle. The subject's instance for the cycle is created with its first group type.
+
+**Status**
+
+`201`. `404` if no curriculum term taught in the cycle includes the subject. `409` if the subject already has a group type with that name in that cycle.
 
 **Query**
 
@@ -430,12 +432,15 @@ RETURN gt.id AS id, su.code AS subject_code, ac.id AS cycle_id,
 	"end_time": Time,
 	"subject_code": String,
 	"cycle_id": String,
-	"room_id": String,
-	"err": String?
+	"room_id": String
 }
 ```
 
-Fails if the room doesn't exist, or if the subject has no group type named `g_type` in that cycle (create it with `POST /admin/group-types` first).
+The group type must exist first (`POST /admin/group-types`).
+
+**Status**
+
+`201` with `Location: /api/groups/{id}`. `404` if the room does not exist, or the subject has no group type named `g_type` in that cycle.
 
 **Query**
 
@@ -473,10 +478,13 @@ RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number
 ```json
 {
 	"teacher_idx": String,
-	"group_id": String,
-	"err": String?
+	"group_id": String
 }
 ```
+
+**Status**
+
+`200`. Idempotent: assigning a teacher who already teaches the group changes nothing. `404` if the teacher or the group does not exist.
 
 **Query**
 
@@ -509,10 +517,13 @@ RETURN t.idx AS teacher_idx, g.id AS group_id
 {
 	"id": String,
 	"building": String,
-	"room_num": String,
-	"err": String?
+	"room_num": String
 }
 ```
+
+**Status**
+
+`201`.
 
 **Query**
 
@@ -538,7 +549,7 @@ RETURN r.id AS id, r.building AS building, r.room_num AS room_num
 }
 ```
 
-`start_date` and `end_date` bound the teaching period; the weekly schedule shows a cycle's classes only between them. Fails if `end_date` is not after `start_date`.
+`start_date` and `end_date` bound the teaching period; the weekly schedule shows a cycle's classes only between them.
 
 **Response**
 
@@ -548,10 +559,13 @@ RETURN r.id AS id, r.building AS building, r.room_num AS room_num
 	"year": String,
 	"season": String,
 	"start_date": Date,
-	"end_date": Date,
-	"err": String?
+	"end_date": Date
 }
 ```
+
+**Status**
+
+`201`. `422` if `end_date` is not after `start_date`.
 
 **Query**
 
@@ -566,17 +580,20 @@ RETURN ac.id AS id, ac.year AS year, ac.season AS season,
 
 ---
 
-## POST /admin/subjects
+## PUT /admin/subjects/{code}
 
 **Allowed:** Admin
 
-Creates the subject, or updates its name and ECTS if the code already exists.
+Creates the subject, or updates its name and ECTS if the code already exists. The code identifies the subject, so it goes in the path, and the operation is a `PUT`.
 
 **Request**
 
+```http
+PUT /admin/subjects/W04CBE-SI0005G
+```
+
 ```json
 {
-	"code": String,
 	"name": String,
 	"ects": Integer?
 }
@@ -588,17 +605,22 @@ Creates the subject, or updates its name and ECTS if the code already exists.
 {
 	"code": String,
 	"name": String,
-	"ects": Integer?,
-	"err": String?
+	"ects": Integer?
 }
 ```
+
+**Status**
+
+`201` with `Location: /api/subjects/{code}` when the subject is new, `200` when an existing one is updated.
 
 **Query**
 
 ```cypher
+OPTIONAL MATCH (old:Subject {code: $code})
+WITH old IS NULL AS created
 MERGE (su:Subject {code: $code})
 SET su.name = $name, su.ects = $ects
-RETURN su.code AS code, su.name AS name, su.ects AS ects
+RETURN su.code AS code, su.name AS name, su.ects AS ects, created
 ```
 
 ---
@@ -624,10 +646,13 @@ RETURN su.code AS code, su.name AS name, su.ects AS ects
 	"id": String,
 	"sem": Integer,
 	"curriculum_id": String,
-	"cycle_id": String?,
-	"err": String?
+	"cycle_id": String?
 }
 ```
+
+**Status**
+
+`201`. `404` if the curriculum or the cycle does not exist. `422` if `cycle_id` is missing.
 
 **Query**
 
@@ -661,10 +686,13 @@ RETURN ct.id AS id, ct.sem AS sem, c.id AS curriculum_id, ac.id AS cycle_id
 {
 	"id": String,
 	"programme_id": String,
-	"intake_year": String,
-	"err": String?
+	"intake_year": String
 }
 ```
+
+**Status**
+
+`201`. `404` if the programme does not exist.
 
 **Query**
 
@@ -696,10 +724,13 @@ RETURN c.id AS id, p.id AS programme_id, c.intake_year AS intake_year
 {
 	"id": String,
 	"name": String,
-	"full_name": String,
-	"err": String?
+	"full_name": String
 }
 ```
+
+**Status**
+
+`201`.
 
 **Query**
 
@@ -744,10 +775,13 @@ Creates a registration with its turns and opened groups in one transaction. Noth
 	"name": String?,
 	"reg_type": "zapisowa"?,
 	"turns": List[RegistrationTurn],
-	"group_ids": List[String],
-	"err": String?
+	"group_ids": List[String]
 }
 ```
+
+**Status**
+
+`201`. `404` if the cycle, the faculty or any of the groups does not exist; nothing is saved then.
 
 **Query**
 
@@ -1043,10 +1077,13 @@ Creates an administrator person. A login is assigned separately with `POST /admi
 	"idx": String?,
 	"name": String,
 	"surname": String,
-	"phone": String,
-	"err": String?
+	"phone": String
 }
 ```
+
+**Status**
+
+`201`. `409` if the idx is taken.
 
 **Query**
 
@@ -1057,7 +1094,7 @@ RETURN a.idx AS idx, a.name AS name, a.surname AS surname, a.phone AS phone
 
 ---
 
-## POST /admin/users/remove
+## DELETE /admin/users/{idx}
 
 **Allowed:** Admin (not on their own account)
 
@@ -1065,20 +1102,19 @@ Deletes the login account. The person node, its roles and its history (registrat
 
 **Request**
 
-```json
-{
-	"idx": String
-}
+No body:
+
+```http
+DELETE /admin/users/279413
 ```
 
 **Response**
 
-```json
-{
-	"idx": String,
-	"err": String?
-}
-```
+None.
+
+**Status**
+
+`204` when the account is deleted. `404` if the person has no login account. `409` for the caller's own account.
 
 **Query**
 
@@ -1109,10 +1145,13 @@ RETURN u.idx AS idx
 {
 	"id": String?,
 	"name": String,
-	"faculty_id": String,
-	"err": String?
+	"faculty_id": String
 }
 ```
+
+**Status**
+
+`201`. `404` if the faculty does not exist.
 
 **Query**
 
@@ -1144,10 +1183,13 @@ Adds a subject to a curriculum term. Required before a group type can be created
 ```json
 {
 	"term_id": String,
-	"subject_code": String,
-	"err": String?
+	"subject_code": String
 }
 ```
+
+**Status**
+
+`201`. `404` if the term or the subject does not exist. `409` if the subject is already in the term.
 
 **Query**
 
@@ -1162,7 +1204,7 @@ RETURN already
 
 ---
 
-## POST /admin/students/enrol
+## POST /admin/students/{idx}/enrolments
 
 **Allowed:** Admin
 
@@ -1170,9 +1212,12 @@ Enrols an existing student in a curriculum term (e.g. the next semester).
 
 **Request**
 
+```http
+POST /admin/students/279413/enrolments
+```
+
 ```json
 {
-	"student_idx": String,
 	"term_id": String
 }
 ```
@@ -1182,10 +1227,13 @@ Enrols an existing student in a curriculum term (e.g. the next semester).
 ```json
 {
 	"student_idx": String,
-	"term_id": String,
-	"err": String?
+	"term_id": String
 }
 ```
+
+**Status**
+
+`201`. `404` if the student or the term does not exist. `409` if the student is already enrolled in the term.
 
 **Query**
 
@@ -1204,7 +1252,7 @@ RETURN already
 
 **Allowed:** Admin
 
-Assigns students to a registration turn. All-or-nothing: fails if any student does not exist or is already assigned to another turn of the same registration.
+Assigns students to a registration turn. All-or-nothing: nothing is saved if any student does not exist or is already assigned to another turn of the same registration.
 
 **Request**
 
@@ -1220,10 +1268,13 @@ Assigns students to a registration turn. All-or-nothing: fails if any student do
 ```json
 {
 	"turn_id": String,
-	"assigned": List[String],
-	"err": String?
+	"assigned": List[String]
 }
 ```
+
+**Status**
+
+`200` with the assigned students. `404` if the turn or any student does not exist. `409` if a student is already in another turn of the same registration. `422` if the list is empty.
 
 **Query**
 
@@ -1350,10 +1401,13 @@ Dean's office registration of a student to a group. Bypasses registration turns.
 {
 	"student_idx": String,
 	"group_id": String,
-	"ignore_capacity": Boolean,
-	"err": String?
+	"ignore_capacity": Boolean
 }
 ```
+
+**Status**
+
+`201`. `404` if the student or the group does not exist. `409` if the student is already in this group or in another group of the same type, or the group is full (unless `ignore_capacity`).
 
 **Query**
 

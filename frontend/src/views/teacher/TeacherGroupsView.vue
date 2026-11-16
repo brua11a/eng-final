@@ -40,7 +40,7 @@ function rowLabel(g) {
 
     <TeacherSelect v-if="auth.hasAdmin" v-model="teacherIdx" @ready="onTeachersReady" />
 
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
 
     <div v-if="api.result?.groups?.length" class="teacher-panel">
       <table class="teacher-groups-table">

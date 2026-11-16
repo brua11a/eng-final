@@ -37,7 +37,7 @@ async function assignStudents() {
   const data = await assignApi.run(() =>
     admin.assignStudentsToTurn({ turn_id: assignTurnId.value, student_idxs: assignStudentIdxs.value }),
   )
-  if (data && !assignApi.apiMessage) assignStudentIdxs.value = []
+  if (data) assignStudentIdxs.value = []
 }
 
 const api = useApiCall()
@@ -109,7 +109,7 @@ async function submit() {
       group_ids: selectedGroupIds.value,
     }),
   )
-  if (data?.id && !api.apiMessage) reloadRefs()
+  if (data?.id) reloadRefs()
 }
 </script>
 
@@ -183,8 +183,8 @@ async function submit() {
         </fieldset>
         <button type="submit" class="teacher-btn-save" :disabled="api.loading">Start</button>
       </form>
-      <ApiMessages :error="formError || api.error" :api-message="api.apiMessage" />
-      <p v-if="api.result?.id && !api.apiMessage" class="admin-ok">Registration {{ api.result.id }}</p>
+      <ApiMessages :error="formError || api.error" />
+      <p v-if="api.result?.id" class="admin-ok">Registration {{ api.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -208,8 +208,8 @@ async function submit() {
           Assign
         </button>
       </form>
-      <ApiMessages :error="assignApi.error" :api-message="assignApi.apiMessage" />
-      <p v-if="assignApi.result?.assigned?.length && !assignApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="assignApi.error" />
+      <p v-if="assignApi.result?.assigned?.length" class="admin-ok">
         Assigned {{ assignApi.result.assigned.length }} student(s)
       </p>
     </section>
@@ -239,8 +239,8 @@ async function submit() {
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="deanApi.loading">Register</button>
       </form>
-      <ApiMessages :error="deanApi.error" :api-message="deanApi.apiMessage" />
-      <p v-if="deanApi.result && !deanApi.apiMessage && !deanApi.error" class="admin-ok">
+      <ApiMessages :error="deanApi.error" />
+      <p v-if="deanApi.result && !deanApi.error" class="admin-ok">
         Registered {{ deanApi.result.student_idx }}
       </p>
     </section>

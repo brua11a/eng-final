@@ -6,18 +6,17 @@ export function useApiCall() {
     loading: false,
     error: '',
     result: null,
-    apiMessage: '',
     async run(fn) {
       this.loading = true
       this.error = ''
-      this.apiMessage = ''
       try {
         const data = await fn()
         this.result = data
-        this.apiMessage = data?._apiMessage || ''
         return data
       } catch (e) {
         this.error = errorMessage(e)
+        // Drop the previous result, so a success message is never shown next to an error.
+        this.result = null
         return null
       } finally {
         this.loading = false

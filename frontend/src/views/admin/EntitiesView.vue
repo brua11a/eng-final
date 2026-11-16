@@ -26,7 +26,7 @@ const {
 
 async function create(api, fn) {
   const data = await api.run(fn)
-  if (data && !api.apiMessage) reloadRefs()
+  if (data) reloadRefs()
 }
 
 const facultyApi = useApiCall()
@@ -77,8 +77,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         <label>Full name <input v-model="faculty.full_name" required /></label>
         <button type="submit" class="teacher-btn-save" :disabled="facultyApi.loading">Create</button>
       </form>
-      <ApiMessages :error="facultyApi.error" :api-message="facultyApi.apiMessage" />
-      <p v-if="facultyApi.result?.id && !facultyApi.apiMessage" class="admin-ok">Id {{ facultyApi.result.id }}</p>
+      <ApiMessages :error="facultyApi.error" />
+      <p v-if="facultyApi.result?.id" class="admin-ok">Id {{ facultyApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -96,8 +96,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="programmeApi.loading">Create</button>
       </form>
-      <ApiMessages :error="programmeApi.error" :api-message="programmeApi.apiMessage" />
-      <p v-if="programmeApi.result?.id && !programmeApi.apiMessage" class="admin-ok">Id {{ programmeApi.result.id }}</p>
+      <ApiMessages :error="programmeApi.error" />
+      <p v-if="programmeApi.result?.id" class="admin-ok">Id {{ programmeApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -107,8 +107,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         <label>Room number <input v-model="room.room_num" required /></label>
         <button type="submit" class="teacher-btn-save" :disabled="roomApi.loading">Create</button>
       </form>
-      <ApiMessages :error="roomApi.error" :api-message="roomApi.apiMessage" />
-      <p v-if="roomApi.result?.id && !roomApi.apiMessage" class="admin-ok">Id {{ roomApi.result.id }}</p>
+      <ApiMessages :error="roomApi.error" />
+      <p v-if="roomApi.result?.id" class="admin-ok">Id {{ roomApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -120,8 +120,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         <label>Classes end <input v-model="cycle.end_date" type="date" required /></label>
         <button type="submit" class="teacher-btn-save" :disabled="cycleApi.loading">Create</button>
       </form>
-      <ApiMessages :error="cycleApi.error" :api-message="cycleApi.apiMessage" />
-      <p v-if="cycleApi.result?.id && !cycleApi.apiMessage" class="admin-ok">Id {{ cycleApi.result.id }}</p>
+      <ApiMessages :error="cycleApi.error" />
+      <p v-if="cycleApi.result?.id" class="admin-ok">Id {{ cycleApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -143,8 +143,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         <label>ECTS <input v-model="subject.ects" type="number" /></label>
         <button type="submit" class="teacher-btn-save" :disabled="subjectApi.loading">Create</button>
       </form>
-      <ApiMessages :error="subjectApi.error" :api-message="subjectApi.apiMessage" />
-      <p v-if="subjectApi.result?.code && !subjectApi.apiMessage" class="admin-ok">Code {{ subjectApi.result.code }}</p>
+      <ApiMessages :error="subjectApi.error" />
+      <p v-if="subjectApi.result?.code" class="admin-ok">Code {{ subjectApi.result.code }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -162,8 +162,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         <label>Intake year <input v-model="curriculum.intake_year" required /></label>
         <button type="submit" class="teacher-btn-save" :disabled="curriculumApi.loading">Create</button>
       </form>
-      <ApiMessages :error="curriculumApi.error" :api-message="curriculumApi.apiMessage" />
-      <p v-if="curriculumApi.result?.id && !curriculumApi.apiMessage" class="admin-ok">Id {{ curriculumApi.result.id }}</p>
+      <ApiMessages :error="curriculumApi.error" />
+      <p v-if="curriculumApi.result?.id" class="admin-ok">Id {{ curriculumApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -201,8 +201,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="termApi.loading">Create</button>
       </form>
-      <ApiMessages :error="termApi.error" :api-message="termApi.apiMessage" />
-      <p v-if="termApi.result?.id && !termApi.apiMessage" class="admin-ok">Id {{ termApi.result.id }}</p>
+      <ApiMessages :error="termApi.error" />
+      <p v-if="termApi.result?.id" class="admin-ok">Id {{ termApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -226,8 +226,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="termSubjectApi.loading">Add</button>
       </form>
-      <ApiMessages :error="termSubjectApi.error" :api-message="termSubjectApi.apiMessage" />
-      <p v-if="termSubjectApi.result && !termSubjectApi.apiMessage" class="admin-ok">
+      <ApiMessages :error="termSubjectApi.error" />
+      <p v-if="termSubjectApi.result" class="admin-ok">
         Added {{ termSubjectApi.result.subject_code }}
       </p>
     </section>
@@ -267,8 +267,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         <label>Weight <input v-model="groupType.weight" type="number" step="0.1" required /></label>
         <button type="submit" class="teacher-btn-save" :disabled="groupTypeApi.loading">Create</button>
       </form>
-      <ApiMessages :error="groupTypeApi.error" :api-message="groupTypeApi.apiMessage" />
-      <p v-if="groupTypeApi.result?.id && !groupTypeApi.apiMessage" class="admin-ok">Id {{ groupTypeApi.result.id }}</p>
+      <ApiMessages :error="groupTypeApi.error" />
+      <p v-if="groupTypeApi.result?.id" class="admin-ok">Id {{ groupTypeApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -328,8 +328,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="groupApi.loading">Create</button>
       </form>
-      <ApiMessages :error="groupApi.error" :api-message="groupApi.apiMessage" />
-      <p v-if="groupApi.result?.id && !groupApi.apiMessage" class="admin-ok">Id {{ groupApi.result.id }}</p>
+      <ApiMessages :error="groupApi.error" />
+      <p v-if="groupApi.result?.id" class="admin-ok">Id {{ groupApi.result.id }}</p>
     </section>
 
     <section class="teacher-panel admin-panel-spaced">
@@ -355,8 +355,8 @@ const termSubject = ref({ term_id: '', subject_code: '' })
         </label>
         <button type="submit" class="teacher-btn-save" :disabled="assignTeacherApi.loading">Assign</button>
       </form>
-      <ApiMessages :error="assignTeacherApi.error" :api-message="assignTeacherApi.apiMessage" />
-      <p v-if="assignTeacherApi.result && !assignTeacherApi.apiMessage && !assignTeacherApi.error" class="admin-ok">
+      <ApiMessages :error="assignTeacherApi.error" />
+      <p v-if="assignTeacherApi.result && !assignTeacherApi.error" class="admin-ok">
         {{ assignTeacherApi.result.teacher_idx }} teaches {{ assignTeacherApi.result.group_id }}
       </p>
     </section>

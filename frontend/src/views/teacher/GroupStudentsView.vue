@@ -18,9 +18,9 @@ function load() {
     <h1>Students in group</h1>
     <form class="row" @submit.prevent="load">
       <input v-model="groupId" placeholder="group_id" required />
-      <button type="submit" :disabled="api.loading">POST /groups/students</button>
+      <button type="submit" :disabled="api.loading">GET /groups/{group_id}/students</button>
     </form>
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
     <JsonPreview :data="api.result" />
   </div>
 </template>

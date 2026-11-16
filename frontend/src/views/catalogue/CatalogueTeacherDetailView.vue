@@ -38,8 +38,8 @@ function groupLabel(g) {
         ← Back to results
       </RouterLink>
     </p>
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
-    <div v-if="api.result && !api.result.err" class="catalogue-detail-card">
+    <ApiMessages :error="api.error" />
+    <div v-if="api.result" class="catalogue-detail-card">
       <p><strong>{{ api.result.name }}</strong></p>
       <p>{{ api.result.degree }}</p>
       <p v-if="api.result.phone">Phone: {{ api.result.phone }}</p>
@@ -70,7 +70,7 @@ function groupLabel(g) {
         </li>
       </ul>
     </div>
-    <OpinionList v-if="api.result && !api.result.err" :teacher-idx="String(route.params.idx)" />
+    <OpinionList v-if="api.result" :teacher-idx="String(route.params.idx)" />
   </div>
 </template>
 

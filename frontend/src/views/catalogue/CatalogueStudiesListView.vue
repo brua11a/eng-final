@@ -16,7 +16,7 @@ onMounted(() => api.run(() => catalogue.curricula('')))
     <p class="catalogue-hint">
       <RouterLink to="/catalogue/studia">← wróć do studiów</RouterLink>
     </p>
-    <ApiMessages :error="api.error" :api-message="api.apiMessage" />
+    <ApiMessages :error="api.error" />
     <ul v-if="api.result?.curricula?.length" class="result-list">
       <li v-for="c in api.result.curricula" :key="c.id">
         <RouterLink

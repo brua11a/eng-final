@@ -52,17 +52,19 @@ RETURN
 
 ---
 
-## POST /me/registrations/courses
+## GET /me/registrations/{registration_id}/courses
 
 **Allowed:** Student, only for registrations they have a turn in (403 otherwise)
 
 **Request**
 
-```json
-{
-	"registration_id": String
-}
+No body; parameters go in the URL:
+
+```http
+GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/courses
 ```
+
+- `registration_id` (path): registration id.
 
 **Response**
 
@@ -107,18 +109,20 @@ RETURN
 
 ---
 
-## POST /me/registrations/groups
+## GET /me/registrations/{registration_id}/subjects/{subject_code}/groups
 
 **Allowed:** Student, only for registrations they have a turn in (403 otherwise)
 
 **Request**
 
-```json
-{
-	"registration_id": String,
-	"subject_code": String
-}
+No body; parameters go in the URL:
+
+```http
+GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/subjects/W04CBE-SI0404G/groups
 ```
+
+- `registration_id` (path): registration id.
+- `subject_code` (path): subject code.
 
 **Response**
 
@@ -173,29 +177,27 @@ ORDER BY gt.g_type, g.number
 
 ---
 
-## POST /me/registrations/register
+## PUT /me/registered-groups/{group_id}
 
 **Allowed:** Student, only for groups opened by a registration they have a turn in
 
+Registers the student in the group. The student's place in the group is the resource, so it is created with `PUT`: registering again in a group the student is already in changes nothing and succeeds.
+
 **Request**
 
-```json
-{
-	"subject_code": String,
-	"group_id": String
-}
+No body:
+
+```http
+PUT /me/registered-groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f
 ```
 
 **Response**
 
-```json
-{
-	"ok": Boolean,
-	"err": String?
-}
-```
+None.
 
-Rejected when the student has no access to the group (`"Forbidden"`), already has another group of the same type for this subject in the same cycle, or the group is full. Registering again in a group the student is already in succeeds without changes.
+**Status**
+
+`204` when the student is registered. `403` if the student has no access to the group. `409` if they already have another group of the same type for this subject, or if the group is full.
 
 **Query**
 
@@ -203,7 +205,7 @@ All checks and the write run in one query. It takes write locks on the student a
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
-MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)
 WITH DISTINCT st, g, gt
 SET st.idx = st.idx
 SET g.capacity = g.capacity
@@ -229,33 +231,30 @@ RETURN status
 
 ---
 
-## POST /me/registrations/deregister
+## DELETE /me/registered-groups/{group_id}
 
 **Allowed:** Student, only while a registration they have a turn in still opens the group
 
 **Request**
 
-```json
-{
-	"subject_code": String,
-	"group_id": String
-}
+No body:
+
+```http
+DELETE /me/registered-groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f
 ```
 
 **Response**
 
-```json
-{
-	"ok": Boolean,
-	"err": String?
-}
-```
+None.
+
+**Status**
+
+`204` when the student is deregistered. `404` if the student is not in the group, or no registration they have a turn in opens it.
 
 **Query**
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-MATCH (g)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})
 MATCH (st)-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
 DELETE r
 RETURN g.id AS group_id
@@ -342,17 +341,19 @@ RETURN DISTINCT ac.id AS id, ac.year AS year, ac.season AS season
 
 ---
 
-## POST /me/academic-cycles/detail
+## GET /me/academic-cycles/{cycle_id}
 
 **Allowed:** Student, only for cycles they are enrolled in (403 otherwise)
 
 **Request**
 
-```json
-{
-	"cycle_id": String
-}
+No body; parameters go in the URL:
+
+```http
+GET /me/academic-cycles/e3efab49-3222-58a3-a329-2bf8c5d9a363
 ```
+
+- `cycle_id` (path): academic cycle id.
 
 **Response**
 
@@ -512,12 +513,11 @@ RETURN
 	"content": String?,
 	"submit": DateTime?,  // null when the opinion was not created
 	"group_id": String,
-	"teacher_idx": String,
-	"err": String?
+	"teacher_idx": String
 }
 ```
 
-Returns HTTP 403 (`"Forbidden"`) if the student is not registered in the group, or HTTP 403 (`"Teacher does not teach this group"`) if `teacher_idx` is invalid for the group. Returns `err="Opinion already exists"` if the student already submitted for that group and teacher.
+`201` with the new opinion. `403` (`"Forbidden"`) if the student is not registered in the group, or `403` (`"Teacher does not teach this group"`) if `teacher_idx` is invalid for the group. `409` if the student already submitted an opinion for that group and teacher. `422` if an admin leaves out `student_idx`.
 
 **Query**
 
