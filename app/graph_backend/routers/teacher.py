@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
 
-from app.database import get_session
+from app.graph_backend.database import get_session
 from app.graph_backend.auth import Caller, require
 from app.graph_backend.errors import forbidden, not_found
 from app.graph_backend.grades import average_grade

@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.database import close_driver, verify_connectivity
+from app.graph_backend.database import close_driver, verify_connectivity
 from app.graph_backend.errors import register_exception_handlers
 from app.graph_backend.routers.admin import router as admin_router
 from app.graph_backend.routers.catalogue import router as catalogue_router

@@ -462,9 +462,9 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 ├── app
 │   ├── graph_backend
 │   │   ├── auth
-│   │   └── routers
-│   ├── schemas
-│   └── database.py
+│   │   ├── routers
+│   │   └── database.py
+│   └── schemas
 ├── certificates
 │   └── app
 ├── endpoint_schema
@@ -486,7 +486,7 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 
 Klient Vue jest w całości zawarty w katalogu `frontend/`, wraz z plikiem `Dockerfile` budującym jego obraz i konfiguracją serwera nginx (`nginx.conf`), który go serwuje.
 
-W katalogu `app/` znajduje się backend, w tym warstwa API. Plik `database.py` tworzy połączenie z bazą Neo4j za pomocą sterownika. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, a w podkatalogu `graph_backend/` – backend grafowy. Punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, wspólna obsługa błędów w `errors.py`, a zapytania do bazy danych w pozostałych modułach.
+W katalogu `app/` znajduje się backend, w tym warstwa API. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, niezależne od bazy danych. W podkatalogu `graph_backend/` znajduje się backend grafowy, czyli cały kod zależny od Neo4j. Plik `database.py` tworzy w nim połączenie z bazą za pomocą sterownika, punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, wspólna obsługa błędów w `errors.py`, a zapytania do bazy danych w pozostałych modułach.
 
 *todo* W tym samym katalogu, w podkatalogu `relation_backend/`, znajdzie się implementacja relacyjna podobnego systemu. Będzie ona działać w ten sam sposób – poprzez sterownik bazy danych zamiast mapowania obiektowo-relacyjnego. Oba backendy będą korzystać z tych samych modeli Pydantic.
 
@@ -1104,12 +1104,12 @@ API odbiera żądanie na wybranym punkcie końcowym, weryfikuje token i uprawnie
 
 ```
 .
-├── database.py
 ├── graph_backend
 │   ├── auth
 │   │   ├── deps.py
 │   │   └── __init__.py
 │   ├── cycles.py
+│   ├── database.py
 │   ├── errors.py
 │   ├── grades.py
 │   ├── __init__.py
@@ -1213,9 +1213,41 @@ def not_found(what: str) -> HTTPException:
 Na końcu `app/__init__.py` podłączane są routery z katalogu `routers/` (5.5.1), pogrupowane według ról użytkowników. Każdy jest dołączany z argumentem `prefix=API_PREFIX`, więc wszystkie punkty końcowe zaczynają się od `/api`.
 
 5.5.3 Połączenie z bazą danych
-- `app/database.py`: sterownik (`AsyncGraphDatabase.driver`), konfiguracja ze zmiennych środowiskowych
-- zależność `get_session` – jedna sesja na żądanie, zamykana po odpowiedzi (`yield`)
-- transakcje: zwykle automatyczne (jedno zapytanie), jawne przy kilku zapisach naraz (`start_registrations`, `remove_role`)
+
+Baza danych Neo4j wykorzystywana przez aplikację komunikuje się z aplikacją przez asynchroniczny sterownik zdefiniowany w `graph_backend/database.py`. Pojedyncza instancja `AsyncGraphDatabase.driver` jest współdzielona w całej aplikacji. Zgodnie z testami wykonanymi na potrzeby biblioteki neomodel, asynchroniczny sterownik jest szybszy od zrównoleglonego i o wiele szybszy od szeregowego.  [CYTOWANIE: https://github.com/mariusconjeaud/neomodel-locust]
+
+Konstruktor sterownika przyjmuje URI bazy danych oraz login i hasło użytkownika aplikacji. Wszystkie trzy wartości są odczytywane ze zmiennych środowiskowych ustawianych przez Docker Compose (5.1.5). URI ma schemat `bolt+s`, więc cały ruch między API a bazą jest szyfrowany TLS.
+
+Moduł udostępnia też funkcje `verify_connectivity()` i `close_driver()`, wywoływane w `lifespan` (5.5.2), oraz zależność `get_session()`, przez którą punkty końcowe otrzymują sesję bazy danych.
+
+```python
+async def get_session():
+    async with driver.session() as session:
+        yield session
+```
+
+*Funkcja pozyskiwania sesji*
+
+Sesja jest otwierana w bloku `async with`, czyli przez asynchroniczny menedżer kontekstu (ang. *context manager*). Przy wejściu do bloku wywoływana jest metoda `__aenter__()`, która otwiera sesję, a przy wyjściu – `__aexit__()`, która ją zamyka, również wtedy, gdy w bloku wystąpi wyjątek [CYTOWANIE: https://docs.python.org/3/reference/datamodel.html#async-context-managers]. Wewnątrz bloku funkcja zatrzymuje się na `yield` i przekazuje sesję. Resztą zarządza FastAPI: wstrzykuje sesję do punktu końcowego jako zależność, a po jego zakończeniu wznawia funkcję, która wychodzi z bloku `async with` i zamyka sesję [CYTOWANIE: https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/].
+
+Sesja jest tworzona raz na żądanie. Zgodnie z dokumentacją sterownika, tworzenie sesji jest lekką operacją, ale sesje nie są bezpieczne przy współbieżnym użyciu [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/async_api.html#asyncsessions-asynctransactions]. Dlatego sesja nie jest współdzielona: każde żądanie dostaje własną, a współdzielony jest jedynie sterownik. To on utrzymuje pulę połączeń, z której sesje pobierają połączenie przy pierwszym zapytaniu i do której je oddają przy zamknięciu.
+
+Transakcje są wykorzystywane na dwa sposoby. Pojedyncze wywołanie `session.run()` jest wykonywane jako transakcja automatyczna (ang. *auto-commit*): zapytanie wykonuje się w całości albo wcale. Większość punktów końcowych wykonuje jedno zapytanie, więc to wystarcza. Gdy kilka zapytań musi się udać razem, otwierana jest jawna transakcja i zatwierdzana przez `commit()`. Tak działa m.in. usuwanie roli użytkownika oraz otwarcie zapisów, w którym utworzenie rejestracji, jej tur i powiązań z grupami jest jedną operacją.
+
+```python
+tx = await session.begin_transaction()
+try:
+    row = None
+    if await one(tx, _LOCK_PERSON, idx=idx) is not None:
+        row = await one(tx, _REMOVE_ROLE[role], idx=idx)
+    await tx.commit()
+finally:
+    await tx.close()
+```
+
+*Jawna transakcja przy usuwaniu roli*
+
+Zapytania w transakcji są wykonywane tą samą funkcją `one()` co w sesji (5.5.5), ponieważ sesja i transakcja udostępniają metodę `run()` o tej samej sygnaturze. Jeśli przed `commit()` zostanie zgłoszony wyjątek, `close()` w bloku `finally` wycofuje transakcję i żadna ze zmian nie trafia do bazy. Neo4j zawsze działa na poziomie izolacji *read committed*, którego nie da się podnieść, dlatego spójność przy współbieżnych żądaniach zapewniają jawne blokady zapisu, takie jak `_LOCK_PERSON` powyżej (5.5.8) [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/].
 
 5.5.4 Modele danych (schema)
 - `app/schemas/` – modele Pydantic, podział na pliki według dziedziny, konwencja `...Request` / `...Response`
@@ -1227,7 +1259,7 @@ Na końcu `app/__init__.py` podłączane są routery z katalogu `routers/` (5.5.
 ```
 
 5.5.5 Funkcje współdzielone
-- `query.py`: `run`, `one`, `tx_one`, `native` (zamiana typów czasowych Neo4j), `new_id` / `next_id` (UUID)
+- `query.py`: `run`, `one` (działają zarówno na sesji, jak i na jawnej transakcji), `native` (zamiana typów czasowych Neo4j), `new_id` (UUID)
 - `teaching.py` (`teacher_groups` – wspólne dla `/me/groups`, `/teachers/{idx}`, `/teachers/{idx}/groups`), `cycles.py` (`cycle_sort_key`), `grades.py` (`average_grade`)
 
 ```json

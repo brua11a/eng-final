@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
 
-from app.database import get_session
+from app.graph_backend.database import get_session
 from app.graph_backend.auth import Caller, require
 from app.graph_backend.errors import conflict, forbidden, invalid, not_found
-from app.graph_backend.query import next_id, one, run
+from app.graph_backend.query import new_id, one, run
 from app.schemas.academic_cycle import (
     CycleSubject,
     CycleSubjectGroup,
@@ -431,7 +431,7 @@ async def create_opinion(
         raise forbidden("Teacher does not teach this group")
     if check["duplicate"]:
         raise conflict("Opinion already exists")
-    opinion_id = await next_id(session, "Opinion")
+    opinion_id = new_id()
     row = await one(
         session,
         """

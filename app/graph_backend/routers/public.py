@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
 
-from app.database import get_session
+from app.graph_backend.database import get_session
 from app.graph_backend.auth import create_token, roles_from_flags, verify_password
 from app.graph_backend.auth.deps import Caller
 from app.graph_backend.errors import forbidden, unauthorized

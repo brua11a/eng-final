@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from neo4j import AsyncSession
 from neo4j.exceptions import ConstraintError
 
-from app.database import get_session
+from app.graph_backend.database import get_session
 from app.graph_backend.auth import hash_password, require, roles_from_flags
-from app.graph_backend.query import next_id, one, run, tx_one
+from app.graph_backend.query import new_id, one, run
 from app.schemas.academic_cycle import (
     AcademicCycleCreateRequest,
     AcademicCycleCreateResponse,
@@ -374,8 +374,8 @@ async def remove_role(
     tx = await session.begin_transaction()
     try:
         row = None
-        if await tx_one(tx, _LOCK_PERSON, idx=idx) is not None:
-            row = await tx_one(tx, _REMOVE_ROLE[role], idx=idx)
+        if await one(tx, _LOCK_PERSON, idx=idx) is not None:
+            row = await one(tx, _REMOVE_ROLE[role], idx=idx)
         await tx.commit()
     finally:
         await tx.close()
@@ -429,7 +429,7 @@ async def create_group_type(
         """,
         subject_code=body.subject_code,
         cycle_id=body.cycle_id,
-        id=await next_id(session, "GroupType"),
+        id=new_id(),
         g_type=body.g_type,
         weight=body.weight,
     )
@@ -466,7 +466,7 @@ async def create_group(
         subject_code=body.subject_code,
         cycle_id=body.cycle_id,
         room_id=body.room_id,
-        id=await next_id(session, "Group"),
+        id=new_id(),
         weekday=body.weekday,
         g_type=body.g_type,
         number=body.number,
@@ -517,7 +517,7 @@ async def create_room(
         CREATE (r:Room {id: $id, building: $building, room_num: $room_num})
         RETURN r.id AS id, r.building AS building, r.room_num AS room_num
         """,
-        id=await next_id(session, "Room"),
+        id=new_id(),
         building=body.building,
         room_num=body.room_num,
     )
@@ -542,7 +542,7 @@ async def create_cycle(
         RETURN ac.id AS id, ac.year AS year, ac.season AS season,
                ac.start_date AS start_date, ac.end_date AS end_date
         """,
-        id=await next_id(session, "AcademicCycle"),
+        id=new_id(),
         year=body.year,
         season=body.season,
         start_date=body.start_date.isoformat(),
@@ -601,7 +601,7 @@ async def create_term(
         """,
         curriculum_id=body.curriculum_id,
         cycle_id=body.cycle_id,
-        id=await next_id(session, "CurriculumTerm"),
+        id=new_id(),
         sem=body.sem,
     )
     if row is None:
@@ -624,7 +624,7 @@ async def create_curriculum(
         RETURN c.id AS id, p.id AS programme_id, c.intake_year AS intake_year
         """,
         programme_id=body.programme_id,
-        id=await next_id(session, "Curriculum"),
+        id=new_id(),
         intake_year=body.intake_year,
     )
     if row is None:
@@ -644,7 +644,7 @@ async def create_faculty(
         CREATE (fa:Faculty {id: $id, name: $name, full_name: $full_name})
         RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name
         """,
-        id=await next_id(session, "Faculty"),
+        id=new_id(),
         name=body.name,
         full_name=body.full_name,
     )
@@ -657,10 +657,10 @@ async def start_registrations(
     session: AsyncSession = Depends(get_session),
     caller=Depends(_admin),
 ) -> StartRegistrationsResponse:
-    registration_id = await next_id(session, "Registration")
+    registration_id = new_id()
     turns = [
         {
-            "id": await next_id(session, "RegistrationTurn"),
+            "id": new_id(),
             "turn_number": turn.turn_number,
             "date": turn.date.isoformat(),
             "start": _zoned_time(turn.start),
@@ -671,7 +671,7 @@ async def start_registrations(
     # All three writes in one transaction: an error in any of them rolls back the others.
     tx = await session.begin_transaction()
     try:
-        created = await tx_one(
+        created = await one(
             tx,
             """
             MATCH (ac:AcademicCycle {id: $cycle_id})
@@ -689,7 +689,7 @@ async def start_registrations(
         )
         if created is None:
             raise not_found("Cycle or faculty")
-        await tx_one(
+        await one(
             tx,
             """
             MATCH (reg:Registration {id: $registration_id})
@@ -704,7 +704,7 @@ async def start_registrations(
             registration_id=registration_id,
             turns=turns,
         )
-        opened = await tx_one(
+        opened = await one(
             tx,
             """
             MATCH (reg:Registration {id: $registration_id})
@@ -916,7 +916,7 @@ async def create_programme(
         RETURN p.id AS id, p.name AS name, fa.id AS faculty_id
         """,
         faculty_id=body.faculty_id,
-        id=await next_id(session, "Programme"),
+        id=new_id(),
         name=body.name,
     )
     if row is None:

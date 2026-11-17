@@ -12,7 +12,7 @@ from app.graph_backend.errors import forbidden, unauthorized
 
 Role = Literal["Student", "Teacher", "Admin"]
 _bearer = HTTPBearer(auto_error=False)
-_secret = os.getenv("JWT_SECRET", "dev-secret")
+_secret = os.environ["JWT_SECRET"]
 _algorithm = "HS256"
 
 
