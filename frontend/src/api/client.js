@@ -129,7 +129,8 @@ export const catalogue = {
   teachers: (name) => apiRequest('/teachers', { query: { name } }),
   subjects: (name, code) => apiRequest('/subjects', { query: { name, code } }),
   curricula: (name) => apiRequest('/curricula', { query: { name } }),
-  organizationalUnits: (name) => apiRequest('/organizational-units', { query: { name } }),
+  organizationalUnits: (name) => apiRequest('/faculties', { query: { name } }),
+  teacherGroups: (idx) => apiRequest(`/teachers/${seg(idx)}/groups`),
   subjectDetail: (code) => apiRequest(`/subjects/${seg(code)}`),
   subjectGroups: (subject_code, cycle_id) =>
     apiRequest(`/subjects/${seg(subject_code)}/groups`, { query: { cycle_id } }),
@@ -141,20 +142,20 @@ export const catalogue = {
 export const student = {
   registrations: () => apiRequest('/me/registrations'),
   registrationCourses: (registration_id) =>
-    apiRequest(`/me/registrations/${seg(registration_id)}/courses`),
+    apiRequest(`/me/registrations/${seg(registration_id)}/subjects`),
   registrationGroups: (registration_id, subject_code) =>
-    apiRequest(`/me/registrations/${seg(registration_id)}/subjects/${seg(subject_code)}/groups`),
+    apiRequest(`/me/registrations/${seg(registration_id)}/groups`, { query: { subject_code } }),
   register: (group_id) => apiRequest(`/me/registered-groups/${seg(group_id)}`, { method: 'PUT' }),
   deregister: (group_id) => apiRequest(`/me/registered-groups/${seg(group_id)}`, { method: 'DELETE' }),
   enrolments: () => apiRequest('/me/enrolments'),
   academicCycles: () => apiRequest('/me/academic-cycles'),
   academicCycleDetail: (cycle_id) => apiRequest(`/me/academic-cycles/${seg(cycle_id)}`),
-  dashboard: () => apiRequest('/me/dashboard'),
+  registeredGroups: () => apiRequest('/me/registered-groups'),
   createOpinion: (body) => apiRequest('/opinions', { method: 'POST', body }),
 }
 
 export const teacher = {
-  myGroups: (query) => apiRequest('/me/groups', { query }),
+  myGroups: () => apiRequest('/me/groups'),
   studentDetail: (student_idx) => apiRequest(`/students/${seg(student_idx)}`),
   groupStudents: (group_id) => apiRequest(`/groups/${seg(group_id)}/students`),
   setGrade: (group_id, student_idx, grade) =>
@@ -177,7 +178,7 @@ export const admin = {
   removeRole: ({ idx, role }) =>
     apiRequest(`/admin/users/${seg(idx)}/roles/${seg(role)}`, { method: 'DELETE' }),
   createFaculty: (body) => apiRequest('/admin/faculties', { method: 'POST', body }),
-  listFaculties: () => apiRequest('/organizational-units'),
+  listFaculties: () => apiRequest('/faculties'),
   listProgrammes: () => apiRequest('/admin/programmes'),
   listRooms: () => apiRequest('/admin/rooms'),
   listAcademicCycles: () => apiRequest('/admin/academic-cycles'),

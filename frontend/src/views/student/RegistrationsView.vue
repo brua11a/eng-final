@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { catalogue, student } from '../../api/client'
 import ApiMessages from '../../components/ApiMessages.vue'
 import GroupFacts from '../../components/GroupFacts.vue'
@@ -26,6 +26,23 @@ const detailError = ref('')
 const detailData = ref(null)
 
 const onListScreen = computed(() => !selected.value)
+
+// The server accepts (de)registration only during the student's turn; the buttons follow it.
+// `now` ticks so a turn that starts while the page is open enables them without a reload.
+const now = ref(Date.now())
+let clock = null
+
+function turnState(r) {
+  const start = Date.parse(`${r.date}T${r.start}`)
+  const end = Date.parse(`${r.date}T${r.end}`)
+  if (now.value < start) return 'upcoming'
+  if (now.value >= end) return 'over'
+  return 'open'
+}
+
+const TURN_LABEL = { upcoming: 'not started yet', open: 'in progress', over: 'ended' }
+
+const turnOpen = computed(() => !!selected.value && turnState(selected.value) === 'open')
 
 function registrationLabel(r) {
   return `${r.name} · turn ${r.turn_number} · ${r.date} ${timeRange(r.start, r.end)}`
@@ -164,7 +181,11 @@ async function setRegistered(courseId, group, register) {
   }
 }
 
-onMounted(loadRegistrations)
+onMounted(() => {
+  loadRegistrations()
+  clock = setInterval(() => (now.value = Date.now()), 30000)
+})
+onUnmounted(() => clearInterval(clock))
 </script>
 
 <template>
@@ -191,6 +212,7 @@ onMounted(loadRegistrations)
             <strong>{{ r.name }}</strong>
             <span>Turn {{ r.turn_number }} · {{ r.date }}</span>
             <span>{{ timeRange(r.start, r.end) }} · {{ r.reg_type }}</span>
+            <span :class="['reg-turn', `reg-turn--${turnState(r)}`]">Turn {{ TURN_LABEL[turnState(r)] }}</span>
           </button>
         </li>
       </ul>
@@ -200,6 +222,11 @@ onMounted(loadRegistrations)
       <button type="button" class="teacher-btn-secondary reg-back" @click="backToList">← All registrations</button>
       <h2 class="reg-detail-title">{{ registrationLabel(selected) }}</h2>
       <p class="reg-meta">Curriculum {{ selected.curriculum_id }}</p>
+      <p v-if="!turnOpen" class="reg-closed">
+        Your turn has {{ turnState(selected) === 'upcoming' ? 'not started yet' : 'ended' }}
+        ({{ selected.date }} {{ timeRange(selected.start, selected.end) }}). You can browse the groups, but cannot register
+        or deregister now.
+      </p>
 
       <ApiMessages :error="coursesError" />
       <p v-if="loadingCourses" class="page-empty">Loading subjects…</p>
@@ -256,7 +283,8 @@ onMounted(loadRegistrations)
                         v-if="g.registered"
                         type="button"
                         class="teacher-btn-secondary"
-                        :disabled="registerStatus[g.id]?.saving"
+                        :disabled="!turnOpen || registerStatus[g.id]?.saving"
+                        :title="turnOpen ? '' : 'Only during your registration turn'"
                         @click="setRegistered(course.id, g, false)"
                       >
                         Deregister
@@ -265,7 +293,8 @@ onMounted(loadRegistrations)
                         v-else-if="canRegister(course.id, g)"
                         type="button"
                         class="teacher-btn-save"
-                        :disabled="registerStatus[g.id]?.saving"
+                        :disabled="!turnOpen || registerStatus[g.id]?.saving"
+                        :title="turnOpen ? '' : 'Only during your registration turn'"
                         @click="setRegistered(course.id, g, true)"
                       >
                         Register
@@ -408,6 +437,26 @@ onMounted(loadRegistrations)
 .reg-muted {
   font-size: 0.75rem;
   color: #9ca3af;
+}
+
+.reg-turn {
+  font-size: 0.75rem;
+}
+
+.reg-turn--open {
+  color: #047857;
+}
+
+.reg-turn--upcoming,
+.reg-turn--over {
+  color: #9ca3af;
+}
+
+.reg-closed {
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .reg-err {

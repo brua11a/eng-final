@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { student, teacher } from '../../api/client'
+import { catalogue, student, teacher } from '../../api/client'
 import { useAuthStore } from '../../stores/auth'
 import ApiMessages from '../../components/ApiMessages.vue'
 import TeacherSelect from '../../components/TeacherSelect.vue'
@@ -35,12 +35,14 @@ async function loadAll() {
   const merged = []
   try {
     if (showStudent) {
-      const data = await student.dashboard()
+      const data = await student.registeredGroups()
       merged.push(...toEntries(data?.groups, 'student'))
     }
     if (showTeaching) {
-      const query = pickTeacher && teacherIdx.value ? { teacher_idx: teacherIdx.value } : {}
-      const data = await teacher.myGroups(query)
+      const data =
+        pickTeacher && teacherIdx.value
+          ? await catalogue.teacherGroups(teacherIdx.value)
+          : await teacher.myGroups()
       merged.push(...toEntries(data?.groups, 'teaching'))
     }
     if (token === loadToken) scheduleEntries.value = merged

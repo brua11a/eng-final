@@ -399,8 +399,14 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    location /assets/ {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
     }
 }
 ```
@@ -423,6 +429,8 @@ Wcześniejsza wersja konfiguracji wymieniała ścieżki API w wyrażeniu regular
 Samo `https` w `proxy_pass` włącza szyfrowanie, ale nginx domyślnie nie weryfikuje certyfikatu serwera docelowego [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify]. Byłaby to sytuacja analogiczna do `bolt+ssc` z 5.1.4: połączenie szyfrowane, ale bez pewności, z kim. Dlatego `proxy_ssl_verify` włącza weryfikację, `proxy_ssl_trusted_certificate` wskazuje lokalne CA, a `proxy_ssl_name` i `proxy_ssl_server_name` określają i przekazują w SNI nazwę `app` sprawdzaną w certyfikacie API. Połączenie ograniczono do TLS 1.3, ponieważ obie strony są pod kontrolą projektu. Nagłówki `proxy_set_header` przekazują do API dane oryginalnego żądania (host, adres IP klienta, protokół), które inaczej zostałyby utracone na proxy.
 
 Drugi blok obsługuje aplikację jednostronicową (ang. *Single Page Application*, SPA), w której routing odbywa się w przeglądarce. Adresy widoków, np. `/student/plan`, nie odpowiadają plikom na serwerze, więc `try_files` zwraca w takim przypadku `index.html` [CYTOWANIE: https://router.vuejs.org/guide/essentials/history-mode.html]. Bez tego odświeżenie strony kończyłoby się błędem 404.
+
+Wyjątkiem są pliki zbudowanej aplikacji w katalogu `/assets/`. Vite umieszcza w ich nazwach skrót zawartości, np. `CyclesView-D5yd3d5K.js`, więc każda nowa wersja aplikacji ma nowe nazwy plików. Brakujący plik kończy się błędem 404, a nie zwróceniem `index.html`: strona otwarta przed wdrożeniem nowej wersji żąda plików, których już nie ma, a przeglądarka odrzuciłaby otrzymany w ich miejsce dokument HTML jako niepoprawny moduł JavaScript. Ponieważ zawartość pliku o danej nazwie nigdy się nie zmienia, może on być przechowywany w pamięci podręcznej przeglądarki bezterminowo (`immutable`). Sam `index.html`, wskazujący aktualne nazwy plików, nie jest natomiast buforowany (`no-cache`), dzięki czemu po wdrożeniu przeglądarka od razu pobiera nową wersję. Strony otwarte jeszcze przed wdrożeniem obsługuje router aplikacji klienckiej: gdy nie uda się załadować modułu widoku, przeładowuje stronę jeden raz.
 
 W `docker-compose.yml` argument `NPM_REGISTRY` korzysta ze składni `${ZMIENNA:-domyślna}`. W przeciwieństwie do `:?` z 5.1.5 brak zmiennej nie blokuje uruchomienia, tylko powoduje użycie publicznego rejestru [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/].
 
@@ -809,11 +817,13 @@ Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API: dozwol
 Ponadto API generuje interaktywną dokumentację w standardzie OpenAPI [CYTOWANIE: https://fastapi.tiangolo.com/reference/openapi/docs/], na podstawie tych samych modeli, które służą do walidacji. Jest ona dostępna pod adresem `/api/docs`.
 
 5.4.1 Konwencje
-Każdy punkt końcowy jest opisany według tego samego schematu: kto może go wywołać (**Allowed**), kształt żądania (**Request**), kształt odpowiedzi (**Response**) oraz zapytania Cypher, które wykonuje (**Query**). `X?` oznacza pole opcjonalne lub mogące przyjąć wartość `null`, a `List[X]` tablicę JSON. Każdy punkt końcowy poza `POST /login` wymaga nagłówka `Authorization: Bearer <token>`. Ścieżki podawane są względem prefiksu `/api`, np. `GET /subjects` jest dostępny pod adresem `/api/subjects`. Zasady doboru metod HTTP i kodów odpowiedzi opisano w 4.5.2.
+
+Każdy punkt końcowy jest opisany według tego samego schematu: kto może go wywołać (**Allowed**), kształt żądania (**Request**), kształt odpowiedzi (**Response**) oraz zapytania Cypher, które wykonuje (**Query**). `X?` oznacza pole opcjonalne lub mogące przyjąć wartość `null`, a `List[X]` tablicę JSON. Każdy punkt końcowy poza `POST /login` wymaga nagłówka `Authorization: Bearer <token>`. Ścieżki podawane są względem prefiksu `/api`, np. `GET /subjects` jest dostępny pod adresem `/api/subjects`.
 
 Poniżej opisano wybrane, najważniejsze punkty końcowe - po co najmniej jednym dla każdej roli.
 
 5.4.2 Logowanie - POST /login
+
 Jedyny punkt końcowy dostępny bez tokenu. Przyjmuje adres e-mail i hasło, a w odpowiedzi zwraca token oraz listę ról użytkownika.
 
 ```json
@@ -846,10 +856,11 @@ RETURN
   u:Student AS student
 ```
 
-Zapytanie dobrze pokazuje zaletę wieloetykietowości. Role są po prostu etykietami tego samego węzła. Wyrażenie `u:Admin` zwraca wartość logiczną, więc jednym odczytem węzła uzyskiwany jest komplet informacji o uprawnieniach. Podobnie działa blokada konta: dezaktywowany użytkownik dostaje etykietę `Inactive`.
+Zapytanie dobrze pokazuje zaletę wieloetykietowości. Role są po prostu etykietami tego samego węzła. Wyrażenia `u:Admin`, `u:Teacher` itd. zwracają wartość logiczną, więc jednym odczytem węzła uzyskiwany jest komplet informacji o uprawnieniach. Podobnie działa blokada konta - dezaktywowany użytkownik dostaje etykietę `Inactive`.
 
 5.4.3 Katalog przedmiotów - GET /subjects
-Zwraca listę przedmiotów w postaci siatki: wiersze to przedmioty, a kolumny to cykle akademickie. Każda komórka mówi, czy przedmiot jest w danym cyklu prowadzony, ile ma grup i czy trwają na niego zapisy. Opcjonalne parametry `name` i `code` zawężają wyniki do przedmiotów, których nazwa lub kod zawiera podany tekst:
+
+Zwraca listę przedmiotów w postaci siatki: wiersze to przedmioty, a kolumny to cykle akademickie. Każda komórka mówi, czy przedmiot jest w danym cyklu prowadzony, ile ma grup i czy trwają na niego zapisy. Opcjonalne parametry `name` i `code` zawężają wyniki do przedmiotów, których nazwa lub kod zawiera podany tekst.
 
 ```http
 GET /subjects?name=sieci&code=SI00
@@ -880,6 +891,11 @@ GET /subjects?name=sieci&code=SI00
 Serwer wykonuje dwa zapytania. Pierwsze pobiera wszystkie cykle akademickie, które po posortowaniu chronologicznym stają się kolumnami siatki. Ich identyfikatory trafiają do drugiego zapytania jako lista `$cycle_ids`, a ono zwraca gotowe wiersze:
 
 ```cypher
+// 1. Kolumny: wszystkie cykle akademickie (sortowane przez serwer)
+MATCH (ac:AcademicCycle)
+RETURN ac.id AS id, ac.year AS year, ac.season AS season
+
+// 2. Wiersze: przedmioty z wydziałami i komórką dla każdego cyklu
 MATCH (su:Subject)
 WHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))
   AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))
@@ -900,22 +916,26 @@ RETURN
       (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
     },
     registration_open: EXISTS {
-      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
-      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(:Registration)
+      MATCH (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
+            (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)
+      WITH reg,
+           min(datetime({date: rt.date, time: rt.start_time})) AS opens,
+           max(datetime({date: rt.date, time: rt.end_time})) AS closes
+      WHERE opens <= datetime() < closes
     }
   }] AS cycles
 ORDER BY su.name
 ```
 
-Warunek `$name IS NULL OR ...` sprawia, że to samo zapytanie obsługuje zarówno wyszukiwanie z filtrem, jak i bez niego, więc nie trzeba składać tekstu zapytania w zależności od parametrów. Podzapytanie `COLLECT { ... }` przechodzi ścieżką od przedmiotu, przez semestr programu i program studiów, aż do wydziału.
+Warunek `$name IS NULL OR ...` sprawia, że to samo zapytanie obsługuje zarówno wyszukiwanie z filtrem, jak i bez niego. Podzapytanie `COLLECT` przechodzi ścieżką od przedmiotu, przez semestr programu i program studiów, aż do wydziału.
 
-Komórki siatki powstają w wyrażeniu listowym `[cycle_id IN $cycle_ids | { ... }]`, w kolejności zgodnej z kolumnami. Każde pole komórki to osobne pytanie o istnienie ścieżki w grafie: `EXISTS { ... }` sprawdza, czy taka ścieżka istnieje, a `COUNT { ... }` liczy jej wystąpienia. Przedmiot jest oferowany w cyklu, jeśli należy do semestru programu studiów realizowanego w tym cyklu. Zapisy są otwarte, jeśli choć jedna grupa przedmiotu z tego cyklu została otwarta przez jakieś zapisy (Registration). Wzorzec zawierający przecinek opisuje dwie ścieżki, które muszą być spełnione jednocześnie i mają wspólny węzeł `si`.
+Komórki siatki powstają w wyrażeniu listowym `[cycle_id IN $cycle_ids | { ... }]`, w kolejności zgodnej z kolumnami. Każde pole komórki to osobne pytanie o istnienie ścieżki w grafie: `EXISTS { ... }` sprawdza, czy taka ścieżka istnieje, a `COUNT { ... }` liczy jej wystąpienia. Przedmiot jest oferowany w cyklu, jeśli należy do semestru programu studiów realizowanego w tym cyklu. Zapisy są otwarte, jeśli bieżący moment mieści się w okresie zapisów (Registration) obejmujących którąkolwiek grupę przedmiotu z tego cyklu. Zapisy nie mają własnych dat, więc ich okres trwa od początku pierwszej do końca ostatniej tury. Wzorzec zawierający przecinek opisuje dwie ścieżki, które muszą być spełnione jednocześnie i mają wspólny węzeł `si`.
 
-5.4.4 Lista grup w zapisach - GET /me/registrations/{registration_id}/subjects/{subject_code}/groups
-Punkt końcowy studenta, wywoływany po wybraniu przedmiotu w trakcie zapisów. Zwraca wszystkie grupy tego przedmiotu otwarte przez dane zapisy, wraz z liczbą zajętych miejsc i informacją, czy student już jest w danej grupie zapisany. Zarówno zapisy, jak i przedmiot są wskazywane w ścieżce:
+5.4.4 Lista grup w zapisach - GET /me/registrations/{registration_id}/groups
+Punkt końcowy studenta, wywoływany po wybraniu przedmiotu w trakcie zapisów. Zwraca wszystkie grupy tego przedmiotu otwarte przez dane zapisy, wraz z liczbą zajętych miejsc i informacją, czy student już jest w danej grupie zapisany. Zapisy są wskazywane w ścieżce, a przedmiot w parametrze zapytania, ponieważ jedynie zawęża listę grup otwartych przez zapisy:
 
 ```http
-GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/subjects/W04CBE-SI0404G/groups
+GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/groups?subject_code=W04CBE-SI0404G
 ```
 
 ```json
@@ -973,18 +993,18 @@ ORDER BY gt.g_type, g.number
 Sala i prowadzący są dołączane przez `OPTIONAL MATCH`, ponieważ nowo utworzona grupa może ich jeszcze nie mieć - wtedy odpowiednie pola mają wartość `null`, a grupa nadal jest zwracana. Liczba zajętych miejsc nie jest przechowywana jako licznik, tylko liczona na bieżąco jako liczba krawędzi `REGISTERED_IN` wchodzących do grupy. Dzięki temu nie istnieje ryzyko rozjechania się licznika z faktycznym stanem.
 
 5.4.5 Zapis do grupy - PUT /me/registered-groups/{group_id}
-Najważniejszy punkt końcowy całego systemu, a zarazem najbardziej obciążony - w momencie otwarcia tury zapisów wywołuje go jednocześnie wielu studentów. Zasobem jest tu miejsce studenta w grupie, wskazane identyfikatorem grupy w ścieżce. Żądanie nie ma treści, a udany zapis zwraca kod 204 bez treści odpowiedzi:
+Najważniejszy punkt końcowy całego systemu, a zarazem najbardziej obciążony - w momencie otwarcia tury zapisów wywołuje go jednocześnie wielu studentów. Zasobem jest tu miejsce studenta w grupie, wskazane identyfikatorem grupy w ścieżce.
 
 ```http
 PUT /me/registered-groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f
 ```
 
-Zapis jest odrzucany z kodem 403, gdy student nie ma dostępu do grupy, oraz z kodem 409, gdy jest już zapisany do innej grupy tego samego typu z tego przedmiotu albo grupa jest pełna. Ponowny zapis do grupy, w której student już jest, kończy się sukcesem bez żadnych zmian. Taka idempotentność jest wymagana od metody `PUT`, a w praktyce sprawia, że np. podwójne kliknięcie przycisku nie powoduje błędu. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem.
+Zapis jest odrzucany z kodem 403, gdy student nie ma dostępu do grupy lub jego tura nie trwa, oraz z kodem 409, gdy jest już zapisany do innej grupy tego samego typu z tego przedmiotu albo grupa jest pełna. Ponowny zapis do grupy, w której student już jest, kończy się sukcesem bez żadnych zmian. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem.
 
 Wszystkie te warunki są sprawdzane w tym samym zapytaniu, w którym tworzona jest krawędź `REGISTERED_IN`. Nie jest to przypadek - rozbicie sprawdzenia i zapisu na dwa osobne zapytania prowadziłoby do sytuacji wyścigu. Sposób jej rozwiązania został szczegółowo opisany w podrozdziale [TODO: numer podrozdziału o race condition].
 
 5.4.6 Wystawienie oceny - PUT /groups/{group_id}/students/{student_idx}/grade
-Punkt końcowy prowadzącego. Pozwala wystawić ocenę studentowi zapisanemu do grupy. Grupa i student są wskazani w ścieżce, a treść żądania zawiera wyłącznie ocenę. Metoda `PUT` oznacza, że ocena jest ustawiana - ponowne wywołanie nadpisuje poprzednią wartość.
+Punkt końcowy prowadzącego. Pozwala wystawić ocenę studentowi zapisanemu do grupy. Grupa i student są wskazani w ścieżce, a treść żądania zawiera wyłącznie ocenę.
 
 ```http
 PUT /groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f/students/279413/grade
@@ -1076,10 +1096,94 @@ Udane utworzenie zwraca kod 201 z nagłówkiem `Location: /api/students/{idx}`, 
 
 Student jest tworzony bez etykiety `User`, czyli bez możliwości logowania - konto nadaje się osobnym punktem końcowym `POST /admin/users`.
 
-
-
 5.5 API
 
 Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i formatuje dane wyjściowe. API odbiera żądanie na wybranym punkcie końcowym, weryfikuje token i uprawnienia użytkownika, otwiera sesję bazy danych, a następnie – jeśli wykorzystywany jest backend grafowy – wykonuje zapytanie w języku Cypher, przekształca jego wynik do oczekiwanego kształtu i zwraca go klientowi. Zapytania wykonywane są bezpośrednio przez oficjalny, asynchroniczny sterownik Neo4j dla języka Python [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/].
+
+5.5.1 Struktura aplikacji
+- `app/__init__.py`: obiekt `FastAPI`, `lifespan` (sprawdzenie połączenia z bazą przy starcie, zamknięcie sterownika przy wyłączeniu)
+- prefiks `API_PREFIX = "/api"`, adresy dokumentacji (`/api/docs`, `/api/openapi.json`)
+- `register_exception_handlers`, `include_router` dla modułów z 4.5.1
+
+5.5.2 Połączenie z bazą danych
+- `app/database.py`: sterownik (`AsyncGraphDatabase.driver`), konfiguracja ze zmiennych środowiskowych
+- zależność `get_session` – jedna sesja na żądanie, zamykana po odpowiedzi (`yield`)
+- transakcje: zwykle automatyczne (jedno zapytanie), jawne przy kilku zapisach naraz (`start_registrations`, `remove_role`)
+
+5.5.3 Modele danych (schema)
+- `app/schemas/` – modele Pydantic, podział na pliki według dziedziny, konwencja `...Request` / `...Response`
+- walidacja wejścia: typy, `Field(pattern=...)` (idx), `Field(ge=1, le=7)` (dzień tygodnia), `Literal` (pnp, rola), `max_length` (treść opinii), `field_validator` ze wspólnym `check_grade`
+- walidacja wyjścia: `response_model`, niezgodna odpowiedź → 500
+
+```json
+// TODO: przykładowa odpowiedź 422 – PUT /api/groups/{group_id}/students/{student_idx}/grade z oceną 4.2
+```
+
+5.5.4 Funkcje współdzielone
+- `query.py`: `run`, `one`, `tx_one`, `native` (zamiana typów czasowych Neo4j), `new_id` / `next_id` (UUID)
+- `errors.py`: `not_found`, `forbidden`, `conflict`, `invalid`; handlery wyjątków Neo4j (409 / 400 / 500), `ResponseValidationError`, nieobsłużonych wyjątków
+- `teaching.py` (`teacher_groups` – wspólne dla `/me/groups`, `/teachers/{idx}`, `/teachers/{idx}/groups`), `cycles.py` (`cycle_sort_key`), `grades.py` (`average_grade`)
+
+```json
+// TODO: przykładowa odpowiedź błędu w formacie {"detail": ...}, np. 409 przy zapisie do pełnej grupy
+```
+
+5.5.5 Uwierzytelnianie
+- logowanie: `verify_password` (bcrypt), `create_token` – pola tokenu (`sub`, `idx`, `roles`, `exp`), HS256, `JWT_SECRET`, ważność 12 h
+- `get_caller`: `HTTPBearer`, dekodowanie i sprawdzenie tokenu, obiekt `Caller`; 401 przy braku lub błędnym tokenie
+
+```json
+// TODO: przykładowa odpowiedź POST /api/login
+```
+
+```json
+// TODO: zdekodowana zawartość (payload) tokenu
+```
+
+> [!todo] Do decyzji przy opisie
+> `get_caller` akceptuje jeszcze starszy format tokenu z pojedynczym polem `role`, a `JWT_SECRET` ma w kodzie wartość domyślną `dev-secret` (Compose i tak wymaga zmiennej). Opisać albo usunąć z kodu.
+
+5.5.6 Autoryzacja
+- fabryka zależności `require(*roles)` i zmienne modułów: `_logged_in`, `_student`, `_teacher`, `_staff`, `_admin`, `_opinion_roles`
+- RBAC w zależności (403 przed wejściem do funkcji), ReBAC w treści funkcji (zapytanie sprawdzające relację, 403)
+- `/me/...` – identyfikator z tokenu (`caller.idx`)
+
+```json
+// TODO: przykładowa odpowiedź 403 – np. prowadzący wystawiający ocenę w cudzej grupie
+```
+
+5.5.7 Budowa punktu końcowego
+- przykład: `PUT /groups/{group_id}/students/{student_idx}/grade`
+- dekorator: metoda, ścieżka, `response_model`, `status_code` (201 / 204 przy innych endpointach)
+- argumenty: parametry ścieżki, parametry zapytania (`str | None = None`), model treści, `Depends(get_session)`, `Depends(_staff)`
+- kolejność obsługi (sprawdzona): zależności – 401, potem 403 za rolę → walidacja treści – 422 → funkcja – 403 za relację, 404 → serializacja przez `response_model`
+- `Location` przy 201 (`url_path_for`), 204 bez treści
+
+```json
+// TODO: przykładowa odpowiedź 200 – PUT /api/groups/{group_id}/students/{student_idx}/grade
+```
+
+```json
+// TODO: przykładowa odpowiedź 201 z nagłówkiem Location – np. POST /api/admin/groups
+```
+
+5.5.8 Przykładowe żądania i odpowiedzi
+- po jednym na moduł z 4.5.1 (public, catalogue, student, teacher, admin)
+
+```json
+// TODO: GET /api/subjects?name=Algebra
+```
+
+```json
+// TODO: GET /api/me/registered-groups
+```
+
+```json
+// TODO: GET /api/groups/{group_id}/students
+```
+
+```json
+// TODO: GET /api/admin/people/next-idx
+```
 
 5.6 Klient

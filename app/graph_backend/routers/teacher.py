@@ -3,7 +3,7 @@ from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
-from app.graph_backend.errors import invalid, not_found
+from app.graph_backend.errors import not_found
 from app.graph_backend.grades import average_grade
 from app.graph_backend.query import one, run
 from app.schemas.student import (
@@ -18,16 +18,7 @@ from app.schemas.teacher import MyTeachingGroupsResponse
 
 router = APIRouter(tags=["teacher"])
 _staff = require("Teacher", "Admin")
-
-
-def _resolve_teacher_idx(caller: Caller, teacher_idx: str | None) -> str:
-    if "Admin" in caller.roles and teacher_idx:
-        return teacher_idx
-    if "Teacher" in caller.roles and caller.idx:
-        return caller.idx
-    if "Admin" in caller.roles:
-        raise invalid("teacher_idx is required")
-    raise HTTPException(status_code=403, detail="Forbidden")
+_teacher = require("Teacher")
 
 _STUDENT = """
 MATCH (st:Student {idx: $student_idx})
@@ -84,14 +75,13 @@ async def student_detail(
     return StudentDetailResponse(**row, avg_grade=average_grade(grade_rows))
 
 
+# The caller's own teaching groups. Another teacher's groups: GET /teachers/{idx}/groups.
 @router.get("/me/groups", response_model=MyTeachingGroupsResponse)
 async def my_teaching_groups(
-    teacher_idx: str | None = None,
     session: AsyncSession = Depends(get_session),
-    caller: Caller = Depends(_staff),
+    caller: Caller = Depends(_teacher),
 ) -> MyTeachingGroupsResponse:
-    idx = _resolve_teacher_idx(caller, teacher_idx)
-    return MyTeachingGroupsResponse(groups=await teacher_groups(session, idx))
+    return MyTeachingGroupsResponse(groups=await teacher_groups(session, caller.idx))
 
 
 @router.get("/groups/{group_id}/students", response_model=StudentsInGroupResponse)

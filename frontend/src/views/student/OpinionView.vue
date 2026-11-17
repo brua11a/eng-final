@@ -39,7 +39,7 @@ async function loadGroups() {
   loading.value = true
   loadError.value = ''
   try {
-    const data = await student.dashboard()
+    const data = await student.registeredGroups()
     groups.value = data?.groups || []
     for (const item of targets.value) {
       const key = targetKey(item)

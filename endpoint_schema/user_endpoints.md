@@ -154,7 +154,7 @@ GET /subjects?name=sieci&code=SI00
 }
 ```
 
-`cycles[i]` belongs to the cycle named in `cycle_columns[i]`. Columns are in chronological order (`Z` before `L` within a year). A subject is offered in a cycle when some curriculum term taught in that cycle includes it.
+`cycles[i]` belongs to the cycle named in `cycle_columns[i]`. Columns are in chronological order (`Z` before `L` within a year). A subject is offered in a cycle when some curriculum term taught in that cycle includes it. Registration is open when the current time falls within the period of a registration that opens one of the subject's groups in that cycle. A registration has no dates of its own: its period runs from the start of its first turn to the end of its last one.
 
 **Query**
 
@@ -186,8 +186,12 @@ RETURN
       (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
     },
     registration_open: EXISTS {
-      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
-      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(:Registration)
+      MATCH (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
+            (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)
+      WITH reg,
+           min(datetime({date: rt.date, time: rt.start_time})) AS opens,
+           max(datetime({date: rt.date, time: rt.end_time})) AS closes
+      WHERE opens <= datetime() < closes
     }
   }] AS cycles
 ORDER BY su.name
@@ -195,7 +199,7 @@ ORDER BY su.name
 
 ---
 
-## GET /organizational-units
+## GET /faculties
 
 **Allowed:** Student, Teacher, Admin
 
@@ -204,7 +208,7 @@ ORDER BY su.name
 No body; parameters go in the URL:
 
 ```http
-GET /organizational-units?name=W04
+GET /faculties?name=W04
 ```
 
 - `name` (query, optional): part of the short or full faculty name.
@@ -541,7 +545,7 @@ GET /teachers/T001
 }
 ```
 
-Returns 404 if the teacher does not exist. `groups` is the same list as `GET /me/groups` returns for that teacher.
+Returns 404 if the teacher does not exist. `groups` is the same list as `GET /teachers/{idx}/groups` returns.
 
 **Query**
 
@@ -549,6 +553,41 @@ Returns 404 if the teacher does not exist. `groups` is the same list as `GET /me
 // 1. Profile
 MATCH (t:Teacher {idx: $idx})
 RETURN t.degree AS degree, t.name AS name, t.surname AS surname, t.email AS email, t.phone AS phone
+
+// 2. Groups: the teaching-groups query from GET /me/groups (teacher_endpoints.md)
+```
+
+---
+
+## GET /teachers/{idx}/groups
+
+**Allowed:** Student, Teacher, Admin
+
+The groups a teacher teaches, e.g. for a teacher's weekly schedule viewed by an admin. The same list is part of `GET /teachers/{idx}`.
+
+**Request**
+
+No body; parameters go in the URL:
+
+```http
+GET /teachers/T001/groups
+```
+
+- `idx` (path): teacher idx.
+
+**Response**
+
+The same as `GET /me/groups` (`teacher_endpoints.md`).
+
+**Status**
+
+`200`. `404` if the teacher does not exist.
+
+**Query**
+
+```cypher
+// 1. The teacher exists
+MATCH (t:Teacher {idx: $idx}) RETURN t.idx AS idx
 
 // 2. Groups: the teaching-groups query from GET /me/groups (teacher_endpoints.md)
 ```

@@ -13,7 +13,7 @@ See `user_endpoints.md` for conventions. Admins can use every endpoint here with
 No body; parameters go in the URL:
 
 ```http
-GET /students/279413
+GET /students/2794131
 ```
 
 - `student_idx` (path): student idx.
@@ -85,19 +85,11 @@ RETURN
 
 ## GET /me/groups
 
-**Allowed:** Teacher (own groups); Admin (any teacher's groups, `teacher_idx` required)
+**Allowed:** Teacher (own groups only). Another teacher's groups: `GET /teachers/{idx}/groups` (`user_endpoints.md`).
 
 **Request**
 
-No body; parameters go in the URL:
-
-```http
-GET /me/groups?teacher_idx=T001
-```
-
-- `teacher_idx` (query, optional).
-
-`teacher_idx` is only used for admins (`422` if an admin leaves it out). Teachers always get their own groups.
+None.
 
 **Response**
 

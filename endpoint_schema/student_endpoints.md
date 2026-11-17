@@ -52,7 +52,7 @@ RETURN
 
 ---
 
-## GET /me/registrations/{registration_id}/courses
+## GET /me/registrations/{registration_id}/subjects
 
 **Allowed:** Student, only for registrations they have a turn in (403 otherwise)
 
@@ -61,7 +61,7 @@ RETURN
 No body; parameters go in the URL:
 
 ```http
-GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/courses
+GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/subjects
 ```
 
 - `registration_id` (path): registration id.
@@ -109,7 +109,7 @@ RETURN
 
 ---
 
-## GET /me/registrations/{registration_id}/subjects/{subject_code}/groups
+## GET /me/registrations/{registration_id}/groups
 
 **Allowed:** Student, only for registrations they have a turn in (403 otherwise)
 
@@ -118,11 +118,11 @@ RETURN
 No body; parameters go in the URL:
 
 ```http
-GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/subjects/W04CBE-SI0404G/groups
+GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/groups?subject_code=W04CBE-SI0404G
 ```
 
 - `registration_id` (path): registration id.
-- `subject_code` (path): subject code.
+- `subject_code` (query, required): only groups of this subject.
 
 **Response**
 
@@ -179,7 +179,7 @@ ORDER BY gt.g_type, g.number
 
 ## PUT /me/registered-groups/{group_id}
 
-**Allowed:** Student, only for groups opened by a registration they have a turn in
+**Allowed:** Student, only for groups opened by a registration they have a turn in, and only during that turn
 
 Registers the student in the group. The student's place in the group is the resource, so it is created with `PUT`: registering again in a group the student is already in changes nothing and succeeds.
 
@@ -197,14 +197,15 @@ None.
 
 **Status**
 
-`204` when the student is registered. `403` if the student has no access to the group. `409` if they already have another group of the same type for this subject, or if the group is full.
+`204` when the student is registered. `403` if the student has no access to the group, or their turn is not in progress. `409` if they already have another group of the same type for this subject, or if the group is full.
 
 **Query**
 
 All checks and the write run in one query. It takes write locks on the student and then on the group (always in this order, so concurrent requests cannot deadlock). The student lock makes the student's concurrent requests wait, so they cannot end up in two groups of the same type; the group lock makes concurrent registrations to the group run one at a time, so they cannot both take the last place. No row means no access. Otherwise `status` is `ok`, `conflict` or `full`.
 
 ```cypher
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)
 WITH DISTINCT st, g, gt
 SET st.idx = st.idx
@@ -233,7 +234,7 @@ RETURN status
 
 ## DELETE /me/registered-groups/{group_id}
 
-**Allowed:** Student, only while a registration they have a turn in still opens the group
+**Allowed:** Student, only during a turn of a registration that opens the group
 
 **Request**
 
@@ -249,13 +250,14 @@ None.
 
 **Status**
 
-`204` when the student is deregistered. `404` if the student is not in the group, or no registration they have a turn in opens it.
+`204` when the student is deregistered. `404` if the student is not in the group, or no registration they have a turn in opens it, or that turn is not in progress.
 
 **Query**
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-MATCH (st)-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
 DELETE r
 RETURN g.id AS group_id
 ```
@@ -423,9 +425,11 @@ ORDER BY su.name, gt.g_type, g.number
 
 ---
 
-## GET /me/dashboard
+## GET /me/registered-groups
 
 **Allowed:** Student
+
+The groups the student is registered in. `PUT` / `DELETE /me/registered-groups/{group_id}` add and remove items of this list.
 
 **Request**
 

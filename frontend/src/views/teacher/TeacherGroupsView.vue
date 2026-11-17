@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { teacher } from '../../api/client'
+import { catalogue, teacher } from '../../api/client'
 import { useApiCall } from '../../composables/useApiCall'
 import { useAuthStore } from '../../stores/auth'
 import ApiMessages from '../../components/ApiMessages.vue'
@@ -12,8 +12,9 @@ const auth = useAuthStore()
 const teacherIdx = ref(auth.idx || '')
 
 function load() {
-  const query = auth.hasAdmin && teacherIdx.value ? { teacher_idx: teacherIdx.value } : {}
-  return api.run(() => teacher.myGroups(query))
+  return api.run(() =>
+    auth.hasAdmin && teacherIdx.value ? catalogue.teacherGroups(teacherIdx.value) : teacher.myGroups(),
+  )
 }
 
 function onTeachersReady() {

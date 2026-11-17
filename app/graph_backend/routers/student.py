@@ -45,8 +45,8 @@ RETURN reg.id AS id
 # - on the group: concurrent registrations to it wait, so the capacity check is exact.
 _REGISTER = """
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
-// Turn time window, disabled for testing: uncomment to allow registering only during the student's turn.
-// WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
+// Only during the student's turn.
+WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)
 WITH DISTINCT st, g, gt
 SET st.idx = st.idx
@@ -113,7 +113,7 @@ async def show_registrations(
     )
 
 
-@router.get("/me/registrations/{registration_id}/courses", response_model=ShowCoursesInRegistrationResponse)
+@router.get("/me/registrations/{registration_id}/subjects", response_model=ShowCoursesInRegistrationResponse)
 async def show_courses(
     registration_id: str,
     session: AsyncSession = Depends(get_session),
@@ -153,10 +153,7 @@ async def show_courses(
     return ShowCoursesInRegistrationResponse(courses=list(grouped.values()))
 
 
-@router.get(
-    "/me/registrations/{registration_id}/subjects/{subject_code}/groups",
-    response_model=OpenGroupsResponse,
-)
+@router.get("/me/registrations/{registration_id}/groups", response_model=OpenGroupsResponse)
 async def show_groups(
     registration_id: str,
     subject_code: str,
@@ -204,7 +201,7 @@ async def register_to_group(
 ) -> None:
     row = await one(session, _REGISTER, student_idx=caller.idx, group_id=group_id)
     if row is None:
-        raise forbidden()
+        raise forbidden("Group not open to you, or outside your registration turn")
     if row["status"] == "conflict":
         raise conflict("You are already registered in another group of this type for this subject")
     if row["status"] == "full":
@@ -222,8 +219,8 @@ async def deregister_from_group(
         """
         MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
         MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
-        // Turn time window, disabled for testing: uncomment to allow deregistering only during the student's turn.
-        // WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
+        // Only during the student's turn.
+        WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
         DELETE r
         RETURN g.id AS group_id
         """,
@@ -359,8 +356,9 @@ async def my_cycle_detail(
     )
 
 
-@router.get("/me/dashboard", response_model=DashboardResponse)
-async def dashboard(
+# The groups the student is registered in; PUT/DELETE /me/registered-groups/{group_id} change it.
+@router.get("/me/registered-groups", response_model=DashboardResponse)
+async def registered_groups(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
 ) -> DashboardResponse:

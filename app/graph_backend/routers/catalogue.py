@@ -22,6 +22,7 @@ from app.schemas.subject import (
     SubjectOfferingItem,
 )
 from app.schemas.teacher import (
+    MyTeachingGroupsResponse,
     TeacherCatalogueItem,
     TeacherCatalogueResponse,
     TeacherDetailResponse,
@@ -87,9 +88,15 @@ RETURN
       (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
       (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)
     },
+    // Registration has no dates of its own: its period runs from the start of its first turn
+    // to the end of its last one.
     registration_open: EXISTS {
-      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
-      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(:Registration)
+      MATCH (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
+            (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)
+      WITH reg,
+           min(datetime({date: rt.date, time: rt.start_time})) AS opens,
+           max(datetime({date: rt.date, time: rt.end_time})) AS closes
+      WHERE opens <= datetime() < closes
     }
   }] AS cycles
 ORDER BY su.name
@@ -165,7 +172,7 @@ async def subject_catalogue(
     )
 
 
-@router.get("/organizational-units", response_model=FacultyListResponse)
+@router.get("/faculties", response_model=FacultyListResponse)
 async def organizational_units_catalogue(
     name: str | None = None,
     session: AsyncSession = Depends(get_session),
@@ -384,6 +391,18 @@ async def teacher_detail(
         email=profile["email"],
         groups=await teacher_groups(session, idx),
     )
+
+
+# The same list as in GET /teachers/{idx}, on its own: the weekly schedule of any teacher.
+@router.get("/teachers/{idx}/groups", response_model=MyTeachingGroupsResponse)
+async def teacher_groups_list(
+    idx: str,
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_logged_in),
+) -> MyTeachingGroupsResponse:
+    if await one(session, "MATCH (t:Teacher {idx: $idx}) RETURN t.idx AS idx", idx=idx) is None:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    return MyTeachingGroupsResponse(groups=await teacher_groups(session, idx))
 
 
 # Opinions are anonymous: the author (WRITES) is never returned.

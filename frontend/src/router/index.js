@@ -168,4 +168,16 @@ router.beforeEach((to) => {
   return true
 })
 
+// After a new frontend is deployed, a page loaded earlier still refers to the old chunk files,
+// which no longer exist. Reload once to get the new version; the flag prevents a reload loop.
+const RELOAD_FLAG = 'chunk_reload'
+router.onError((error, to) => {
+  const missingChunk = /dynamically imported module|Importing a module script failed/i.test(error?.message || '')
+  if (missingChunk && sessionStorage.getItem(RELOAD_FLAG) !== to.fullPath) {
+    sessionStorage.setItem(RELOAD_FLAG, to.fullPath)
+    window.location.assign(to.fullPath)
+  }
+})
+router.afterEach(() => sessionStorage.removeItem(RELOAD_FLAG))
+
 export default router
