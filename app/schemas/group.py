@@ -21,11 +21,9 @@ class GroupTypeCreateResponse(BaseModel):
 
 
 class GroupCreateRequest(BaseModel):
-    # ISO 8601: 1 = poniedziałek, ..., 7 = niedziela (zgodnie z date.dayOfWeek w Cypher)
     weekday: int = Field(ge=1, le=7)
     g_type: str
     number: int
-    # P = parzyste tygodnie, NP = nieparzyste, ALL = co tydzień
     pnp: Literal["P", "NP", "ALL"]
     capacity: int
     start_time: time

@@ -63,8 +63,6 @@ async def get_caller(
     try:
         payload = jwt.decode(creds.credentials, _secret, algorithms=[_algorithm])
         raw = payload.get("roles")
-        if raw is None and payload.get("role") in ("Student", "Teacher", "Admin"):
-            raw = [payload["role"]]
         if not isinstance(raw, list) or any(role not in ("Student", "Teacher", "Admin") for role in raw):
             raise unauthorized("Invalid token")
         roles = tuple(role for role in ("Admin", "Teacher", "Student") if role in raw)

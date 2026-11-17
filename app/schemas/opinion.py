@@ -11,9 +11,6 @@ class OpinionCreateRequest(BaseModel):
     group_id: str
     teacher_idx: str
     student_idx: Optional[str] = None
-    # ^ required only when the caller is admin (WRITES needs a Student).
-    #   When caller is student, derive from session and ignore/reject
-    #   a client-supplied value to prevent submitting on someone else's behalf.
 
     @field_validator("grade")
     @classmethod
@@ -25,7 +22,7 @@ class OpinionCreateResponse(BaseModel):
     id: Optional[str] = None
     grade: float
     content: Optional[str] = None
-    submit: Optional[datetime] = None  # set by the server when the opinion is created
+    submit: Optional[datetime] = None
     group_id: str
     teacher_idx: str
 

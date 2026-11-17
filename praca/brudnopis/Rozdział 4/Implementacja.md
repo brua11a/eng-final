@@ -1250,21 +1250,133 @@ finally:
 Zapytania w transakcji są wykonywane tą samą funkcją `one()` co w sesji (5.5.5), ponieważ sesja i transakcja udostępniają metodę `run()` o tej samej sygnaturze. Jeśli przed `commit()` zostanie zgłoszony wyjątek, `close()` w bloku `finally` wycofuje transakcję i żadna ze zmian nie trafia do bazy. Neo4j zawsze działa na poziomie izolacji *read committed*, którego nie da się podnieść, dlatego spójność przy współbieżnych żądaniach zapewniają jawne blokady zapisu, takie jak `_LOCK_PERSON` powyżej (5.5.8) [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/].
 
 5.5.4 Modele danych (schema)
-- `app/schemas/` – modele Pydantic, podział na pliki według dziedziny, konwencja `...Request` / `...Response`
-- walidacja wejścia: typy, `Field(pattern=...)` (idx), `Field(ge=1, le=7)` (dzień tygodnia), `Literal` (pnp, rola), `max_length` (treść opinii), `field_validator` ze wspólnym `check_grade`
-- walidacja wyjścia: `response_model`, niezgodna odpowiedź → 500
+
+Kształt żądań i odpowiedzi został zdefiniowany w katalogu `schemas/` w postaci modeli Pydantic. Pydantic działa w obie strony: dane JSON z żądania zamienia na zwalidowany obiekt Pythona, a wynik zapytania – na odpowiedź JSON. Pliki są podzielone według dziedziny (przedmioty, grupy, opinie itd.), a nazwy modeli stosują konwencję `…Request` dla treści żądania i `…Response` dla odpowiedzi. Kształt odpowiedzi określono dla każdego punktu końcowego zwracającego dane, a kształt żądania – dla każdego, który przyjmuje treść.
+
+Walidacja działa po obu stronach punktu końcowego. Żądanie niezgodne z modelem jest odrzucane z kodem 422, zanim funkcja punktu końcowego zostanie wywołana, więc błędne dane nie docierają do bazy danych (5.4.6). Odpowiedź niezgodna z modelem podanym w `response_model` kończy się kodem 500 (5.5.2), ponieważ jest to błąd serwera, a nie klienta.
+
+Definiowanie modelu Pydantic polega na stworzeniu klasy dziedziczącej po `BaseModel` i określeniu, jakie pola i jakiego typu ma zawierać. Typ `Optional[X]`, równoważny `X | None`, oznacza, że pole może przyjąć wartość `null` [CYTOWANIE: https://docs.python.org/3/library/typing.html#typing.Optional].
+
+Od Pydantic v2 `Optional` nie oznacza jednak, że pole można pominąć. O tym decyduje wyłącznie wartość domyślna: pole `Optional` bez niej jest wymagane, a żądanie, które go nie zawiera, zostaje odrzucone z kodem 422 [CYTOWANIE: https://docs.pydantic.dev/latest/migration/#required-optional-and-nullable-fields]. Dlatego wszystkie pola opcjonalne w projekcie mają jawnie ustawione `= None`.
+
+```python
+class SubjectUpsertRequest(BaseModel):
+    name: str
+    ects: Optional[int] = None
+```
+
+*Przykładowy model z opcjonalnym polem*
+
+Ograniczenia wartości pola można określić funkcją `Field()`, działającą podobnie do funkcji `field()` dla klas danych (ang. *dataclasses*) [CYTOWANIE: https://pydantic.dev/docs/validation/latest/concepts/fields/]. Choć zapisuje się ją po prawej stronie `=`, sama nie ustawia wartości domyślnej – robią to dopiero argumenty `default` lub `default_factory`.
+
+```python
+class GroupCreateRequest(BaseModel):
+    weekday: int = Field(ge=1, le=7)
+    pnp: Literal["P", "NP", "ALL"]
+    # ...
+```
+
+*Przykładowy model z ograniczeniem zakresu wartości pola*
+
+`Field(ge=1, le=7)` dopuszcza jako dzień tygodnia wyłącznie liczby całkowite od 1 do 7, a `Literal` ogranicza pole `pnp` do trzech podanych wartości.
+
+Bardziej złożoną walidację zapewniają własne walidatory [CYTOWANIE: https://pydantic.dev/docs/validation/latest/concepts/validators/]. Metoda oznaczona dekoratorami `@field_validator()` i `@classmethod` jest wywoływana dla pól podanych w argumentach dekoratora. Domyślnie metoda uruchamia się po standardowej walidacji typu, więc otrzymuje wartość już przekonwertowaną na Pythonowy typ danych. 
+
+W projekcie własny walidator sprawdza, czy liczba jest oceną ze skali 2.0, 2.5, …, 5.0. Nie można było użyć `Literal[2.0, 2.5, …]`, ponieważ `Literal` z założenia nie przyjmuje liczb zmiennoprzecinkowych [CYTOWANIE: https://peps.python.org/pep-0586/#illegal-parameters-for-literal-at-type-check-time]. Sama funkcja `check_grade()` znajduje się w osobnym pliku `grades.py`, ponieważ korzystają z niej dwa modele: `OpinionCreateRequest` (ocena prowadzącego w opinii) i `SetGroupGradeRequest` (ocena wystawiana studentowi).
+
+```python
+# opinion.py
+
+class OpinionCreateRequest(BaseModel):
+    grade: float
+    content: Optional[str] = Field(default=None, max_length=1000)
+    group_id: str
+    teacher_idx: str
+    student_idx: Optional[str] = None
+
+    @field_validator("grade")
+    @classmethod
+    def grade_on_scale(cls, value: float) -> float:
+        return check_grade(value)
+
+# grades.py
+
+GRADE_SCALE = (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)
+
+
+def check_grade(value: float) -> float:
+    if value not in GRADE_SCALE:
+        raise ValueError(f"grade must be one of {', '.join(map(str, GRADE_SCALE))}")
+    return value
+```
+
+*Walidacja oceny w modelu Pydantic*
 
 ```json
-// TODO: przykładowa odpowiedź 422 – PUT /api/groups/{group_id}/students/{student_idx}/grade z oceną 4.2
+{
+  "detail": [
+    {
+      "type": "value_error",
+      "loc": ["body", "grade"],
+      "msg": "Value error, grade must be one of 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0",
+      "input": 4.2,
+      "ctx": {"error": {}}
+    }
+  ]
+}
 ```
+
+*Odpowiedź 422 na `PUT /groups/{group_id}/students/{student_idx}/grade` z oceną 4.2*
+
+Pole `loc` wskazuje miejsce błędu – pole `grade` w treści żądania – a `msg` zawiera komunikat zgłoszony przez `check_grade()`. Żądanie zostało odrzucone przed sprawdzeniem, czy grupa i student w ogóle istnieją.
 
 5.5.5 Funkcje współdzielone
-- `query.py`: `run`, `one` (działają zarówno na sesji, jak i na jawnej transakcji), `native` (zamiana typów czasowych Neo4j), `new_id` (UUID)
-- `teaching.py` (`teacher_groups` – wspólne dla `/me/groups`, `/teachers/{idx}`, `/teachers/{idx}/groups`), `cycles.py` (`cycle_sort_key`), `grades.py` (`average_grade`)
 
-```json
-// TODO: przykładowa odpowiedź błędu w formacie {"detail": ...}, np. 409 przy zapisie do pełnej grupy
+Zapytania do bazy danych są wykonywane przez dwie funkcje z pliku `query.py`: `run()` i `one()`. Są to cienkie nakładki (ang. *wrappers*) na metodę `run()` sesji i transakcji sterownika, które poza wykonaniem zapytania zamieniają jego wynik na listę słowników z typami Pythona. Funkcja `one()` korzysta z `run()`, ale zwraca jedynie pierwszy wiersz albo `None`, gdy wynik jest pusty. Jest przeznaczona dla zapytań, które z założenia zwracają najwyżej jeden wiersz. Takich jest w projekcie dużo – w szczególności zapytania kontroli dostępu. Wynik `None` oznacza, że szukany element nie istnieje, co punkty końcowe zamieniają na odpowiedź 404.
+
+```python
+Runner = AsyncSession | AsyncTransaction
+
+async def run(runner: Runner, query: str, **params: Any) -> list[dict[str, Any]]:
+    result = await runner.run(query, params)
+    return [native(record.data()) async for record in result]
+
+
+async def one(runner: Runner, query: str, **params: Any) -> dict[str, Any] | None:
+    rows = await run(runner, query, **params)
+    return rows[0] if rows else None
 ```
+
+*Funkcje do wykonywania zapytań*
+
+Za zamianę typów odpowiada funkcja `native()`. Sterownik zwraca daty i godziny jako własne typy (`neo4j.time.Date`, `neo4j.time.DateTime` itd.), które nie dziedziczą po typach z modułu `datetime`, więc modele Pydantic by ich nie przyjęły, a odpowiedź kończyłaby się błędem 500 (5.5.2). Funkcja przechodzi rekurencyjnie przez listy i słowniki i każdą wartość mającą metodę `to_native()` zamienia na odpowiadający jej typ Pythona.
+
+Metoda `run()` sterownika przyjmuje tekst zapytania oraz jego parametry, przekazywane osobno – jako słownik lub jako argumenty nazwane. Przykładowo zapytanie tworzące wydział, wykonane bezpośrednio przez sterownik, wyglądałoby tak:
+
+```python
+result = await session.run(
+    """
+    CREATE (fa:Faculty {id: $id, name: $name, full_name: $full_name})
+    RETURN fa.id AS id, fa.name AS name, fa.full_name AS full_name
+    """,
+    id=new_id(),
+    name=body.name,
+    full_name=body.full_name,
+)
+```
+
+*Zapytanie z `POST /admin/faculties` wykonane bezpośrednio metodą `run()` sterownika*
+
+Zapisy `$id`, `$name` i `$full_name` to parametry zapytania [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/syntax/parameters/]. Ich wartości nie są wstawiane do tekstu zapytania – sterownik wysyła do bazy tekst i parametry osobno, a podstawia je dopiero baza. Dzięki temu dane od użytkownika nigdy nie stają się częścią kodu zapytania, co chroni przed wstrzykiwaniem kodu Cypher (ang. *Cypher injection*). Tekst zapytania pozostaje przy tym stały, więc baza może ponownie wykorzystać raz przygotowany plan jego wykonania. Dane od użytkownika trafiają do zapytań w projekcie wyłącznie w ten sposób.
+
+Python 3.14 wprowadził szablony tekstowe (ang. *template strings*, t-stringi), które pozwalają zapisać zapytanie podobnie do f-stringa, a mimo to przekazać wartości osobno. Biblioteka psycopg, służąca do łączenia z bazą PostgreSQL, już je obsługuje [CYTOWANIE: https://www.psycopg.org/psycopg3/docs/basic/tstrings.html], natomiast sterownik Neo4j w wykorzystanej wersji 6.2.0 – nie. Jest to jednak różnica w wygodzie zapisu, a nie w bezpieczeństwie.
+
+Ostatnią funkcją z `query.py` jest `new_id()`, która generuje losowy identyfikator funkcją `uuid4()` i od razu zamienia go na napis. Neo4j nie ma typu UUID, dlatego identyfikatory są w schemacie zadeklarowane jako `STRING`. Powody wyboru UUID zamiast identyfikatorów liczbowych omówiono w 5.3.1.
+
+Pozostałe funkcje współdzielone wynikają z logiki dziedziny:
+- `teacher_groups()` (`teaching.py`) – zapytanie zwracające grupy prowadzącego, wykorzystywane przez trzy punkty końcowe: `/me/groups`, `/teachers/{idx}` oraz `/teachers/{idx}/groups`. Dzięki temu lista grup prowadzącego ma wszędzie ten sam kształt i kolejność.
+- `cycle_sort_key()` (`cycles.py`) – klucz sortowania cykli akademickich: najpierw rok, a w jego obrębie semestr zimowy przed letnim. Zwykłe sortowanie alfabetyczne dałoby odwrotną kolejność, ponieważ „L” poprzedza „Z”.
+- `average_grade()` (`grades.py`) – średnia ocen studenta ważona punktami ECTS, liczona z ostatniego w pełni ocenionego podejścia do każdego przedmiotu. Do wyboru ostatniego podejścia wykorzystuje `cycle_sort_key()`. Średnia jest liczona w Pythonie, a nie w zapytaniu Cypher, ponieważ wybór podejścia i uśrednianie ocen z kilku grup tego samego typu byłyby w Cypher znacznie mniej czytelne.
 
 5.5.6 Uwierzytelnianie
 - logowanie: `verify_password` (bcrypt), `create_token` – pola tokenu (`sub`, `idx`, `roles`, `exp`), HS256, `JWT_SECRET`, ważność 12 h
@@ -1277,9 +1389,6 @@ Zapytania w transakcji są wykonywane tą samą funkcją `one()` co w sesji (5.5
 ```json
 // TODO: zdekodowana zawartość (payload) tokenu
 ```
-
-> [!todo] Do decyzji przy opisie
-> `get_caller` akceptuje jeszcze starszy format tokenu z pojedynczym polem `role`, a `JWT_SECRET` ma w kodzie wartość domyślną `dev-secret` (Compose i tak wymaga zmiennej). Opisać albo usunąć z kodu.
 
 5.5.7 Autoryzacja
 - fabryka zależności `require(*roles)` i zmienne modułów: `_logged_in`, `_student`, `_teacher`, `_staff`, `_admin`, `_opinion_roles`
@@ -1300,6 +1409,18 @@ Zapytania w transakcji są wykonywane tą samą funkcją `one()` co w sesji (5.5
 ```json
 // TODO: przykładowa odpowiedź 200 – PUT /api/groups/{group_id}/students/{student_idx}/grade
 ```
+
+```http
+PUT /me/registered-groups/c798fc10-c169-58c8-9c55-c0fd2d104535
+```
+
+```json
+{
+  "detail": "Group is full"
+}
+```
+
+*Żądanie zapisu studenta do pełnej grupy i odpowiedź 409*
 
 ```json
 // TODO: przykładowa odpowiedź 201 z nagłówkiem Location – np. POST /api/admin/groups
