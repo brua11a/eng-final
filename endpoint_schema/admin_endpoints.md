@@ -805,7 +805,7 @@ CREATE (reg)-[:HAS_TURN]->(rt)
 RETURN count(rt) AS created
 
 // 3. All groups at once. Any id missing from `found` rolls the transaction back
-//    with "Groups not found: <ids>".
+//    with "Groups <ids> not found".
 MATCH (reg:Registration {id: $registration_id})
 UNWIND $group_ids AS group_id
 MATCH (g:Group {id: group_id})

@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
-from app.graph_backend.errors import invalid
+from app.graph_backend.errors import invalid, not_found
 from app.graph_backend.cycles import cycle_sort_key
 from app.graph_backend.query import one, run
 from app.graph_backend.teaching import teacher_groups
@@ -216,7 +216,7 @@ async def subject_detail(
         code=code,
     )
     if subject is None:
-        raise HTTPException(status_code=404, detail="Subject not found")
+        raise not_found("Subject")
     offering_rows = await run(
         session,
         """
@@ -286,7 +286,7 @@ async def subject_groups(
         cycle_id=cycle_id,
     )
     if not rows:
-        raise HTTPException(status_code=404, detail="No groups for this subject in this cycle")
+        raise not_found("Groups for this subject in this cycle")
     groups = [
         GroupTracked(
             id=row["id"],
@@ -348,7 +348,7 @@ async def group_detail(
         group_id=group_id,
     )
     if row is None:
-        raise HTTPException(status_code=404, detail="Group not found")
+        raise not_found("Group")
     return GroupDetailResponse(
         subject_code=row["subject_code"] or "",
         course_name=row["course_name"],
@@ -383,7 +383,7 @@ async def teacher_detail(
         idx=idx,
     )
     if profile is None:
-        raise HTTPException(status_code=404, detail="Teacher not found")
+        raise not_found("Teacher")
     return TeacherDetailResponse(
         degree=profile["degree"],
         name=f"{profile['name']} {profile['surname']}",
@@ -401,7 +401,7 @@ async def teacher_groups_list(
     caller: Caller = Depends(_logged_in),
 ) -> MyTeachingGroupsResponse:
     if await one(session, "MATCH (t:Teacher {idx: $idx}) RETURN t.idx AS idx", idx=idx) is None:
-        raise HTTPException(status_code=404, detail="Teacher not found")
+        raise not_found("Teacher")
     return MyTeachingGroupsResponse(groups=await teacher_groups(session, idx))
 
 

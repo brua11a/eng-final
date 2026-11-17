@@ -4,9 +4,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 import bcrypt
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
+
+from app.graph_backend.errors import forbidden, unauthorized
 
 Role = Literal["Student", "Teacher", "Admin"]
 _bearer = HTTPBearer(auto_error=False)
@@ -57,26 +59,26 @@ async def get_caller(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> Caller:
     if creds is None:
-        raise HTTPException(status_code=401, detail="Missing token")
+        raise unauthorized("Missing token")
     try:
         payload = jwt.decode(creds.credentials, _secret, algorithms=[_algorithm])
         raw = payload.get("roles")
         if raw is None and payload.get("role") in ("Student", "Teacher", "Admin"):
             raw = [payload["role"]]
         if not isinstance(raw, list) or any(role not in ("Student", "Teacher", "Admin") for role in raw):
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise unauthorized("Invalid token")
         roles = tuple(role for role in ("Admin", "Teacher", "Student") if role in raw)
         if not roles:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise unauthorized("Invalid token")
         return Caller(email=payload["sub"], idx=payload.get("idx"), roles=roles)
     except (jwt.PyJWTError, KeyError):
-        raise HTTPException(status_code=401, detail="Invalid token") from None
+        raise unauthorized("Invalid token") from None
 
 
 def require(*roles: Role):
     async def checker(caller: Caller = Depends(get_caller)) -> Caller:
         if not any(role in caller.roles for role in roles):
-            raise HTTPException(status_code=403, detail="Forbidden")
+            raise forbidden()
         return caller
 
     return checker

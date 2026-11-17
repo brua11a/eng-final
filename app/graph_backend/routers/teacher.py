@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import Caller, require
-from app.graph_backend.errors import not_found
+from app.graph_backend.errors import forbidden, not_found
 from app.graph_backend.grades import average_grade
 from app.graph_backend.query import one, run
 from app.schemas.student import (
@@ -67,7 +67,7 @@ async def student_detail(
             student_idx=student_idx,
         )
         if allowed is None:
-            raise HTTPException(status_code=403, detail="Forbidden")
+            raise forbidden()
     row = await one(session, _STUDENT, student_idx=student_idx)
     if row is None:
         raise not_found("Student")
@@ -101,7 +101,7 @@ async def students_in_group(
             group_id=group_id,
         )
         if allowed is None:
-            raise HTTPException(status_code=403, detail="Forbidden")
+            raise forbidden()
     rows = await run(
         session,
         """
@@ -141,7 +141,7 @@ async def set_group_grade(
             group_id=group_id,
         )
         if allowed is None:
-            raise HTTPException(status_code=403, detail="Forbidden")
+            raise forbidden()
     row = await one(
         session,
         """

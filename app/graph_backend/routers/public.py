@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from neo4j import AsyncSession
 
 from app.database import get_session
 from app.graph_backend.auth import create_token, roles_from_flags, verify_password
 from app.graph_backend.auth.deps import Caller
-from app.graph_backend.errors import forbidden
+from app.graph_backend.errors import forbidden, unauthorized
 from app.graph_backend.query import one
 from app.schemas.auth import LoginRequest, LoginResponse
 
@@ -27,7 +27,7 @@ RETURN
 async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)) -> LoginResponse:
     row = await one(session, _LOGIN, email=body.email)
     if row is None or not verify_password(body.password, row["passwd_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise unauthorized("Invalid email or password")
     if row["inactive"]:
         raise forbidden("Account inactive")
     roles = roles_from_flags(row["admin"], row["teacher"], row["student"])

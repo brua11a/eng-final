@@ -26,6 +26,10 @@ def not_found(what: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"{what} not found")
 
 
+def unauthorized(detail: str) -> HTTPException:
+    return HTTPException(status_code=401, detail=detail)
+
+
 def forbidden(detail: str = "Forbidden") -> HTTPException:
     return HTTPException(status_code=403, detail=detail)
 

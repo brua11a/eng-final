@@ -719,7 +719,7 @@ async def start_registrations(
         found = set(opened["found"])
         missing = [gid for gid in body.group_ids if gid not in found]
         if missing:
-            raise HTTPException(status_code=404, detail=f"Groups not found: {', '.join(missing)}")
+            raise not_found(f"Groups {', '.join(missing)}")
         await tx.commit()
     finally:
         # Closing a transaction that was not committed rolls it back.
@@ -1017,7 +1017,7 @@ async def assign_students_to_turn(
     if row is None:
         raise not_found("Registration turn")
     if row["missing"]:
-        raise HTTPException(status_code=404, detail=f"Students not found: {', '.join(row['missing'])}")
+        raise not_found(f"Students {', '.join(row['missing'])}")
     if row["conflicts"]:
         raise conflict(
             f"Already assigned to another turn of this registration: {', '.join(row['conflicts'])}"

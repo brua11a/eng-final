@@ -1098,19 +1098,126 @@ Student jest tworzony bez etykiety `User`, czyli bez możliwości logowania - ko
 
 5.5 API
 
-Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i formatuje dane wyjściowe. API odbiera żądanie na wybranym punkcie końcowym, weryfikuje token i uprawnienia użytkownika, otwiera sesję bazy danych, a następnie – jeśli wykorzystywany jest backend grafowy – wykonuje zapytanie w języku Cypher, przekształca jego wynik do oczekiwanego kształtu i zwraca go klientowi. Zapytania wykonywane są bezpośrednio przez oficjalny, asynchroniczny sterownik Neo4j dla języka Python [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/].
+API odbiera żądanie na wybranym punkcie końcowym, weryfikuje token i uprawnienia użytkownika, otwiera sesję bazy danych, wykonuje zapytanie w języku Cypher, a jego wynik przekształca do oczekiwanego kształtu i zwraca klientowi. Poprawność danych wejściowych i format odpowiedzi wyznaczają modele Pydantic. Zapytania są wykonywane bezpośrednio przez oficjalny, asynchroniczny sterownik Neo4j dla języka Python.[CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/].
 
 5.5.1 Struktura aplikacji
-- `app/__init__.py`: obiekt `FastAPI`, `lifespan` (sprawdzenie połączenia z bazą przy starcie, zamknięcie sterownika przy wyłączeniu)
-- prefiks `API_PREFIX = "/api"`, adresy dokumentacji (`/api/docs`, `/api/openapi.json`)
-- `register_exception_handlers`, `include_router` dla modułów z 4.5.1
 
-5.5.2 Połączenie z bazą danych
+```
+.
+├── database.py
+├── graph_backend
+│   ├── auth
+│   │   ├── deps.py
+│   │   └── __init__.py
+│   ├── cycles.py
+│   ├── errors.py
+│   ├── grades.py
+│   ├── __init__.py
+│   ├── query.py
+│   ├── routers
+│   │   ├── admin.py
+│   │   ├── catalogue.py
+│   │   ├── __init__.py
+│   │   ├── public.py
+│   │   ├── student.py
+│   │   └── teacher.py
+│   └── teaching.py
+├── __init__.py
+└── schemas
+    ├── academic_cycle.py
+    ├── admin_links.py
+    ├── admin_lists.py
+    ├── auth.py
+    ├── curriculum.py
+    ├── curriculum_term.py
+    ├── dashboard.py
+    ├── faculty.py
+    ├── generic.py
+    ├── grades.py
+    ├── group.py
+    ├── __init__.py
+    ├── opinion.py
+    ├── registration.py
+    ├── room.py
+    ├── student.py
+    ├── subject.py
+    └── teacher.py
+
+5 directories, 34 files
+```
+
+*Struktura katalogu `app/` (bez katalogów `__pycache__`)*
+
+W pliku `app/__init__.py` jest tworzony obiekt `app`, instancja klasy `FastAPI`. To do niego podłączane są wszystkie elementy backendu: punkty końcowe, obsługa błędów i obsługa cyklu życia aplikacji. Ten sam obiekt wykorzystuje polecenie `uvicorn app:app` z 5.1.5.
+
+5.5.2 Inicjalizacja i błędy
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await verify_connectivity()
+    yield
+    await close_driver()
+
+
+API_PREFIX = "/api"
+
+app = FastAPI(
+    title="mini-usos",
+    lifespan=lifespan,
+    docs_url=f"{API_PREFIX}/docs",
+    redoc_url=f"{API_PREFIX}/redoc",
+    openapi_url=f"{API_PREFIX}/openapi.json",
+)
+register_exception_handlers(app)
+app.include_router(public_router, prefix=API_PREFIX)
+# ... pozostałe routery
+```
+
+*Fragment `app/__init__.py`*
+
+Do konstruktora `FastAPI` przekazywane są tytuł, funkcja `lifespan` oraz ścieżki do automatycznie generowanej dokumentacji.
+
+Funkcja `lifespan` obejmuje cały czas działania aplikacji [CYTOWANIE: https://fastapi.tiangolo.com/advanced/events/#lifespan]. FastAPI wymaga, by była ona asynchronicznym menedżerem kontekstu, a staje się nim poprzez dekorator `@asynccontextmanager`. Kod przed `yield` wykonuje się raz, przy uruchomieniu, a kod po `yield` też raz, przy zamknięciu. Pomiędzy nimi funkcja jest wstrzymana na słowie `yield`, aplikacja przez ten czas obsługuje żądania. Obie wywoływane funkcje są asynchroniczne, dlatego poprzedza je `await`. Wywołanie funkcji asynchronicznej zwraca jedynie obiekt korutyny (ang. *coroutine*), jej kod wykonuje się dopiero po użyciu `await`. [CYTOWANIE: https://docs.python.org/3/library/asyncio-task.html]
+
+![[Pasted image 20261117184011.png]]
+
+*Dokumentacja metody `verify_connectivity` [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/async_api.html#neo4j.AsyncDriver.verify_connectivity]*
+
+Przy starcie `verify_connectivity()` sprawdza, czy sterownik może połączyć się z bazą i zalogować. Jeśli baza jest niedostępna, aplikacja nie uruchamia się wcale. Przy zamknięciu `close_driver()` zamyka sterownik wraz z jego pulą połączeń.
+
+Na poziomie całej aplikacji są rejestrowane procedury obsługi wyjątków (ang. *exception handlers*). Określają one, jaki kod statusu i jaki komunikat w formacie JSON zwrócić, gdy podczas obsługi żądania zostanie zgłoszony wyjątek danego typu [CYTOWANIE: https://fastapi.tiangolo.com/tutorial/handling-errors/#install-custom-exception-handlers]. Zdefiniowano je w funkcji `register_exception_handlers()` w pliku `errors.py`.
+
+```python
+def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(ConstraintError)
+    async def constraint_error_handler(_request: Request, exc: ConstraintError) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": db_err(exc)})
+
+    @app.exception_handler(ClientError)
+    async def client_error_handler(_request: Request, exc: ClientError) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": db_err(exc)})
+```
+
+*Fragment funkcji `register_exception_handlers`*
+
+Dzięki temu punkty końcowe nie muszą same przechwytywać błędów bazy danych. Naruszenie ograniczenia ze schematu (5.3.1), np. duplikat klucza, kończy się kodem 409, a odrzucenie zapytania przez bazę, np. z powodu niepoprawnej daty, kodem 400. `ConstraintError` dziedziczy po `ClientError`, a ten po `Neo4jError`. Pozostałe błędy – inne błędy bazy, niezgodność odpowiedzi z modelem Pydantic i nieobsłużone wyjątki – kończą się kodem 500. Ich szczegóły trafiają do logów serwera, a klient otrzymuje ogólny komunikat.
+
+W tym samym pliku zdefiniowano funkcje pomocnicze tworzące `HTTPException` dla najczęstszych kodów: `unauthorized` (401), `forbidden` (403), `not_found` (404), `conflict` (409) i `invalid` (422). Punkty końcowe zgłaszają błędy wyłącznie przez nie, co pozwala ustandaryzować odpowiedzi.
+
+```python
+def not_found(what: str) -> HTTPException:
+    return HTTPException(status_code=404, detail=f"{what} not found")
+```
+
+Na końcu `app/__init__.py` podłączane są routery z katalogu `routers/` (5.5.1), pogrupowane według ról użytkowników. Każdy jest dołączany z argumentem `prefix=API_PREFIX`, więc wszystkie punkty końcowe zaczynają się od `/api`.
+
+5.5.3 Połączenie z bazą danych
 - `app/database.py`: sterownik (`AsyncGraphDatabase.driver`), konfiguracja ze zmiennych środowiskowych
 - zależność `get_session` – jedna sesja na żądanie, zamykana po odpowiedzi (`yield`)
 - transakcje: zwykle automatyczne (jedno zapytanie), jawne przy kilku zapisach naraz (`start_registrations`, `remove_role`)
 
-5.5.3 Modele danych (schema)
+5.5.4 Modele danych (schema)
 - `app/schemas/` – modele Pydantic, podział na pliki według dziedziny, konwencja `...Request` / `...Response`
 - walidacja wejścia: typy, `Field(pattern=...)` (idx), `Field(ge=1, le=7)` (dzień tygodnia), `Literal` (pnp, rola), `max_length` (treść opinii), `field_validator` ze wspólnym `check_grade`
 - walidacja wyjścia: `response_model`, niezgodna odpowiedź → 500
@@ -1119,16 +1226,15 @@ Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i for
 // TODO: przykładowa odpowiedź 422 – PUT /api/groups/{group_id}/students/{student_idx}/grade z oceną 4.2
 ```
 
-5.5.4 Funkcje współdzielone
+5.5.5 Funkcje współdzielone
 - `query.py`: `run`, `one`, `tx_one`, `native` (zamiana typów czasowych Neo4j), `new_id` / `next_id` (UUID)
-- `errors.py`: `not_found`, `forbidden`, `conflict`, `invalid`; handlery wyjątków Neo4j (409 / 400 / 500), `ResponseValidationError`, nieobsłużonych wyjątków
 - `teaching.py` (`teacher_groups` – wspólne dla `/me/groups`, `/teachers/{idx}`, `/teachers/{idx}/groups`), `cycles.py` (`cycle_sort_key`), `grades.py` (`average_grade`)
 
 ```json
 // TODO: przykładowa odpowiedź błędu w formacie {"detail": ...}, np. 409 przy zapisie do pełnej grupy
 ```
 
-5.5.5 Uwierzytelnianie
+5.5.6 Uwierzytelnianie
 - logowanie: `verify_password` (bcrypt), `create_token` – pola tokenu (`sub`, `idx`, `roles`, `exp`), HS256, `JWT_SECRET`, ważność 12 h
 - `get_caller`: `HTTPBearer`, dekodowanie i sprawdzenie tokenu, obiekt `Caller`; 401 przy braku lub błędnym tokenie
 
@@ -1143,7 +1249,7 @@ Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i for
 > [!todo] Do decyzji przy opisie
 > `get_caller` akceptuje jeszcze starszy format tokenu z pojedynczym polem `role`, a `JWT_SECRET` ma w kodzie wartość domyślną `dev-secret` (Compose i tak wymaga zmiennej). Opisać albo usunąć z kodu.
 
-5.5.6 Autoryzacja
+5.5.7 Autoryzacja
 - fabryka zależności `require(*roles)` i zmienne modułów: `_logged_in`, `_student`, `_teacher`, `_staff`, `_admin`, `_opinion_roles`
 - RBAC w zależności (403 przed wejściem do funkcji), ReBAC w treści funkcji (zapytanie sprawdzające relację, 403)
 - `/me/...` – identyfikator z tokenu (`caller.idx`)
@@ -1152,7 +1258,7 @@ Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i for
 // TODO: przykładowa odpowiedź 403 – np. prowadzący wystawiający ocenę w cudzej grupie
 ```
 
-5.5.7 Budowa punktu końcowego
+5.5.8 Budowa punktu końcowego
 - przykład: `PUT /groups/{group_id}/students/{student_idx}/grade`
 - dekorator: metoda, ścieżka, `response_model`, `status_code` (201 / 204 przy innych endpointach)
 - argumenty: parametry ścieżki, parametry zapytania (`str | None = None`), model treści, `Depends(get_session)`, `Depends(_staff)`
@@ -1167,7 +1273,7 @@ Na podstawie modeli Pydantic API sprawdza poprawność danych wejściowych i for
 // TODO: przykładowa odpowiedź 201 z nagłówkiem Location – np. POST /api/admin/groups
 ```
 
-5.5.8 Przykładowe żądania i odpowiedzi
+5.5.9 Przykładowe żądania i odpowiedzi
 - po jednym na moduł z 4.5.1 (public, catalogue, student, teacher, admin)
 
 ```json

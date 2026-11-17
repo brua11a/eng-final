@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 API_PREFIX = "/api"
 
 app = FastAPI(
-    title="eng-final",
+    title="mini-usos",
     lifespan=lifespan,
     docs_url=f"{API_PREFIX}/docs",
     redoc_url=f"{API_PREFIX}/redoc",
