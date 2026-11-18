@@ -1504,7 +1504,7 @@ Token jest podpisywany algorytmem HS256, czyli kodem HMAC z funkcją skrótu SHA
   "email": "279413@student.pwr.edu.pl",
   "idx": "279413",
   "roles": ["Student"],
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNzk0MTNAc3R1ZGVudC5wd3IuZWR1LnBsIiwiaWR4IjoiMjc5NDEzIiwicm9sZXMiOlsiU3R1ZGVudCJdLCJleHAiOjE3OTUwNjI3NTR9.Mp85du5sH9UgkPx4Bmjugjcm9Py7KKuYHiePbQconbQ"
+  "token": "eyJhbGciO...iePbQconbQ"
 }
 ```
 
