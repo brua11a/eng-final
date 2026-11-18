@@ -196,7 +196,6 @@ export const admin = {
   createGroup: (body) => apiRequest('/admin/groups', { method: 'POST', body }),
   assignTeacherToGroup: (body) => apiRequest('/admin/groups/teachers', { method: 'POST', body }),
   startRegistrations: (body) => apiRequest('/admin/registrations', { method: 'POST', body }),
-  createOpinion: (body) => apiRequest('/opinions', { method: 'POST', body }),
   createAdmin: (body) => apiRequest('/admin/admins', { method: 'POST', body }),
   // 204 No Content: return the idx so the view can say whose login was removed.
   removeUser: (idx) =>

@@ -3,7 +3,7 @@ from neo4j import AsyncSession
 
 from app.graph_backend.database import get_session
 from app.graph_backend.auth import Caller, require
-from app.graph_backend.errors import conflict, forbidden, invalid, not_found
+from app.graph_backend.errors import conflict, forbidden, not_found
 from app.graph_backend.query import new_id, one, run
 from app.schemas.academic_cycle import (
     CycleSubject,
@@ -31,7 +31,6 @@ router = APIRouter(tags=["student"])
 
 
 _student = require("Student")
-_opinion_roles = require("Student", "Admin")
 
 _CAN_USE_REGISTRATION = """
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
@@ -405,16 +404,9 @@ async def registered_groups(
 async def create_opinion(
     body: OpinionCreateRequest,
     session: AsyncSession = Depends(get_session),
-    caller: Caller = Depends(_opinion_roles),
+    caller: Caller = Depends(_student),
 ) -> OpinionCreateResponse:
-    if "Admin" in caller.roles and body.student_idx:
-        student_idx = body.student_idx
-    elif "Student" in caller.roles:
-        student_idx = caller.idx
-    else:
-        student_idx = body.student_idx
-    if not student_idx:
-        raise invalid("student_idx is required")
+    student_idx = caller.idx
     check = await one(
         session,
         """

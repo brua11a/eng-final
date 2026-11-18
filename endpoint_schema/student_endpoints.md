@@ -492,7 +492,7 @@ RETURN
 
 ## POST /opinions
 
-**Allowed:** Student (about their own groups), Admin (on behalf of any student)
+**Allowed:** Student (about their own groups)
 
 **Request**
 
@@ -501,12 +501,11 @@ RETURN
 	"grade": Float,
 	"content": String?,  // at most 1000 characters
 	"group_id": String,
-	"teacher_idx": String,
-	"student_idx": String?
+	"teacher_idx": String
 }
 ```
 
-`student_idx` is required for admins. For students it is ignored and taken from the token. `teacher_idx` must be a teacher who `TEACHES` the given group.
+The author is always the caller (`idx` from the token). `teacher_idx` must be a teacher who `TEACHES` the given group.
 
 `grade` must be one of `2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0` (the same scale as teacher grades); any other value is rejected with HTTP 422. `submit` is set by the server to the time the opinion is created.
 
@@ -523,7 +522,7 @@ RETURN
 }
 ```
 
-`201` with the new opinion. `403` (`"Forbidden"`) if the student is not registered in the group, or `403` (`"Teacher does not teach this group"`) if `teacher_idx` is invalid for the group. `409` if the student already submitted an opinion for that group and teacher. `422` if an admin leaves out `student_idx`.
+`201` with the new opinion. `403` (`"Forbidden"`) if the student is not registered in the group, or `403` (`"Teacher does not teach this group"`) if `teacher_idx` is invalid for the group. `409` if the student already submitted an opinion for that group and teacher.
 
 **Query**
 

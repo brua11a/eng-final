@@ -1001,7 +1001,7 @@ PUT /me/registered-groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f
 
 Zapis jest odrzucany z kodem 403, gdy student nie ma dostępu do grupy lub jego tura nie trwa, oraz z kodem 409, gdy jest już zapisany do innej grupy tego samego typu z tego przedmiotu albo grupa jest pełna. Ponowny zapis do grupy, w której student już jest, kończy się sukcesem bez żadnych zmian. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem. Poza turą studenta również kończy się kodem 403, a jeśli student nie jest zapisany do grupy – kodem 404.
 
-Wszystkie te warunki są sprawdzane w tym samym zapytaniu, w którym tworzona jest krawędź `REGISTERED_IN`. Nie jest to przypadek - rozbicie sprawdzenia i zapisu na dwa osobne zapytania prowadziłoby do sytuacji wyścigu. Sposób jej rozwiązania został szczegółowo opisany w podrozdziale [TODO: numer podrozdziału o race condition].
+Wszystkie te warunki są sprawdzane w tym samym zapytaniu, w którym tworzona jest krawędź `REGISTERED_IN`. Nie jest to przypadek - rozbicie sprawdzenia i zapisu na dwa osobne zapytania prowadziłoby do sytuacji wyścigu. Sposób jej rozwiązania został szczegółowo opisany w podrozdziale 5.5.10.
 
 5.4.6 Wystawienie oceny - PUT /groups/{group_id}/students/{student_idx}/grade
 Punkt końcowy prowadzącego. Pozwala wystawić ocenę studentowi zapisanemu do grupy. Grupa i student są wskazani w ścieżce, a treść żądania zawiera wyłącznie ocenę.
@@ -1247,7 +1247,7 @@ finally:
 
 *Jawna transakcja przy usuwaniu roli*
 
-Zapytania w transakcji są wykonywane tą samą funkcją `one()` co w sesji (5.5.5), ponieważ sesja i transakcja udostępniają metodę `run()` o tej samej sygnaturze. Jeśli przed `commit()` zostanie zgłoszony wyjątek, `close()` w bloku `finally` wycofuje transakcję i żadna ze zmian nie trafia do bazy. Neo4j zawsze działa na poziomie izolacji *read committed*, którego nie da się podnieść, dlatego spójność przy współbieżnych żądaniach zapewniają jawne blokady zapisu, takie jak `_LOCK_PERSON` powyżej (5.5.8) [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/].
+Zapytania w transakcji są wykonywane tą samą funkcją `one()` co w sesji (5.5.5), ponieważ sesja i transakcja udostępniają metodę `run()` o tej samej sygnaturze. Jeśli przed `commit()` zostanie zgłoszony wyjątek, `close()` w bloku `finally` wycofuje transakcję i żadna ze zmian nie trafia do bazy. Neo4j zawsze działa na poziomie izolacji *read committed*, którego nie da się podnieść, dlatego spójność przy współbieżnych żądaniach zapewniają jawne blokady zapisu, takie jak `_LOCK_PERSON` powyżej (5.5.10) [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/].
 
 5.5.4 Modele danych (schema)
 
@@ -1589,8 +1589,7 @@ Zależności dla poszczególnych zestawów ról są tworzone raz, na początku m
 | Zmienna | Role | Moduł | Liczba punktów końcowych |
 | --- | --- | --- | ---: |
 | `_logged_in` | Student, Teacher, Admin | `catalogue.py` | 10 |
-| `_student` | Student | `student.py` | 9 |
-| `_opinion_roles` | Student, Admin | `student.py` | 1 |
+| `_student` | Student | `student.py` | 10 |
 | `_teacher` | Teacher | `teacher.py` | 1 |
 | `_staff` | Teacher, Admin | `teacher.py` | 3 |
 | `_admin` | Admin | `admin.py` | 34 |
@@ -1815,7 +1814,7 @@ async def register_to_group(
 
 *Zapis do grupy (`routers/student.py`)*
 
-Jeśli grupa nie należy do żadnej rejestracji z turą studenta albo tura nie trwa, kwerenda nie zwraca wiersza (403). W przeciwnym razie zwraca `status`: `"conflict"` lub `"full"` (409) albo `"ok"`, gdy krawędź została utworzona lub już istniała. Kod 204 oznacza sukces bez treści odpowiedzi – funkcja niczego nie zwraca. Kwerenda `_REGISTER` i powody, dla których sprawdzenie i zapis muszą być jednym zapytaniem, zostały opisane w [TODO: 5.5.9 lub 5.5.10].
+Jeśli grupa nie należy do żadnej rejestracji z turą studenta albo tura nie trwa, kwerenda nie zwraca wiersza (403). W przeciwnym razie zwraca `status`: `"conflict"` lub `"full"` (409) albo `"ok"`, gdy krawędź została utworzona lub już istniała. Kod 204 oznacza sukces bez treści odpowiedzi – funkcja niczego nie zwraca. Kwerenda `_REGISTER` i powody, dla których sprawdzenie i zapis muszą być jednym zapytaniem, zostały opisane w 5.5.10.
 
 ```http
 PUT /me/registered-groups/c798fc10-c169-58c8-9c55-c0fd2d104535
@@ -1898,23 +1897,275 @@ content-type: application/json
 
 *To samo żądanie powtórzone – przedmiot już istnieje, więc jest tylko aktualizowany*
 
-5.5.9 Przykładowe żądania i odpowiedzi
-- po jednym na moduł z 4.5.1 (public, catalogue, student, teacher, admin)
+5.5.9 Wybrane punkty końcowe
 
-```json
-// TODO: GET /api/subjects?name=Algebra
+Poniżej opisano po jednym punkcie końcowym z każdego modułu z 4.5.1. Moduł `public` zawiera wyłącznie logowanie, opisane w 5.5.6. Wybrano przede wszystkim te funkcje, które zapowiedziano w analizie wymagań (3.2, 3.5), a które nie pojawiły się jeszcze w poprzednich podrozdziałach.
+
+**Student – wystawienie opinii (`POST /opinions`)**
+
+Jest to trzeci z procesów opisanych w 3.5. Opinię może wystawić student zapisany do grupy, o prowadzącym tej grupy, i tylko raz dla danej pary grupa–prowadzący (4.3.5).
+
+```python
+@router.post("/opinions", response_model=OpinionCreateResponse, status_code=201)
+async def create_opinion(
+    body: OpinionCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_student),
+) -> OpinionCreateResponse:
+    student_idx = caller.idx
+    check = await one(
+        session,
+        """
+        MATCH (st:Student {idx: $student_idx})
+        OPTIONAL MATCH (st)-[:REGISTERED_IN]->(g:Group {id: $group_id})
+        OPTIONAL MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g)
+        OPTIONAL MATCH (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t)
+        RETURN g IS NOT NULL AS registered, t IS NOT NULL AS teaches, dup IS NOT NULL AS duplicate
+        """,
+        student_idx=student_idx,
+        group_id=body.group_id,
+        teacher_idx=body.teacher_idx,
+    )
+    if check is None or not check["registered"]:
+        raise forbidden()
+    if not check["teaches"]:
+        raise forbidden("Teacher does not teach this group")
+    if check["duplicate"]:
+        raise conflict("Opinion already exists")
+    # ... utworzenie opinii
 ```
 
-```json
-// TODO: GET /api/me/registered-groups
+*Sprawdzenie uprawnień przy wystawianiu opinii (`routers/student.py`)*
+
+Autorem opinii jest zawsze wywołujący – identyfikator studenta pochodzi z tokenu (5.5.7), a model żądania nie ma pola, w którym można by wskazać innego studenta.
+
+Kwerenda sprawdzająca odpowiada na trzy pytania naraz. Każdy kolejny wzorzec jest w `OPTIONAL MATCH`, więc wiersz jest zwracany nawet wtedy, gdy ścieżka nie istnieje, a brakujący węzeł ma wartość `null`. Dzięki temu jedno zapytanie mówi, czy student jest zapisany do grupy, czy prowadzący ją prowadzi i czy opinia już istnieje, a API może zwrócić dokładny komunikat. Sama opinia jest tworzona drugą kwerendą, jako węzeł z trzema krawędziami: `WRITES`, `ABOUT` i `ABOUT_TEACHER`. Kwerenda ta jeszcze raz sprawdza duplikat, ponieważ między obiema kwerendami ta sama opinia mogła zostać utworzona przez inne żądanie (5.5.10).
+
+| Żądanie | Odpowiedź |
+| --- | --- |
+| opinia o prowadzącym, który nie prowadzi grupy | 403 `Teacher does not teach this group` |
+| poprawna opinia | 201, utworzona opinia |
+| ta sama grupa i prowadzący drugi raz | 409 `Opinion already exists` |
+
+*Odpowiedzi `POST /opinions` dla studenta 279413 i wykładu z Biometrii*
+
+Odpowiedź 201 nie zawiera nagłówka `Location`, ponieważ nie istnieje punkt końcowy zwracający pojedynczą opinię (5.5.8).
+
+**Katalog – odczyt opinii (`GET /opinions`)**
+
+Opinie są widoczne w katalogu przy grupie i przy prowadzącym, bez informacji o autorze (3.4). Punkt końcowy przyjmuje dwa opcjonalne parametry zapytania, `teacher_idx` i `group_id`, z których przynajmniej jeden musi być podany – inaczej zwraca 422.
+
+```cypher
+MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
+WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
+  AND ($group_id IS NULL OR g.id = $group_id)
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+RETURN
+  o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit,
+  g.id AS group_id, su.code AS course_code, su.name AS course_name,
+  gt.g_type AS g_type, ac.year + " " + ac.season AS cycle,
+  t.idx AS teacher_idx, t.name + " " + t.surname AS teacher
+ORDER BY o.submit DESC
 ```
 
-```json
-// TODO: GET /api/groups/{group_id}/students
-```
+*Kwerenda zwracająca opinie (`routers/catalogue.py`)*
+
+Anonimowość nie wynika z odfiltrowania autora przed wysłaniem odpowiedzi, tylko z samej kwerendy: nie przechodzi ona po krawędzi `WRITES`, więc dane autora w ogóle nie są odczytywane z bazy. Nie da się ich więc ujawnić nawet przez pomyłkę w modelu odpowiedzi. Średnia ocen z opinii (`avg_grade`) jest liczona w Pythonie.
 
 ```json
-// TODO: GET /api/admin/people/next-idx
+{
+  "opinions": [
+    {
+      "id": "b88f4628-ff96-47b1-b637-f6997680e571",
+      "grade": 4.5,
+      "content": "Ciekawy wykład, dużo przykładów z praktyki.",
+      "submit": "2026-11-18T21:01:09.098000Z",
+      "group_id": "4925bb42-1eb1-5b07-9eef-8b917bf4f78d",
+      "course_code": "W04CBE-SI0402G",
+      "course_name": "Biometria",
+      "g_type": "W",
+      "cycle": "2025/26 Z",
+      "teacher_idx": "T008",
+      "teacher": "Agnieszka Baran"
+    },
+    // ... druga opinia z oceną 2.0
+  ],
+  "avg_grade": 3.25
+}
 ```
+
+*Odpowiedź 200 na `GET /api/opinions?group_id=4925bb42-1eb1-5b07-9eef-8b917bf4f78d`*
+
+**Prowadzący – lista studentów w grupie (`GET /groups/{group_id}/students`)**
+
+Jest to drugi krok procesu wystawiania oceny (3.5): prowadzący widzi studentów zapisanych do grupy razem z ich dotychczasowymi ocenami. Sprawdzenie uprawnień jest identyczne jak przy wystawianiu oceny (5.5.7) – prowadzący musi prowadzić grupę, administrator pomija sprawdzenie. Ocena jest odczytywana z krawędzi `REGISTERED_IN`, na której jest przechowywana (4.3.3):
+
+```cypher
+MATCH (g:Group {id: $group_id})
+MATCH (st:Student)-[r:REGISTERED_IN]->(g)
+RETURN
+  st.idx AS idx, st.name AS name, st.surname AS surname,
+  st.phone AS phone, st.photo AS photo, st.joined AS joined,
+  r.grade AS grade
+ORDER BY st.surname, st.name
+```
+
+*Kwerenda zwracająca studentów grupy (`routers/teacher.py`)*
+
+```json
+{
+  "students": [
+    {
+      "idx": "279413",
+      "name": "Anna",
+      "surname": "Kowalska",
+      "phone": "600111222",
+      "photo": "279413.jpg",
+      "joined": "2023-10-01T00:00:00+01:00",
+      "grade": 4.5
+    },
+    {
+      "idx": "281056",
+      "name": "Piotr",
+      "surname": "Nowak",
+      "phone": "601222333",
+      "photo": null,
+      "joined": "2023-10-01T00:00:00+01:00",
+      "grade": null
+    }
+    // ...
+  ]
+}
+```
+
+*Fragment odpowiedzi 200 na `GET /api/groups/4925bb42-1eb1-5b07-9eef-8b917bf4f78d/students` (prowadząca T008)*
+
+Studenci bez oceny mają w polu `grade` wartość `null`, zgodnie z tym, że właściwość ta nie jest wymagana w schemacie (5.3.1).
+
+**Administrator – dezaktywacja i usunięcie konta (`PATCH` i `DELETE /admin/users/{idx}`)**
+
+Zgodnie z wymaganiami (3.1, 3.2) odebranie dostępu nie może usuwać danych osoby. Dezaktywacja (`PATCH` z treścią `{"active": false}`) dodaje etykietę `Inactive` z momentem dezaktywacji, a ponowna aktywacja ją usuwa:
+
+```cypher
+// dezaktywacja
+MATCH (u:User {idx: $idx})
+SET u:Inactive, u.deactivated_at = datetime()
+RETURN u.idx AS idx
+
+// aktywacja
+MATCH (u:User {idx: $idx})
+REMOVE u:Inactive, u.deactivated_at
+RETURN u.idx AS idx
+```
+
+Usunięcie konta (`DELETE`) zdejmuje z węzła etykiety `User` i `Inactive` oraz dane logowania. Węzeł `Person` z rolami i wszystkimi krawędziami – zapisami, ocenami, opiniami – zostaje w grafie:
+
+```cypher
+MATCH (u:User {idx: $idx})
+REMOVE u:User:Inactive, u.email, u.passwd_hash, u.deactivated_at
+RETURN u.idx AS idx
+```
+
+Przed wykonaniem tej kwerendy funkcja sprawdza, czy administrator nie usuwa własnego konta, i w takim przypadku zwraca 409. Zapobiega to sytuacji, w której jedyny administrator przypadkowo odcina sobie dostęp do systemu.
+
+Działanie obu operacji sprawdzono na studencie 285904, który w danych początkowych nie ma konta:
+
+| Krok | Odpowiedź |
+| --- | --- |
+| `POST /admin/users` – utworzenie konta | 201 |
+| `POST /login` | 200, token |
+| `PATCH /admin/users/285904` z `{"active": false}` | 200 |
+| `POST /login` | 403 `Account inactive` |
+| żądanie z tokenem wydanym przed dezaktywacją | 200 |
+| `PATCH /admin/users/285904` z `{"active": true}`, potem `POST /login` | 200, 200 |
+| `DELETE /admin/users/285904` | 204 |
+| `POST /login` | 401 `Invalid email or password` |
+| `GET /students/285904` (administrator) | 200 – dane osoby nadal są w grafie |
+| `DELETE /admin/users/A001` (własne konto administratora) | 409 `Cannot remove your own account` |
+
+*Cykl życia konta użytkownika*
+
+Piąty wiersz pokazuje konsekwencję wyboru JWT opisaną w 4.4.1: etykieta `Inactive` jest sprawdzana tylko przy logowaniu, więc token wydany wcześniej działa aż do wygaśnięcia, czyli najdłużej 12 godzin (5.5.6).
+
+5.5.10 Współbieżność
+
+Zgodnie z wymaganiami (3.3, 4.3.4) jednoczesne żądania wielu użytkowników nie mogą doprowadzić do niespójnych danych, w szczególności do przepełnienia grupy w trakcie zapisów. Neo4j działa na poziomie izolacji *read committed* (5.5.3): transakcja widzi tylko zatwierdzone zmiany innych transakcji, ale dwie transakcje mogą jednocześnie odczytać ten sam stan. Typowy błąd, w którym najpierw sprawdza się warunek, a potem zapisuje (ang. *check-then-act*), wygląda wtedy tak: dwie transakcje równocześnie liczą zapisanych studentów, obie widzą 2 z 3 miejsc i obie tworzą krawędź – w grupie jest 4 studentów.
+
+W projekcie zastosowano dwa mechanizmy:
+1. Sprawdzenie warunków i zapis wykonuje jedna kwerenda, a więc jedna transakcja.
+2. Przed sprawdzeniem warunków kwerenda zakłada blokadę zapisu (ang. *write lock*) na węzłach, których warunki dotyczą.
+
+Neo4j zakłada blokadę zapisu na węźle przy pierwszej modyfikacji i trzyma ją do końca transakcji, a inne transakcje próbujące zmodyfikować ten sam węzeł czekają [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/locks-deadlocks/]. Cypher nie ma osobnej instrukcji blokującej węzeł, dlatego blokadę wymusza się zapisem, który niczego nie zmienia, np. `SET g.capacity = g.capacity` [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/].
+
+**Zapis do grupy**
+
+```cypher
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
+// Only during the student's turn.
+WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)
+WITH DISTINCT st, g, gt
+SET st.idx = st.idx
+SET g.capacity = g.capacity
+WITH st, g,
+  EXISTS { (st)-[:REGISTERED_IN]->(g) } AS already,
+  EXISTS {
+    MATCH (st)-[:REGISTERED_IN]->(other:Group)-[:OF_TYPE]->(gt)
+    WHERE other <> g
+  } AS conflict,
+  COUNT { (g)<-[:REGISTERED_IN]-(:Student) } >= g.capacity AS full
+WITH st, g, CASE
+  WHEN already THEN "ok"
+  WHEN conflict THEN "conflict"
+  WHEN full THEN "full"
+  ELSE "ok"
+END AS status
+FOREACH (_ IN CASE WHEN status = "ok" THEN [1] ELSE [] END |
+  MERGE (st)-[r:REGISTERED_IN]->(g)
+    ON CREATE SET r.registered_at = datetime()
+)
+RETURN status
+```
+
+*Kwerenda `_REGISTER` (`routers/student.py`)*
+
+Pierwszy `MATCH` jest jednocześnie sprawdzeniem ReBAC: jeśli student nie ma trwającej tury w rejestracji otwierającej grupę, kwerenda nie zwraca wiersza (403, 5.5.8). Następnie zakładane są dwie blokady:
+- `SET st.idx = st.idx` – na studencie: jego jednoczesne żądania zapisu do różnych grup czekają na siebie, więc warunek „jedna grupa danego typu” widzi zapis zatwierdzony chwilę wcześniej,
+- `SET g.capacity = g.capacity` – na grupie: jednoczesne zapisy do niej wykonują się po kolei, więc liczba zajętych miejsc jest zawsze aktualna.
+
+Dopiero po założeniu blokad kwerenda oblicza warunki. Przy *read committed* transakcja, która czekała na blokadę, widzi już krawędzie zatwierdzone przez poprzednią. Blokady są zakładane zawsze w tej samej kolejności – najpierw student, potem grupa – dzięki czemu dwie transakcje nie mogą czekać na siebie nawzajem (ang. *deadlock*).
+
+Warunkowy zapis realizuje `FOREACH` po liście jednoelementowej albo pustej – jest to standardowy sposób na wykonanie zapisu tylko przy spełnionym warunku w Cypher bez podzapytań. `MERGE` zamiast `CREATE` sprawia, że ponowny zapis do tej samej grupy niczego nie zmienia, zgodnie z idempotentnością metody `PUT` (4.5.2).
+
+Działanie blokad sprawdzono testem `tests/test_concurrent_registration.py`. Test tworzy w bazie tymczasową rejestrację z trwającą turą i grupy testowe, wysyła żądania jednocześnie (wątki zwalniane wspólną barierą), a po zakończeniu usuwa dane testowe. W scenariuszu kontrolnym C ta sama kwerenda została wykonana bez dwóch linii `SET`.
+
+| Scenariusz | Żądania | Odpowiedzi | Stan bazy |
+| --- | ---: | --- | --- |
+| A: 10 studentów, grupa z 3 miejscami | 10 | 3 × 204, 7 × 409 `Group is full` | 3 zapisanych |
+| B: 5 studentów, każdy jednocześnie do 2 grup tego samego typu | 10 | 5 × 204, 5 × 409 (inna grupa tego typu) | każdy student w 1 grupie |
+| C: jak A, kwerenda bez blokad | 10 | 10 × `ok` | **10 zapisanych** |
+
+*Wyniki testu współbieżnych zapisów (dwa uruchomienia, identyczne wyniki)*
+
+Scenariusz C pokazuje, że sama jedna kwerenda nie wystarcza: bez blokad do grupy z 3 miejscami zapisało się 10 studentów.
+
+Ten sam wzorzec zastosowano przy zapisie dziekańskim (`POST /admin/groups/students`), który pomija sprawdzenie tury, a parametrem `ignore_capacity` pozwala pominąć również limit miejsc (3.2). W odróżnieniu od zapisu studenta, ponowny zapis do tej samej grupy zwraca tu 409, ponieważ jest to metoda `POST`.
+
+**Usunięcie roli**
+
+Każda osoba musi mieć przynajmniej jedną rolę, więc odebranie ostatniej roli kończy się kodem 409. Bez blokady dwa jednoczesne żądania odebrania dwóch różnych ról osobie, która ma ich dokładnie dwie, mogłyby oba przejść sprawdzenie i zostawić osobę bez roli. Dlatego usunięcie roli wykonuje się w jawnej transakcji (5.5.3), w której najpierw blokowany jest węzeł osoby:
+
+```python
+_LOCK_PERSON = "MATCH (p:Person {idx: $idx}) SET p.idx = p.idx RETURN p.idx AS idx"
+```
+
+Kwerenda usuwająca rolę jeszcze raz sprawdza liczbę ról, już po założeniu blokady. Odczytuje je funkcją `labels(p)`, a nie wyrażeniami `p:Admin` itd. – według komentarza w kodzie predykat etykiety po oczekiwaniu na blokadę mógł jeszcze zwracać etykietę usuniętą przez drugą transakcję.
+
+W tym samym teście (scenariusz D) wysłano jednocześnie dwa żądania `DELETE /admin/users/{idx}/roles/{role}` dla osoby z rolami Teacher i Student. Jedno zakończyło się kodem 200, drugie 409 `Cannot remove last role`, a osobie została jedna rola.
+
+**Pozostałe miejsca**
+
+Blokadę zapisu stosuje się również przy wystawianiu opinii (blokada studenta przed ponownym sprawdzeniem duplikatu, 5.5.9), tworzeniu typu grupy (blokada przedmiotu, by instancja przedmiotu i typ grupy nie powstały dwukrotnie) oraz przypisywaniu studentów do tur (blokada rejestracji, by student nie trafił do dwóch tur tej samej rejestracji).
 
 5.6 Klient

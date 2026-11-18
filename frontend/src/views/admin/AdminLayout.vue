@@ -8,7 +8,6 @@ const links = [
   { to: '/admin/people', label: 'People' },
   { to: '/admin/entities', label: 'Entities' },
   { to: '/admin/registrations', label: 'Registrations' },
-  { to: '/admin/opinion', label: 'Opinion' },
 ]
 </script>
 

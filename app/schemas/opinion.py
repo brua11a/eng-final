@@ -10,7 +10,6 @@ class OpinionCreateRequest(BaseModel):
     content: Optional[str] = Field(default=None, max_length=1000)
     group_id: str
     teacher_idx: str
-    student_idx: Optional[str] = None
 
     @field_validator("grade")
     @classmethod

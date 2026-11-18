@@ -132,11 +132,6 @@ const routes = [
             name: 'admin-registrations',
             component: () => import('../views/admin/RegistrationsView.vue'),
           },
-          {
-            path: 'opinion',
-            name: 'admin-opinion',
-            component: () => import('../views/admin/OpinionView.vue'),
-          },
         ],
       },
     ],

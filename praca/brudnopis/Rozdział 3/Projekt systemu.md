@@ -345,13 +345,13 @@ Klient komunikuje się z backendem przez interfejs REST (ang. *Representational 
 
 4.5.1 Podział na moduły
 
-Punkty końcowe podzielono na moduły odpowiadające tabelom macierzy uprawnień: funkcje wspólne trafiły do modułu katalogu, funkcje studenta i prowadzącego do osobnych modułów, a funkcje administracyjne do modułu administratora. Dzięki temu wymaganą rolę określa się dla całego modułu, a przy pojedynczych punktach końcowych zapisuje się jedynie wyjątki, np. wystawianie opinii przez administratora w imieniu studenta.
+Punkty końcowe podzielono na moduły odpowiadające tabelom macierzy uprawnień: funkcje wspólne trafiły do modułu katalogu, funkcje studenta i prowadzącego do osobnych modułów, a funkcje administracyjne do modułu administratora. Dzięki temu wymaganą rolę określa się dla całego modułu, a przy pojedynczych punktach końcowych zapisuje się jedynie wyjątki, np. lista własnych grup prowadzącego, niedostępna dla administratora, który nie prowadzi zajęć.
 
 | Moduł | Dostęp | Przeznaczenie |
 |---|---|---|
 | public | wszyscy | logowanie |
 | catalogue | zalogowani | przeglądanie oferty dydaktycznej: przedmiotów, planów studiów, grup, prowadzących i opinii |
-| student | Student (opinie także Admin) | semestry, zapisy na zajęcia, oceny, wystawianie opinii |
+| student | Student | semestry, zapisy na zajęcia, oceny, wystawianie opinii |
 | teacher | Teacher, Admin | prowadzone grupy, zapisani studenci, wystawianie ocen |
 | admin | Admin | tworzenie i modyfikacja danych: osób, kont, ról, oferty dydaktycznej, sal, cykli i zapisów; zapis studenta do grupy z pominięciem tur |
 *Moduły interfejsu API*

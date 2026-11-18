@@ -57,7 +57,7 @@ Tabela 3.2. Funkcje studenta i prowadzącego
 | Przeglądanie rejestracji | tak | nie | nie | tylko te, do których tury student jest przypisany |
 | Zapis do grupy | tak | nie | tak | student tylko do grup ze swojej rejestracji, jedna grupa danego typu na przedmiot, w ramach limitu miejsc; administrator bez rejestracji (dziekanat) |
 | Wypis z grupy | tak | nie | nie | tylko z grup ze swojej rejestracji |
-| Wystawienie opinii | tak | nie | tak | tylko o grupie, do której student jest zapisany, i jej prowadzącym, raz na grupę i prowadzącego; administrator w imieniu studenta |
+| Wystawienie opinii | tak | nie | nie | tylko o grupie, do której student jest zapisany, i jej prowadzącym, raz na grupę i prowadzącego |
 | Lista prowadzonych grup | nie | tak | tak | prowadzący swoje, administrator dowolnego prowadzącego |
 | Lista studentów w grupie | nie | tak | tak | prowadzący tylko w swoich grupach |
 | Szczegóły studenta | nie | tak | tak | prowadzący tylko studentów, których uczy lub uczył |
