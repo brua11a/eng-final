@@ -72,6 +72,19 @@ RETURN status
 """
 
 
+# Not registered in the group: no row (404). Registered, but no turn of a registration
+# opening the group is in progress: in_turn is false and nothing is deleted (403),
+# the same as PUT on this path.
+_DEREGISTER = """
+MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
+WITH r, EXISTS {
+  MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+  WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
+} AS in_turn
+FOREACH (_ IN CASE WHEN in_turn THEN [1] ELSE [] END | DELETE r)
+RETURN in_turn
+"""
+
 async def _require_registration(session: AsyncSession, student_idx: str, registration_id: str) -> None:
     row = await one(
         session,
@@ -214,21 +227,11 @@ async def deregister_from_group(
     session: AsyncSession = Depends(get_session),
     caller: Caller = Depends(_student),
 ) -> None:
-    row = await one(
-        session,
-        """
-        MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-        MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
-        // Only during the student's turn.
-        WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
-        DELETE r
-        RETURN g.id AS group_id
-        """,
-        student_idx=caller.idx,
-        group_id=group_id,
-    )
+    row = await one(session, _DEREGISTER, student_idx=caller.idx, group_id=group_id)
     if row is None:
-        raise not_found("Registration in this group, or its registration period")
+        raise not_found("Registration in this group")
+    if not row["in_turn"]:
+        raise forbidden("Group not open to you, or outside your registration turn")
 
 
 @router.get("/me/enrolments", response_model=MyEnrolmentsResponse)

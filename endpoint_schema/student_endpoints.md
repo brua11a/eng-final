@@ -250,16 +250,18 @@ None.
 
 **Status**
 
-`204` when the student is deregistered. `404` if the student is not in the group, or no registration they have a turn in opens it, or that turn is not in progress.
+`204` when the student is deregistered. `404` if the student is not in the group. `403` if no registration they have a turn in opens the group, or that turn is not in progress (the same as `PUT`).
 
 **Query**
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
-WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
-DELETE r
-RETURN g.id AS group_id
+WITH r, EXISTS {
+  MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
+  WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
+} AS in_turn
+FOREACH (_ IN CASE WHEN in_turn THEN [1] ELSE [] END | DELETE r)
+RETURN in_turn
 ```
 
 ---

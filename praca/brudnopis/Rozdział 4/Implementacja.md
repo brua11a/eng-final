@@ -999,7 +999,7 @@ Najważniejszy punkt końcowy całego systemu, a zarazem najbardziej obciążony
 PUT /me/registered-groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f
 ```
 
-Zapis jest odrzucany z kodem 403, gdy student nie ma dostępu do grupy lub jego tura nie trwa, oraz z kodem 409, gdy jest już zapisany do innej grupy tego samego typu z tego przedmiotu albo grupa jest pełna. Ponowny zapis do grupy, w której student już jest, kończy się sukcesem bez żadnych zmian. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem.
+Zapis jest odrzucany z kodem 403, gdy student nie ma dostępu do grupy lub jego tura nie trwa, oraz z kodem 409, gdy jest już zapisany do innej grupy tego samego typu z tego przedmiotu albo grupa jest pełna. Ponowny zapis do grupy, w której student już jest, kończy się sukcesem bez żadnych zmian. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem. Poza turą studenta również kończy się kodem 403, a jeśli student nie jest zapisany do grupy – kodem 404.
 
 Wszystkie te warunki są sprawdzane w tym samym zapytaniu, w którym tworzona jest krawędź `REGISTERED_IN`. Nie jest to przypadek - rozbicie sprawdzenia i zapisu na dwa osobne zapytania prowadziłoby do sytuacji wyścigu. Sposób jej rozwiązania został szczegółowo opisany w podrozdziale [TODO: numer podrozdziału o race condition].
 
@@ -1736,6 +1736,8 @@ Punkty końcowe, zdefiniowane w katalogu `routers/`, są wszystkie zbudowane w b
 
 > Kroki oznaczone *(FastAPI)* nie wymagają kodu w treści funkcji – wynikają z deklaracji w dekoratorze i argumentach.
 
+Kolejność kroków 3 i 4 sprawdzono na `PUT /groups/{group_id}/students/{student_idx}/grade` z niepoprawną oceną 4.2: żądanie bez tokenu kończy się kodem 401, z tokenem studenta – 403, a dopiero z tokenem administratora – 422. Walidacja treści nie zdradza więc nic użytkownikowi bez uprawnień.
+
 Wszystkie kroki przechodzi punkt końcowy `GET /students/{student_idx}`, zwracający prowadzącemu lub administratorowi szczegóły studenta wraz ze średnią ocen:
 
 ```python
@@ -1793,6 +1795,28 @@ async def student_detail(
 
 *Odpowiedź 200 na `GET /api/students/279413` (administrator)*
 
+Nie każdy punkt końcowy sprawdza relacje osobną kwerendą. Przy zapisie do grupy ReBAC, limit miejsc i zasada jednej grupy danego typu są warunkami tej samej kwerendy, która tworzy krawędź `REGISTERED_IN`. Kwerenda zwraca wynik sprawdzenia, a funkcja zamienia go na kod odpowiedzi:
+
+```python
+@router.put("/me/registered-groups/{group_id}", status_code=204)          # [1]
+async def register_to_group(
+    group_id: str,
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_student),
+) -> None:
+    row = await one(session, _REGISTER, student_idx=caller.idx, group_id=group_id)  # [5], [6]
+    if row is None:                                                         # [7]
+        raise forbidden("Group not open to you, or outside your registration turn")
+    if row["status"] == "conflict":
+        raise conflict("You are already registered in another group of this type for this subject")
+    if row["status"] == "full":
+        raise conflict("Group is full")
+```
+
+*Zapis do grupy (`routers/student.py`)*
+
+Jeśli grupa nie należy do żadnej rejestracji z turą studenta albo tura nie trwa, kwerenda nie zwraca wiersza (403). W przeciwnym razie zwraca `status`: `"conflict"` lub `"full"` (409) albo `"ok"`, gdy krawędź została utworzona lub już istniała. Kod 204 oznacza sukces bez treści odpowiedzi – funkcja niczego nie zwraca. Kwerenda `_REGISTER` i powody, dla których sprawdzenie i zapis muszą być jednym zapytaniem, zostały opisane w [TODO: 5.5.9 lub 5.5.10].
+
 ```http
 PUT /me/registered-groups/c798fc10-c169-58c8-9c55-c0fd2d104535
 ```
@@ -1805,9 +1829,74 @@ PUT /me/registered-groups/c798fc10-c169-58c8-9c55-c0fd2d104535
 
 *Żądanie zapisu studenta do pełnej grupy i odpowiedź 409*
 
-```json
-// TODO: przykładowa odpowiedź 201 z nagłówkiem Location – np. POST /api/admin/groups
+Punkty końcowe tworzące zasoby zwracają kod 201. Standard HTTP zaleca, by odpowiedź 201 wskazywała utworzony zasób nagłówkiem `Location` [CYTOWANIE: RFC 9110, sekcje 15.3.2 i 10.2.2]. Ustawia go funkcja pomocnicza `_location()`:
+
+```python
+def _location(request: Request, response: Response, route: str, **params: str) -> None:
+    response.headers["Location"] = request.app.url_path_for(route, **params)
 ```
+
+*Funkcja ustawiająca nagłówek `Location` (`routers/admin.py`)*
+
+`url_path_for()` buduje adres z nazwy funkcji punktu końcowego i jej parametrów [CYTOWANIE: https://www.starlette.io/routing/#reverse-url-lookups]. Nagłówek ustawiają tylko punkty końcowe, których zasób ma własny `GET` (prowadzący, student, grupa, przedmiot) – pozostałe, np. wydziały, są dostępne wyłącznie jako listy.
+
+Przedmiot jest identyfikowany kodem nadawanym przez uczelnię, więc kod jest w ścieżce, a tworzenie i aktualizacja to jedno żądanie `PUT`. Kod statusu zależy wtedy od wyniku kwerendy i jest ustawiany w treści funkcji:
+
+```python
+@router.put("/subjects/{code}", response_model=SubjectCreateResponse)       # [1]
+async def upsert_subject(
+    code: str,
+    body: SubjectUpsertRequest,                                             # [2], [4]
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    caller=Depends(_admin),                                                 # [3]
+) -> SubjectCreateResponse:
+    row = await one(                                                        # [6]
+        session,
+        """
+        OPTIONAL MATCH (old:Subject {code: $code})
+        WITH old IS NULL AS created
+        MERGE (su:Subject {code: $code})
+        SET su.name = $name, su.ects = $ects
+        RETURN su.code AS code, su.name AS name, su.ects AS ects, created
+        """,
+        code=code,
+        name=body.name,
+        ects=body.ects,
+    )
+    if row.pop("created"):                                                  # [8]
+        response.status_code = 201
+        _location(request, response, "subject_detail", code=row["code"])
+    return SubjectCreateResponse(**row)                                     # [9]
+```
+
+*Utworzenie lub aktualizacja przedmiotu (`routers/admin.py`)*
+
+```http
+PUT /admin/subjects/W04CBE-SI0999G
+
+{"name": "Grafowe bazy danych", "ects": 3}
+```
+
+```http
+HTTP/1.1 201 Created
+content-type: application/json
+location: /api/subjects/W04CBE-SI0999G
+
+{"code":"W04CBE-SI0999G","name":"Grafowe bazy danych","ects":3}
+```
+
+*Pierwsze żądanie – przedmiot zostaje utworzony*
+
+```http
+HTTP/1.1 200 OK
+content-type: application/json
+
+{"code":"W04CBE-SI0999G","name":"Grafowe bazy danych","ects":3}
+```
+
+*To samo żądanie powtórzone – przedmiot już istnieje, więc jest tylko aktualizowany*
 
 5.5.9 Przykładowe żądania i odpowiedzi
 - po jednym na moduł z 4.5.1 (public, catalogue, student, teacher, admin)
