@@ -1379,36 +1379,419 @@ Pozostałe funkcje współdzielone wynikają z logiki dziedziny:
 - `average_grade()` (`grades.py`) – średnia ocen studenta ważona punktami ECTS, liczona z ostatniego w pełni ocenionego podejścia do każdego przedmiotu. Do wyboru ostatniego podejścia wykorzystuje `cycle_sort_key()`. Średnia jest liczona w Pythonie, a nie w zapytaniu Cypher, ponieważ wybór podejścia i uśrednianie ocen z kilku grup tego samego typu byłyby w Cypher znacznie mniej czytelne.
 
 5.5.6 Uwierzytelnianie
-- logowanie: `verify_password` (bcrypt), `create_token` – pola tokenu (`sub`, `idx`, `roles`, `exp`), HS256, `JWT_SECRET`, ważność 12 h
-- `get_caller`: `HTTPBearer`, dekodowanie i sprawdzenie tokenu, obiekt `Caller`; 401 przy braku lub błędnym tokenie
 
-```json
-// TODO: przykładowa odpowiedź POST /api/login
+Uwierzytelnianie zrealizowano w pliku `graph_backend/auth/deps.py`. Zawiera on funkcje obsługi haseł i tokenów, z których korzystają punkt końcowy `POST /login` (5.4.2) oraz tworzenie kont w module administratora, a także zależność `get_caller()`, przez którą wszystkie pozostałe punkty końcowe ustalają, kto wysłał żądanie. Założenia tego mechanizmu, w tym powody wyboru tokenów JWT, opisano w 4.4.1.
+
+Hasła są obsługiwane przez bibliotekę bcrypt w wersji 5.0.0 [CYTOWANIE: https://pypi.org/project/bcrypt/].
+
+```python
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode(), password_hash.encode())
+    except ValueError:
+        return False
 ```
 
-```json
-// TODO: zdekodowana zawartość (payload) tokenu
+*Funkcje obsługi haseł*
+
+`hashpw()` przyjmuje jako argumenty surowe hasło i sól. Funkcja `gensalt()` przy każdym wywołaniu losuje nową sól i ustala współczynnik kosztu (ang. *salt rounds*), domyślnie 12, co oznacza 2^12 rund rozwinięcia klucza. Wynikiem `hashpw()` jest napis w postaci:
+
 ```
+$2b$12$.lG2u6PuGdo7F5TdxxeEDuTQiGb/6nF5zkc04Qq9sf0SfD0egQsmq
+```
+
+*Skrót hasła konta administratora z danych początkowych*
+
+Kolejne fragmenty oddzielone znakiem `$` to wariant algorytmu (`2b`), koszt (`12`), a następnie 22 znaki soli i 31 znaków właściwego skrótu [CYTOWANIE: https://www.usenix.org/legacy/events/usenix99/provos/provos.pdf]. Skrót zawiera więc wszystko, co jest potrzebne do jego weryfikacji poprzez odtworzenie.
+
+Koszt obliczeniowy jest wyraźnie odczuwalny: na maszynie testowej żądanie `POST /login` z istniejącym adresem trwało ok. 190 ms, z czego niemal cały czas zajmuje bcrypt. Dla pojedynczego logowania jest to niezauważalne, ale atakującemu, który zdobyłby skróty z bazy, ogranicza liczbę sprawdzanych haseł do kilku na sekundę na jeden rdzeń procesora.
+
+Algorytm bcrypt uwzględnia wyłącznie pierwsze 72 bajty hasła. Wcześniejsze wersje biblioteki obcinały dłuższe hasła bez ostrzeżenia, zgodnie z oryginalną implementacją zaproponowaną prze OpenBSD. Od wersji 5.0.0 zgłaszany jest wyjątek `ValueError` [CYTOWANIE: https://github.com/pyca/bcrypt/blob/main/CHANGELOG.rst].
+
+Przy zakładaniu konta wyjątek ten kończył się początkowo błędem 500, ponieważ `hash_password()` go nie przechwytywał. Dlatego model `AssignUserRequest` ma walidator, który odrzuca hasła dłuższe niż 72 bajty z kodem 422, zanim punkt końcowy zostanie wywołany (5.5.4).
+
+```python
+MAX_PASSWORD_BYTES = 72
+
+class AssignUserRequest(BaseModel):
+    email: str
+    passwd: str
+    idx: str
+
+    @field_validator("passwd")
+    @classmethod
+    def passwd_fits_bcrypt(cls, value: str) -> str:
+        if len(value.encode()) > MAX_PASSWORD_BYTES:
+            raise ValueError(f"password cannot be longer than {MAX_PASSWORD_BYTES} bytes")
+        return value
+```
+
+*Walidacja długości hasła przy zakładaniu konta (`schemas/auth.py`)*
+
+**Wydanie tokenu**
+
+Punkt końcowy `POST /login` pobiera węzeł użytkownika zapytaniem z 5.4.2, a następnie sprawdza kolejne warunki z 4.4.1.
+
+```python
+@router.post("/login", response_model=LoginResponse)
+async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)) -> LoginResponse:
+    row = await one(session, _LOGIN, email=body.email)
+    password_hash = row["passwd_hash"] if row is not None else DUMMY_PASSWORD_HASH
+    password_ok = verify_password(body.password, password_hash)
+    if row is None or not password_ok:
+        raise unauthorized("Invalid email or password")
+    if row["inactive"]:
+        raise forbidden("Account inactive")
+    roles = roles_from_flags(row["admin"], row["teacher"], row["student"])
+    if not roles:
+        raise forbidden("Account has no role")
+    caller = Caller(email=row["email"], idx=row["idx"], roles=roles)
+    return LoginResponse(
+        email=caller.email,
+        idx=caller.idx,
+        roles=list(caller.roles),
+        token=create_token(caller),
+    )
+```
+
+*Punkt końcowy logowania (`routers/public.py`)*
+
+Brak użytkownika i błędne hasło obsługuje ten sam warunek, z tym samym komunikatem. Sama treść odpowiedzi nie wystarcza jednak, żeby ukryć istnienie konta. W jednej z pierwszych implementacji, gdy użytkownik nie istniał, warunek kończył się przed wywołaniem `verify_password()`, więc bcrypt się nie wykonywał.
+
+Test `tests/test_login_timing.py` wykazał, że odpowiedź dla nieistniejącego konta przychodziła po ok. 4 ms, a dla istniejącego konta z błędnym hasłem po ok. 184 ms. Po samym czasie odpowiedzi dało się więc jednoznacznie sprawdzić, czy konto o danym adresie istnieje (atak czasowy, ang. *timing attack*) [CYTOWANIE: OWASP Authentication Cheat Sheet, https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-responses].
+
+Obecnie, gdy użytkownik nie istnieje, hasło jest sprawdzane względem `DUMMY_PASSWORD_HASH`, czyli skrótu losowego hasła, wyliczanego raz przy starcie aplikacji z tym samym kosztem co prawdziwe skróty. bcrypt wykonuje się zawsze, a wynik i tak jest odrzucany warunkiem `row is None`.
+
+```python
+DUMMY_PASSWORD_HASH = hash_password(os.urandom(16).hex())
+```
+
+*Skrót zastępczy (`auth/deps.py`)*
+
+| Przypadek | Kod | Mediana przed poprawką [ms] | Mediana po poprawce [ms] |
+| --- | :---: | ---: | ---: |
+| istniejące konto, poprawne hasło | 200 | 185,1 | 183,6 |
+| istniejące konto, błędne hasło | 401 | 183,7 | 183,3 |
+| nieistniejące konto | 401 | 4,0 | 183,2 |
+
+*Czas odpowiedzi `POST /api/login`, 30 prób na przypadek*
+
+Stan konta i role są sprawdzane dopiero po poprawnej weryfikacji hasła, więc odpowiedź 403 („konto nieaktywne” albo „brak roli”) otrzymuje tylko ktoś, kto zna hasło. Funkcja `roles_from_flags()` zamienia trzy wartości logiczne z zapytania na krotkę nazw ról: `Admin`, `Teacher`, `Student`.
+
+```python
+def create_token(caller: Caller) -> str:
+    payload = {
+        "sub": caller.email,
+        "idx": caller.idx,
+        "roles": list(caller.roles),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=12),
+    }
+    return jwt.encode(payload, _secret, algorithm=_algorithm)
+```
+
+*Tworzenie tokenu*
+
+Token jest tworzony biblioteką PyJWT [CYTOWANIE: https://pyjwt.readthedocs.io/]. Zawiera cztery roszczenia (ang. *claims*). Dwa z nich są zdefiniowane w standardzie: `sub` (ang. *subject*) wskazuje, kogo dotyczy token, w tym wypadku jest to adres e-mail, a `exp` (ang. *expiration time*) określa moment wygaśnięcia [CYTOWANIE: RFC 7519, sekcja 4.1]. PyJWT sam zamienia obiekt `datetime` na wymaganą przez standard liczbę sekund od 1 stycznia 1970 r. Pozostałe dwa, `idx` i `roles`, to roszczenia prywatne, specyficzne dla tej aplikacji. Token jest ważny przez 12 godzin, po czym użytkownik musi zalogować się ponownie.
+
+Token jest podpisywany algorytmem HS256, czyli kodem HMAC z funkcją skrótu SHA-256 [CYTOWANIE: RFC 7518, sekcja 3.2]. Jest to algorytm symetryczny - ten sam klucz służy do podpisania tokenu i do sprawdzenia podpisu. Wystarcza to, ponieważ token wydaje i weryfikuje wyłącznie to samo API. Klucz pochodzi ze zmiennej środowiskowej `JWT_SECRET` (5.1.5) i jest odczytywany przez `os.environ["JWT_SECRET"]` już przy imporcie modułu
+
+```json
+{
+  "email": "279413@student.pwr.edu.pl",
+  "idx": "279413",
+  "roles": ["Student"],
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNzk0MTNAc3R1ZGVudC5wd3IuZWR1LnBsIiwiaWR4IjoiMjc5NDEzIiwicm9sZXMiOlsiU3R1ZGVudCJdLCJleHAiOjE3OTUwNjI3NTR9.Mp85du5sH9UgkPx4Bmjugjcm9Py7KKuYHiePbQconbQ"
+}
+```
+
+*Odpowiedź 200 na `POST /api/login` dla konta studenta*
+
+Token składa się z trzech części oddzielonych kropkami: nagłówka, treści (ang. *payload*) i podpisu. Nagłówek i treść są zakodowane w base64url, de facto jawne.
+
+![[Pasted image 20261118175909.png]]
+
+*Token JWT zdekodowany przy pomocy https://www.jwt.io/*
+
+Podpis gwarantuje jedynie, że treść nie została zmieniona - nie ukrywa jej. Próba zmiany treści, na przykład dopisania roli `Admin`, unieważnia podpis, a nowego podpisu nie da się wyliczyć bez znajomości klucza.
+
+**Weryfikacja tokenu**
+
+Każdy punkt końcowy poza `POST /login` wymaga tokenu. Jest on sprawdzany przez zależność `get_caller()`.
+
+```python
+_bearer = HTTPBearer()
+
+
+async def get_caller(
+    creds: HTTPAuthorizationCredentials = Depends(_bearer),
+) -> Caller:
+    try:
+        payload = jwt.decode(
+            creds.credentials, _secret, algorithms=[_algorithm], options={"require": ["sub", "exp"]}
+        )
+        raw = payload.get("roles")
+        if not isinstance(raw, list) or any(role not in ("Student", "Teacher", "Admin") for role in raw):
+            raise unauthorized("Invalid token")
+        roles = tuple(role for role in ("Admin", "Teacher", "Student") if role in raw)
+        if not roles:
+            raise unauthorized("Invalid token")
+        return Caller(email=payload["sub"], idx=payload.get("idx"), roles=roles)
+    except jwt.PyJWTError:
+        raise unauthorized("Invalid token")
+```
+
+*Zależność weryfikująca token*
+
+`HTTPBearer` to klasa FastAPI, która odczytuje nagłówek `Authorization` i oddziela schemat `Bearer` od samego tokenu [CYTOWANIE: https://fastapi.tiangolo.com/reference/security/#fastapi.security.HTTPBearer]. Jeśli nagłówka brakuje lub ma on inny schemat niż `Bearer`, `HTTPBearer` sam przerywa obsługę żądania i zwraca błąd 401 `Not authenticated`, a `get_caller()` ani funkcja punktu końcowego nie zostają wywołane. Dodatkowo `HTTPBearer` rejestruje schemat zabezpieczeń w dokumentacji OpenAPI, dzięki czemu w `/api/docs` pojawia się przycisk *Authorize*, którym można wkleić token i wywoływać chronione punkty końcowe bezpośrednio z przeglądarki.
+
+`jwt.decode()` sprawdza podpis tokenu i jego datę ważności. Wygaśnięty lub zmodyfikowany token zwróci błąd. Domyślnie PyJWT sprawdza datę ważności tylko wtedy, gdy pole `exp` znajduje się w tokenie – token bez niego byłby ważny bezterminowo. Dlatego opcja `require` wymusza obecność pól `sub` i `exp`, a token bez któregoś z nich jest odrzucany wyjątkiem `MissingRequiredClaimError` [CYTOWANIE: https://pyjwt.readthedocs.io/en/stable/api.html#jwt.decode]. Serwer decyduje o dozwolonych algorytmach podpisu, a klient w tokenie jedynie informuje który z tych algorymtów wykorzystuje. Chroni to przed znanymi atakami, w których atakujący zmienia algorytm w nagłówku, np. na `none`, czyli token bez podpisu [CYTOWANIE: RFC 8725, sekcja 2.1].
+
+Poprawnie podpisany token jest dodatkowo sprawdzany: `roles` musi być niepustą listą znanych ról. Każdy z tych przypadków kończy się tą samą odpowiedzią 401 `Invalid token`, więc klient nie dowiaduje się, dlaczego token został odrzucony.
+
+| Sytuacja                                                    | Kod | Treść odpowiedzi                          |
+| ----------------------------------------------------------- | :-: | ----------------------------------------- |
+| brak nagłówka `Authorization` lub schemat inny niż `Bearer` | 401 | `{"detail": "Not authenticated"}`         |
+| zmieniony, wygasły lub uszkodzony token                     | 401 | `{"detail": "Invalid token"}`             |
+| błędny e-mail lub hasło przy logowaniu                      | 401 | `{"detail": "Invalid email or password"}` |
+| konto z etykietą Inactive                                   | 403 | `{"detail": "Account inactive"}`          |
+| konto bez żadnej roli                                       | 403 | `{"detail": "Account has no role"}`       |
+
+*Odpowiedzi przy nieudanym uwierzytelnieniu*
+
+Wynikiem `get_caller()` jest obiekt klasy danych `Caller` z adresem e-mail, identyfikatorem osoby i krotką ról. Funkcja nie wykonuje żadnego zapytania do bazy - całą potrzebną informację zawiera token. Na tym obiekcie opiera się autoryzacja opisana w 5.5.7.
 
 5.5.7 Autoryzacja
-- fabryka zależności `require(*roles)` i zmienne modułów: `_logged_in`, `_student`, `_teacher`, `_staff`, `_admin`, `_opinion_roles`
-- RBAC w zależności (403 przed wejściem do funkcji), ReBAC w treści funkcji (zapytanie sprawdzające relację, 403)
-- `/me/...` – identyfikator z tokenu (`caller.idx`)
+Autoryzacja przypisuje funkcje aplikacji do ról, które może otrzymać użytkownik. Opiera się na pokazanym wcześniej mechanizmie `Depends()`, dzięki któremu FastAPI wywołuje funkcję sprawdzającą uprawnienia, zanim uruchomi funkcję punktu końcowego.
+
+Do kontroli dostępu opartej na rolach (RBAC) wykorzystywana jest fabryka zależności `require(*roles)`, której wynik przekazuje się do `Depends()` w argumentach funkcji punktu końcowego.
+
+```python
+def require(*roles: Role):
+    async def checker(caller: Caller = Depends(get_caller)) -> Caller:
+        if not any(role in caller.roles for role in roles):
+            raise forbidden()
+        return caller
+    return checker
+```
+
+*Fabryka zależności sprawdzającej role (`auth/deps.py`)*
+
+Poprzez `Depends(get_caller)` z tokenu uwierzytelniającego użytkownika wyciągane są role (5.5.6), które następnie są porównywane z krotką ról, dla których przewidziano dostęp do danego punktu końcowego. Jeśli w tokenie jest przynajmniej jedna z nich, dostęp jest przyznawany, a `checker` zwraca obiekt `Caller`, z którego funkcja punktu końcowego może dalej korzystać. W przeciwnym razie zgłaszany jest błąd 403, zanim funkcja punktu końcowego zostanie wywołana.
+
+Kod `require` działa w dwóch różnych momentach. Sama funkcja `require` jest wywoływana raz, przy imporcie modułu routera. Niczego wtedy nie sprawdza, tylko tworzy i zwraca nową funkcję `checker`, która zapamiętuje przekazaną krotkę ról jako domknięcie (ang. *closure*). Dopiero `checker` jest wywoływana przez FastAPI przy każdym żądaniu, po rozwiązaniu jej własnej zależności `get_caller`. Dlatego `require` jest zwykłą funkcją, a `checker` – asynchroniczną: gdyby `require` była zadeklarowana jako `async def`, jej wywołanie zwróciłoby obiekt korutyny (5.5.2) zamiast funkcji, której oczekuje `Depends()`.
+
+Zależności dla poszczególnych zestawów ról są tworzone raz, na początku modułów routerów, i współdzielone przez ich punkty końcowe.
+
+| Zmienna | Role | Moduł | Liczba punktów końcowych |
+| --- | --- | --- | ---: |
+| `_logged_in` | Student, Teacher, Admin | `catalogue.py` | 10 |
+| `_student` | Student | `student.py` | 9 |
+| `_opinion_roles` | Student, Admin | `student.py` | 1 |
+| `_teacher` | Teacher | `teacher.py` | 1 |
+| `_staff` | Teacher, Admin | `teacher.py` | 3 |
+| `_admin` | Admin | `admin.py` | 34 |
+
+*Zależności sprawdzające role*
+
+```http
+GET /admin/people/next-idx
+Authorization: Bearer <token studenta>
+```
 
 ```json
-// TODO: przykładowa odpowiedź 403 – np. prowadzący wystawiający ocenę w cudzej grupie
+{
+  "detail": "Forbidden"
+}
 ```
+
+*Odpowiedź 403 na żądanie studenta do punktu końcowego administratora*
+
+Jak wspominano wcześniej, RBAC służy jedynie do wstępnej kontroli dostępu. Jeśli są planowane szczegółowe dostępy, wykorzystywany jest ReBAC. O ile RBAC był wykonywany w zależnościach funkcji, ReBAC jest egzekwowany już w jej definicji. Z racji tego, że baza danych służy zarówno do reprezentacji domeny, jak i do kontroli dostępu, można wykorzystać krawędzie i węzły zdefiniowane bezpośrednio w bazie danych, by sprawdzić, jakie kwerendy są dozwolone, a jakie nie.
+
+W większości przypadków ReBAC polega na sprawdzeniu, czy ścieżka między wyznaczonymi węzłami istnieje. Jeśli istnieje, jest wykonywane docelowe zapytanie, a jeśli nie, to zwracany jest błąd 403 Forbidden. W praktyce ReBAC to po prostu wykonanie dodatkowej kwerendy walidacyjnej przed wykonaniem kwerendy docelowej i podjęcie decyzji o dostępie na podstawie wyniku tej pierwszej.
+
+```python
+_CAN_USE_REGISTRATION = """
+MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
+RETURN reg.id AS id
+"""
+
+
+async def _require_registration(session: AsyncSession, student_idx: str, registration_id: str) -> None:
+    row = await one(
+        session,
+        _CAN_USE_REGISTRATION,
+        student_idx=student_idx,
+        registration_id=registration_id,
+    )
+    if row is None:
+        raise forbidden()
+```
+
+*Sprawdzenie dostępu studenta do rejestracji (`routers/student.py`)*
+
+Funkcja `_require_registration()` jest najprostszą postacią ReBAC. Sprawdza, czy w grafie istnieje ścieżka od studenta, przez przypisaną mu turę (`ASSIGNED`), do rejestracji, do której ta tura należy (`HAS_TURN`). Wzorzec w `MATCH` jest jednocześnie regułą dostępu: student ma dostęp do rejestracji wtedy i tylko wtedy, gdy przypisano go do którejś z jej tur. Funkcja niczego nie zwraca – albo kończy się bez błędu, albo zgłasza 403. Nie wie też, kto wysłał żądanie: oba węzły dostaje jako argumenty, więc ta sama reguła mogłaby posłużyć do sprawdzenia dostępu dowolnego studenta. Jedna funkcja obsługuje dwa punkty końcowe, `GET /me/registrations/{registration_id}/subjects` i `GET /me/registrations/{registration_id}/groups`.
+
+Kolejnym elementem granularnej kontroli dostępu jest ustalenie, czyich danych dotyczy żądanie. Identyfikator osoby trafia do obiektu `Caller` z roszczenia `idx` tokenu (5.5.6), a do tokenu – z właściwości `idx` węzła użytkownika, odczytanej przy logowaniu (5.4.2). Jest to ten sam identyfikator, którym osoba jest oznaczona w grafie, np. numer indeksu `279413` dla studenta albo `T001` dla prowadzącego. Ponieważ token jest podpisany, klient nie może go zmienić bez unieważnienia podpisu, więc `caller.idx` jest wiarygodny w takim samym stopniu jak role.
+
+Punkty końcowe operujące na danych zalogowanego użytkownika mają w ścieżce prefiks `/me/` – jest ich dziesięć, np. plan studiów, zapisy do grup czy prowadzone grupy. Nie przyjmują one identyfikatora osoby ani w ścieżce, ani w treści żądania – biorą go wyłącznie z tokenu.
+
+```python
+@router.get("/me/enrolments", response_model=MyEnrolmentsResponse)
+async def my_enrolments(
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_student),
+) -> MyEnrolmentsResponse:
+    rows = await run(
+        session,
+        """
+        MATCH (st:Student {idx: $student_idx})-[:ENROLLED]->(ct:CurriculumTerm)<-[:HAS_TERM]-(c:Curriculum)<-[:HAS_CURRICULUM]-(p:Programme)
+        OPTIONAL MATCH (ct)-[:TAUGHT_IN]->(ac:AcademicCycle)
+        RETURN
+          p.id AS programme_id,
+          p.name AS programme,
+          // ...
+        """,
+        student_idx=caller.idx,
+    )
+    return MyEnrolmentsResponse(enrolments=[Enrolment(**row) for row in rows])
+```
+
+*Punkt końcowy zwracający kierunki i semestry studenta (`routers/student.py`)*
+
+Zapytanie zaczyna się od węzła studenta wskazanego przez `caller.idx` i przechodzi wyłącznie po jego krawędziach, więc z założenia nie może zwrócić danych innego studenta. Taki punkt końcowy nie potrzebuje osobnego sprawdzenia uprawnień ani odpowiedzi 403 – jeśli student nie jest zapisany na żaden kierunek, otrzymuje po prostu pustą listę.
+
+Gdyby identyfikator był przekazywany przez klienta, np. jako `GET /students/{student_idx}/enrolments`, student mógłby podmienić go na numer indeksu kolegi i odczytać jego dane.
+
+Nie zawsze da się uniknąć identyfikatora w żądaniu. Prowadzący, wystawiając ocenę, musi wskazać grupę i studenta, więc ich identyfikatory przychodzą od klienta i trzeba sprawdzić, czy wolno mu z nich skorzystać. Wtedy oba mechanizmy łączą się: jeden koniec ścieżki sprawdzanej przez ReBAC wyznacza `caller.idx` z tokenu, a drugi – identyfikator z żądania.
+
+```python
+_staff = require("Teacher", "Admin")
+
+# ...
+@router.put("/groups/{group_id}/students/{student_idx}/grade", response_model=SetGroupGradeResponse)
+async def set_group_grade(
+    group_id: str,
+    student_idx: str,
+    body: SetGroupGradeRequest,
+    session: AsyncSession = Depends(get_session),
+    caller: Caller = Depends(_staff),
+) -> SetGroupGradeResponse:
+    if "Teacher" in caller.roles and "Admin" not in caller.roles:
+        allowed = await one(
+            session,
+            """
+            MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g:Group {id: $group_id})
+            RETURN g.id AS id
+            """,
+            teacher_idx=caller.idx,
+            group_id=group_id,
+        )
+        if allowed is None:
+            raise forbidden()
+# ...
+```
+
+*Fragment funkcji `set_group_grade()` odpowiedzialny za ReBAC*
+
+W tej funkcji kwerenda sprawdza, czy nauczycielowi wolno wystawić ocenę. Z zależności wyciągana jest informacja o sesji i osobie wołającej ten punkt końcowy. Z ciała zapytania wyciągane są informacje o ocenie, a ze ścieżki zasobu – identyfikatory grupy i studenta. Do sprawdzenia uprawnień wystarczą dwa z nich: `caller.idx` z tokenu i `group_id` ze ścieżki. Kwerenda sprawdza, czy prowadzący o tym identyfikatorze uczy (`TEACHES`) grupę o podanym UUID. Jeśli tak, to zostanie zwrócona grupa. Jeśli nie, to zostanie zwrócone `None`, co skutkuje przedwczesnym zatrzymaniem wykonania funkcji przez błąd 403 Forbidden.
+
+Reguła ReBAC sprawia, że podmiana `group_id` na cudzą grupę nic nie daje, ponieważ nie będzie oczekiwanej ścieżki od nauczyciela zaszytego w tokenie do cudzej grupy. 
+
+Jednocześnie administracja omija tę zasadę poprzez instrukcję warunkową na początku funkcji. Warunek sprawdza obie role, ponieważ osoba może mieć jednocześnie rolę prowadzącego i administratora – wtedy obowiązują uprawnienia szersze.
+
+W ten sam sposób łączy oba mechanizmy pokazana wcześniej funkcja `_require_registration()`: punkty końcowe `/me/registrations/{registration_id}/...` wywołują ją z `caller.idx` jako identyfikatorem studenta i `registration_id` ze ścieżki.
+
+```http
+PUT /groups/543cca5f-00db-5e15-a47b-b826bb7009d9/students/280601/grade
+Authorization: Bearer <token prowadzącego T001>
+
+{"grade": 5.0}
+```
+
+```json
+{
+  "detail": "Forbidden"
+}
+```
+
+*Odpowiedź 403 na próbę wystawienia oceny w grupie, której prowadzący nie uczy*
 
 5.5.8 Budowa punktu końcowego
-- przykład: `PUT /groups/{group_id}/students/{student_idx}/grade`
-- dekorator: metoda, ścieżka, `response_model`, `status_code` (201 / 204 przy innych endpointach)
-- argumenty: parametry ścieżki, parametry zapytania (`str | None = None`), model treści, `Depends(get_session)`, `Depends(_staff)`
-- kolejność obsługi (sprawdzona): zależności – 401, potem 403 za rolę → walidacja treści – 422 → funkcja – 403 za relację, 404 → serializacja przez `response_model`
-- `Location` przy 201 (`url_path_for`), 204 bez treści
+
+Punkty końcowe, zdefiniowane w katalogu `routers/`, są wszystkie zbudowane w bardzo podobny sposób:
+1. Dekorator - metoda HTTP, ścieżka względna, `response_model`, kod statusu (jeśli inny niż 200)
+2. Argumenty - parametry ścieżki i zapytania, model treści żądania, zależności (sesja, `Caller`)
+3. *(FastAPI)* Rozwiązanie zależności - uwierzytelnienie (401) i RBAC (403)
+4. *(FastAPI)* Walidacja parametrów i treści żądania (422)
+5. *(opcjonalnie)* ReBAC - osobna kwerenda lub warunek w kwerendzie docelowej (403)
+6. Kwerenda docelowa - z parametrami ze ścieżki, zapytania, treści żądania lub `caller.idx`
+7. Obsługa wyniku - brak wyniku (404), konflikt (409)
+8. *(opcjonalnie)* Przetworzenie wyniku w Pythonie i nagłówki odpowiedzi (`Location`)
+9. *(FastAPI)* Serializacja przez `response_model` (500 przy niezgodności) i zamknięcie sesji
+
+> Kroki oznaczone *(FastAPI)* nie wymagają kodu w treści funkcji – wynikają z deklaracji w dekoratorze i argumentach.
+
+Wszystkie kroki przechodzi punkt końcowy `GET /students/{student_idx}`, zwracający prowadzącemu lub administratorowi szczegóły studenta wraz ze średnią ocen:
+
+```python
+@router.get("/students/{student_idx}", response_model=StudentDetailResponse)  # [1]
+async def student_detail(
+    student_idx: str,                                   # [2], [4]
+    session: AsyncSession = Depends(get_session),       # [2]
+    caller: Caller = Depends(_staff),                   # [2], [3]
+) -> StudentDetailResponse:
+    if "Teacher" in caller.roles and "Admin" not in caller.roles:   # [5]
+        allowed = await one(
+            session,
+            """
+            MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(:Group)<-[:REGISTERED_IN]-(st:Student {idx: $student_idx})
+            RETURN st.idx AS idx
+            """,
+            teacher_idx=caller.idx,
+            student_idx=student_idx,
+        )
+        if allowed is None:
+            raise forbidden()
+    row = await one(session, _STUDENT, student_idx=student_idx)     # [6]
+    if row is None:                                                 # [7]
+        raise not_found("Student")
+    grade_rows = await run(session, _STUDENT_GRADES, student_idx=student_idx)  # [6]
+    return StudentDetailResponse(**row, avg_grade=average_grade(grade_rows))  # [8], [9]
+```
+
+*Punkt końcowy `GET /students/{student_idx}` z oznaczonymi krokami (`routers/teacher.py`)*
+
+1. Metoda `GET`, ścieżka z parametrem `student_idx`, model odpowiedzi; kod statusu domyślny (200).
+2. `student_idx` pochodzi ze ścieżki (ta sama nazwa), zależności dostarczają sesję (5.5.3) i `Caller`.
+3. `_staff = require("Teacher", "Admin")` - weryfikacja tokenu (5.5.6) i roli (5.5.7).
+4. Tylko typ `str` parametru - brak treści żądania.
+5. Prowadzący widzi tylko studentów, których uczy lub uczył (ścieżka przez dowolną grupę), a administrator pomija sprawdzenie.
+6. `_STUDENT` - dane studenta, `_STUDENT_GRADES` - oceny z wagami typów zajęć i punktami ECTS.
+7. Potencjalny brak studenta - 404.
+8. Średnia liczona w Pythonie przez `average_grade()` (5.5.5), zaokrąglona do 3 miejsc po przecinku.
+9. Walidacja modelem `StudentDetailResponse`, serializacja do JSON, zamknięcie sesji.
 
 ```json
-// TODO: przykładowa odpowiedź 200 – PUT /api/groups/{group_id}/students/{student_idx}/grade
+{
+    "idx": "279413",
+    "name": "Anna",
+    "surname": "Kowalska",
+    "phone": "600111222",
+    "photo": "279413.jpg",
+    "joined": "2023-10-01T00:00:00+01:00",
+    "avg_grade": 4.026,
+    "term_ids": [
+        "69b50b3d-04e3-54d1-a39a-b2a4eeba7d72"
+    ]
+}
 ```
+
+*Odpowiedź 200 na `GET /api/students/279413` (administrator)*
 
 ```http
 PUT /me/registered-groups/c798fc10-c169-58c8-9c55-c0fd2d104535

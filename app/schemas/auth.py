@@ -1,6 +1,9 @@
 from datetime import date, datetime
 from typing import List, Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+# bcrypt only accepts passwords of up to 72 bytes.
+MAX_PASSWORD_BYTES = 72
 
 UserType = Literal["Teacher", "Student", "Admin"]
 
@@ -9,6 +12,13 @@ class AssignUserRequest(BaseModel):
     email: str
     passwd: str
     idx: str
+
+    @field_validator("passwd")
+    @classmethod
+    def passwd_fits_bcrypt(cls, value: str) -> str:
+        if len(value.encode()) > MAX_PASSWORD_BYTES:
+            raise ValueError(f"password cannot be longer than {MAX_PASSWORD_BYTES} bytes")
+        return value
 
 
 class AssignUserResponse(BaseModel):

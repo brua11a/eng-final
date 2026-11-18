@@ -40,4 +40,4 @@ def average_grade(rows: Iterable[Mapping]) -> float | None:
     ects_total = sum(e for _, e in weighted)
     if not ects_total:
         return None
-    return sum(grade * e for grade, e in weighted) / ects_total
+    return round(sum(grade * e for grade, e in weighted) / ects_total, 3)

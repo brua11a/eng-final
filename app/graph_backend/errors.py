@@ -27,7 +27,7 @@ def not_found(what: str) -> HTTPException:
 
 
 def unauthorized(detail: str) -> HTTPException:
-    return HTTPException(status_code=401, detail=detail)
+    return HTTPException(status_code=401, detail=detail, headers={"WWW-Authenticate": "Bearer"})
 
 
 def forbidden(detail: str = "Forbidden") -> HTTPException:

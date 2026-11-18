@@ -11,7 +11,6 @@ import jwt
 from app.graph_backend.errors import forbidden, unauthorized
 
 Role = Literal["Student", "Teacher", "Admin"]
-_bearer = HTTPBearer(auto_error=False)
 _secret = os.environ["JWT_SECRET"]
 _algorithm = "HS256"
 
@@ -38,6 +37,11 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
+# Hash of a random password, checked when logging in to a missing account
+# so that the response time does not reveal whether the account exists.
+DUMMY_PASSWORD_HASH = hash_password(os.urandom(16).hex())
+
+
 def verify_password(password: str, password_hash: str) -> bool:
     try:
         return bcrypt.checkpw(password.encode(), password_hash.encode())
@@ -56,12 +60,12 @@ def create_token(caller: Caller) -> str:
 
 
 async def get_caller(
-    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    creds: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
 ) -> Caller:
-    if creds is None:
-        raise unauthorized("Missing token")
     try:
-        payload = jwt.decode(creds.credentials, _secret, algorithms=[_algorithm])
+        payload = jwt.decode(
+            creds.credentials, _secret, algorithms=[_algorithm], options={"require": ["sub", "exp"]}
+        )
         raw = payload.get("roles")
         if not isinstance(raw, list) or any(role not in ("Student", "Teacher", "Admin") for role in raw):
             raise unauthorized("Invalid token")
@@ -69,8 +73,8 @@ async def get_caller(
         if not roles:
             raise unauthorized("Invalid token")
         return Caller(email=payload["sub"], idx=payload.get("idx"), roles=roles)
-    except (jwt.PyJWTError, KeyError):
-        raise unauthorized("Invalid token") from None
+    except jwt.PyJWTError:
+        raise unauthorized("Invalid token")
 
 
 def require(*roles: Role):
@@ -78,5 +82,4 @@ def require(*roles: Role):
         if not any(role in caller.roles for role in roles):
             raise forbidden()
         return caller
-
     return checker
