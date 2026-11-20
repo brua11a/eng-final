@@ -1,2 +1,1 @@
-zrob pod koniec na szybko
-
+bede to cisnął w nastepnym tygodniu, RACZEJ zdąże

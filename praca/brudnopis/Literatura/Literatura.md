@@ -1,1 +1,1 @@
-Da sie na koniec
+Da sie na koniec, glownie cytaty z dokumentacji, ale google scholarem uzupelni sie wstep teoretyczny.

@@ -1,0 +1,40 @@
+
+- **3NF** – ang. *Third Normal Form*
+- **AI** – ang. *Artificial Intelligence*
+- **API** – ang. *Application Programming Interface*
+- **CA** – ang. *Certificate Authority*
+- **CORS** – ang. *Cross-Origin Resource Sharing*
+- **CSV** – ang. *Comma-Separated Values*
+- **DNS** – ang. *Domain Name System*
+- **ECTS** – ang. *European Credit Transfer and Accumulation System*
+- **HMAC** – ang. *Hash-based Message Authentication Code*
+- **HTML** – ang. *HyperText Markup Language*
+- **HTTP** – ang. *Hypertext Transfer Protocol*
+- **HTTPS** – ang. *Hypertext Transfer Protocol Secure*
+- **IP** – ang. *Internet Protocol*
+- **ISO** – ang. *International Organization for Standardization*
+- **JSON** – ang. *JavaScript Object Notation*
+- **JVM** – ang. *Java Virtual Machine*
+- **JWT** – ang. *JSON Web Token*
+- **OGM** – ang. *Object-Graph Mapping*
+- **ORM** – ang. *Object-Relational Mapping*
+- **PID** – ang. *Process Identifier*
+- **PKCS** – ang. *Public-Key Cryptography Standards*
+- **RAM** – ang. *Random Access Memory*
+- **RBAC** – ang. *Role-Based Access Control*
+- **ReBAC** – ang. *Relationship-Based Access Control*
+- **REST** – ang. *Representational State Transfer*
+- **SHA** – ang. *Secure Hash Algorithm*
+- **SNI** – ang. *Server Name Indication*
+- **SPA** – ang. *Single-Page Application*
+- **SQL** – ang. *Structured Query Language*
+- **SSL** – ang. *Secure Sockets Layer*
+- **SSO** – ang. *Single Sign-On*
+- **SSRF** – ang. *Server-Side Request Forgery*
+- **TCP** – ang. *Transmission Control Protocol*
+- **TLS** – ang. *Transport Layer Security*
+- **UID** – ang. *User Identifier*
+- **URI** – ang. *Uniform Resource Identifier*
+- **URL** – ang. *Uniform Resource Locator*
+- **USOS** – Uniwersytecki System Obsługi Studiów
+- **UUID** – ang. *Universally Unique Identifier*
