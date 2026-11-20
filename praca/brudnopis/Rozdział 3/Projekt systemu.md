@@ -45,9 +45,9 @@ W domenie uczelnianej zdefiniowano następujące etykiety osób: `Student` dla s
 
 Dane służące do uwierzytelniania (adres e-mail i skrót hasła) przechowywane są w etykiecie `User` - dopiero ona czyni węzeł osoby pełnoprawnym użytkownikiem, który może zalogować się w portalu i uwierzytelnić w API. Osoba bez etykiety `User` istnieje w danych (np. jako prowadzący widoczny w katalogu zajęć), ale nie ma dostępu do systemu.
 
-Wymaganie zachowania danych osób, które utraciły dostęp do systemu (3.1), spełnia etykieta `Inactive`. Pozwala ona niedestruktywnie odebrać użytkownikowi dostęp do wszystkich punktów końcowych; przechowuje ona moment dezaktywacji. Bez tej lub podobnej funkcyjnie etykiety odebranie dostępu wymagałoby usunięcia etykiety `User` wraz z danymi logowania, co powodowałoby utratę danych. Charakter platformy uczelnianej nie zakłada rozbudowanego systemu blokad i kar dla użytkowników - tymczasowe odebranie dostępu wynika raczej z sytuacji takich jak zawieszenie w prawach studenta lub cofnięcie uprawnień do prowadzenia zajęć, dlatego jedna etykieta jest wystarczająca.
+Wymaganie zachowania danych osób, które utraciły dostęp do systemu (3.1), spełnia etykieta `Inactive`. Pozwala ona niedestruktywnie odebrać użytkownikowi dostęp do wszystkich punktów końcowych; przechowuje ona moment dezaktywacji. Bez tej lub podobnej funkcyjnie etykiety odebranie dostępu wymagałoby usunięcia etykiety `User` wraz z danymi logowania. Charakter platformy uczelnianej nie zakłada rozbudowanego systemu blokad i kar dla użytkowników - tymczasowe odebranie dostępu wynika raczej z sytuacji takich jak zawieszenie w prawach studenta lub cofnięcie uprawnień do prowadzenia zajęć, dlatego jedna etykieta jest wystarczająca.
 
-Każda z etykiet osób ma zdefiniowane właściwości, z których większość jest wymagana; opcjonalne jest jedynie zdjęcie. Kluczem (wartością niepowtarzalną i zawsze obecną) każdej osoby jest `idx` - numer indeksu lub inny sekwencyjny identyfikator. Dodatkowo kluczem etykiety `User` jest adres e-mail. Ponadto kombinacja imienia, nazwiska i numeru telefonu musi być unikalna, co zapobiega przypadkowemu wprowadzeniu tej samej osoby dwukrotnie pod różnymi identyfikatorami. Etykieta `Admin` nie ma własnych właściwości - jej obecność sama w sobie nadaje uprawnienia administracyjne.
+Każda z etykiet osób ma zdefiniowane właściwości, z których większość jest wymagana; opcjonalne jest jedynie zdjęcie. Kluczem (wartością niepowtarzalną i zawsze obecną) każdej osoby jest `idx` - numer indeksu lub inny sekwencyjny identyfikator. Dodatkowo kluczem etykiety `User` jest adres e-mail. Ponadto kombinacja imienia, nazwiska i numeru telefonu musi być unikalna, co zapobiega przypadkowemu wprowadzeniu tej samej osoby dwukrotnie pod różnymi identyfikatorami. Etykieta `Admin` nie ma własnych właściwości..
 
 | Etykieta | Właściwość | Typ | Wymagana | Ograniczenia | Opis |
 |---|---|---|---|---|---|
@@ -173,18 +173,18 @@ Zapisy nie obejmują automatycznie wszystkich grup danego cyklu. Grupy dostępne
 
 Zapisy dzieli się na tury, opisane etykietą `RegistrationTurn` i połączone z zapisami krawędzią `HAS_TURN`. Tura ma numer (`turn_number`), datę (`date`) oraz godzinę rozpoczęcia i zakończenia (`start_time`, `end_time`). Student jest przydzielany do tury krawędzią `ASSIGNED`, przy czym w ramach jednych zapisów może należeć do najwyżej jednej tury. Zapisywać się na grupy może tylko w czasie trwania swojej tury i tylko na grupy otwarte w zapisach, do których ta tura należy.
 
-Tura jest osobnym węzłem, a nie właściwością studenta, ponieważ jedna tura obejmuje wielu studentów, a jeden student uczestniczy w wielu zapisach w kolejnych cyklach. Przesunięcie godzin tury jest więc zmianą jednego węzła, a nie danych wszystkich przydzielonych do niej studentów. Z tego samego powodu daty tur nie są zapisane w zapisach (`Registration`): zapisy mogą mieć dowolną liczbę tur o różnych terminach.
+Tura jest osobnym węzłem, ponieważ jedna tura obejmuje wielu studentów, a jeden student uczestniczy w wielu zapisach w kolejnych cyklach. Przesunięcie godzin tury jest więc zmianą jednego węzła, a nie danych wszystkich przydzielonych do niej studentów. Z tego samego powodu daty tur nie są zapisane w zapisach (`Registration`): zapisy mogą mieć dowolną liczbę tur o różnych terminach.
 
-| Etykieta | Właściwość | Typ | Wymagana | Ograniczenia | Opis |
-|---|---|---|---|---|---|
-| `Registration` | `id` | tekst | tak | klucz | identyfikator zapisów |
-| | `name` | tekst | tak | – | nazwa zapisów |
-| | `reg_type` | tekst | tak | – | rodzaj zapisów |
-| `RegistrationTurn` | `id` | tekst | tak | klucz | identyfikator tury |
-| | `turn_number` | liczba całkowita | tak | – | numer tury |
-| | `date` | data | tak | – | dzień tury |
-| | `start_time` | czas ze strefą | tak | – | początek tury |
-| | `end_time` | czas ze strefą | tak | – | koniec tury |
+| Etykieta           | Właściwość    | Typ              | Wymagana | Ograniczenia | Opis                  |
+| ------------------ | ------------- | ---------------- | -------- | ------------ | --------------------- |
+| `Registration`     | `id`          | tekst            | tak      | klucz        | identyfikator zapisów |
+|                    | `name`        | tekst            | tak      | –            | nazwa zapisów         |
+|                    | `reg_type`    | tekst            | tak      | –            | rodzaj zapisów        |
+| `RegistrationTurn` | `id`          | tekst            | tak      | klucz        | identyfikator tury    |
+|                    | `turn_number` | liczba całkowita | tak      | –            | numer tury            |
+|                    | `date`        | data             | tak      | –            | dzień tury            |
+|                    | `start_time`  | czas ze strefą   | tak      | –            | początek tury         |
+|                    | `end_time`    | czas ze strefą   | tak      | –            | koniec tury           |
 *Właściwości etykiet związanych z zapisami*
 
 Sam zapis studenta na grupę jest krawędzią `REGISTERED_IN`, opisaną w 4.3.3. Warunki zapisu – limit miejsc i najwyżej jedna grupa danej formy zajęć w ramach instancji przedmiotu – oraz odporność na wyścigi przy jednoczesnych zapisach wynikają z wymagań (3.2, 3.3). Model danych ich nie wymusza; spełniają je operacje zapisu, opisane w 5.5.10.
@@ -195,12 +195,12 @@ Studenci mogą oceniać zajęcia, w których uczestniczą i prowadzących tych g
 
 Reguły wystawiania opinii określono w 3.4 i 3.5. Ponieważ opinia dotyczy pary grupa i prowadzący, a grupę może prowadzić kilka osób, student może ocenić każdą z nich osobno.
 
-| Etykieta | Właściwość | Typ | Wymagana | Ograniczenia | Opis |
-|---|---|---|---|---|---|
-| `Opinion` | `id` | tekst | tak | klucz | identyfikator opinii |
-| | `grade` | liczba zmiennoprzecinkowa | tak | – | ocena w skali 2,0–5,0 |
-| | `content` | tekst | nie | – | treść opinii |
-| | `submit` | data i czas ze strefą | tak | – | moment wystawienia |
+| Etykieta | Właściwość | Typ | Wymagana | Ograniczenia | Opis                  |
+| --------- | ---------- | ------------------------- | -------- | ------------ | --------------------- |
+| `Opinion` | `id` | tekst | tak | klucz | identyfikator opinii  |
+| | `grade` | liczba zmiennoprzecinkowa | tak | – | ocena w skali 2.0–5.0 |
+| | `content` | tekst | nie | – | treść opinii          |
+| | `submit` | data i czas ze strefą | tak | – | moment wystawienia    |
 *Właściwości etykiety `Opinion`*
 
 Opinia na początku była krawędzią od studenta do grupy, a nauczyciel wynikał pośrednio z tej krawędzi. Po rozważeniu jednak sytuacji, w której jedna grupa jest prowadzona przez kilka osób (np. wykład, na którym prezentacja jest prowadzona prawie za każdym razem przez kogoś innego), zdecydowano się zmienić `Opinion` na pełnoprawny węzeł. Oficjalna nazwa tego zabiegu to *reifikacja*.
@@ -215,7 +215,7 @@ Takie rozwiązanie ma też zalety przy odczycie. Do opinii można dojść od ka�
 
 W modelu grafowym nie są potrzebne tabele łączące ani klucze obce. Każde powiązanie między węzłami jest krawędzią, niezależnie od tego, czy w modelu relacyjnym byłoby powiązaniem jeden-do-wielu, czy wiele-do-wielu. Kardynalność nadal wynika jednak z domeny (np. grupa zajęciowa odbywa się w jednej sali, a w jednej sali odbywa się wiele grup).
 
-Każda krawędź ma kierunek, nadany zgodnie ze znaczeniem relacji (np. student pisze opinię, a nie opinia studenta). Kierunek nie ogranicza jednak zapytań: po krawędzi można przejść w obie strony z tym samym kosztem, więc wybór kierunku jest decyzją o czytelności modelu, a nie o wydajności.
+Każda krawędź ma kierunek, nadany zgodnie ze znaczeniem relacji (np. student pisze opinię, a nie opinia studenta). Kierunek nie ogranicza jednak zapytań: po krawędzi można przejść w obie strony z tym samym kosztem, więc wybór kierunku jest decyzją +o czytelności modelu.
 
 | Krawędź        | Od              | Do               | Znaczenie                          | Kardynalność | Uwagi                                        |
 | -------------- | --------------- | ---------------- | ---------------------------------- | ------------ | -------------------------------------------- |
@@ -274,7 +274,7 @@ Logowanie powiedzie się tylko wtedy, gdy:
 
 Błędny adres i błędne hasło dają tę samą odpowiedź (401). Komunikat jest ten sam, żeby nie zdradzać, czy konto o danym adresie istnieje. Konto nieaktywne lub bez roli jest odrzucane z kodem 403.
 
-Po poprawnym zalogowaniu API wydaje token JWT (ang. *JSON Web Token*) [CYTOWANIE: RFC 7519], podpisany kluczem znanym wyłącznie serwerowi. Token zawiera adres e-mail, identyfikator osoby (`idx`) oraz listę jej ról, a także czas wygaśnięcia. Klient dołącza go do każdego kolejnego żądania w nagłówku `Authorization`. Dzięki temu API jest bezstanowe: nie przechowuje sesji, a do ustalenia tożsamości i ról wystarczy sprawdzić podpis tokenu, bez dodatkowego zapytania do bazy przy każdym żądaniu.
+Po poprawnym zalogowaniu API wydaje token JWT (ang. *JSON Web Token*) [CYTOWANIE: RFC 7519], podpisany kluczem znanym wyłącznie serwerowi. Token zawiera adres e-mail, identyfikator osoby (`idx`) oraz listę jej ról, a także czas wygaśnięcia. Klient dołącza go do każdego kolejnego żądania w nagłówku `Authorization`. Dzięki temu API jest bezstanowe: nie przechowuje sesji, a do ustalenia tożsamości i ról wystarczy sprawdzić podpis tokenu.
 
 Wybrano JWT, ponieważ jednym z celów pracy jest porównanie wydajności backendu grafowego i relacyjnego. Sprawdzanie tożsamości w bazie przy każdym żądaniu dodawałoby do każdego pomiaru stały narzut, niezwiązany z właściwą operacją, który zaciemniałby różnice między backendami. Przy JWT każde żądanie wykonuje wyłącznie zapytania potrzebne do realizacji samej operacji.
 
@@ -358,7 +358,7 @@ Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: 
 
 4.5.2 Konwencje
 
-Wszystkie żądania i odpowiedzi są opisane modelami danych, wspólnymi dla obu backendów (4.2). Na ich podstawie API sprawdza poprawność danych wejściowych, zanim wykona jakiekolwiek zapytanie do bazy: brakujące pola, niewłaściwe typy czy wartości spoza dozwolonego zakresu, np. ocena spoza skali 2,0–5,0, są odrzucane z kodem HTTP 422 (ang. *Unprocessable Content*) [CYTOWANIE: RFC 9110], wraz z informacją, które pole jest niepoprawne. Walidacja dotyczy również odpowiedzi - API nie zwróci klientowi danych o innym kształcie, niż zadeklarował.
+Wszystkie żądania i odpowiedzi są opisane modelami danych, wspólnymi dla obu backendów (4.2). Na ich podstawie API sprawdza poprawność danych wejściowych, zanim wykona jakiekolwiek zapytanie do bazy: brakujące pola, niewłaściwe typy czy wartości spoza dozwolonego zakresu, np. ocena spoza skali 2.0–5.0, są odrzucane z kodem HTTP 422 (ang. *Unprocessable Content*) [CYTOWANIE: RFC 9110], wraz z informacją, które pole jest niepoprawne. Walidacja dotyczy również odpowiedzi - API nie zwróci klientowi danych o innym kształcie, niż zadeklarował.
 
 Wynik operacji przekazuje kod odpowiedzi HTTP [CYTOWANIE: RFC 9110, sekcja 15]. Sukces oznacza kod 200, utworzenie zasobu kod 201 wraz z nagłówkiem `Location` wskazującym nowy zasób, a pomyślna operacja bez treści odpowiedzi kod 204. Błędy mają zawsze postać `{"detail": "<komunikat>"}`, a ich rodzaj określa kod:
 

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "brudnopis/Spis skrótów/Spis skrótów.md",
+                "file": "brudnopis/Rozdział 4/Implementacja.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Spis skrótów"
+              "title": "Implementacja"
             }
           },
           {
@@ -69,7 +69,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "PID",
+                "query": "neo4j_data",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -93,8 +93,7 @@
               "title": "Bookmarks"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "horizontal",
@@ -205,34 +204,34 @@
   },
   "active": "25bd858520d885a5",
   "lastOpenFiles": [
-    "brudnopis/Rozdział 4/Implementacja.md",
+    "brudnopis/Rozdział 5/Porównanie z modelem relacyjnym.md",
+    "brudnopis/Streszczenie/Streszczenie.md",
+    "brudnopis/Spis treści/Spis treści.md",
     "brudnopis/Spis skrótów/Spis skrótów.md",
     "brudnopis/Rozdział 3/Projekt systemu.md",
-    "brudnopis/Untitled",
-    "gotowe/pdflatex32456.fls",
-    "gotowe/pdflatex32448.fls",
-    "gotowe/skroty.aux",
-    "gotowe/pdflatex32430.fls",
-    "gotowe/sedFEcgVR",
-    "gotowe/skroty.tex",
-    "brudnopis/Spis skrótów",
     "brudnopis/Rozdział 2/Analiza wymagań.md",
-    "brudnopis/Wstęp/Wstęp.md",
-    "gotowe/pdflatex31116.fls",
-    "gotowe/pdflatex31109.fls",
     "brudnopis/Rodział 1/Podstawy teoretyczne.md",
     "brudnopis/Podsumowanie i wnioski/Podsumowanie i wnioski.md",
-    "brudnopis/Spis treści/Spis treści.md",
-    "brudnopis/Streszczenie/Streszczenie.md",
+    "brudnopis/Literatura/Literatura.md",
+    "brudnopis/Rozdział 4/Implementacja.md",
+    "gotowe/pdflatex37496.fls",
+    "gotowe/pdflatex37491.fls",
+    "gotowe/pdflatex37473.fls",
+    "gotowe/Dyplom.blg",
+    "gotowe/Dyplom.lot",
+    "gotowe/Dyplom.lof",
+    "gotowe/Dyplom.toc",
+    "gotowe/Dyplom.pdf",
+    "gotowe/Dyplom.out",
+    "gotowe/Dyplom.log",
+    "brudnopis/Wstęp/Wstęp.md",
     "brudnopis/Strona tytułowa/Strona tytułowa.md",
     "gotowe/rys05/fig11.png",
     "gotowe/rys05/fig10.png",
     "gotowe/rys05/fig08.png",
     "gotowe/rys05/fig07.png",
     "gotowe/rys05/fig06.png",
-    "brudnopis/Rozdział 5/Porównanie z modelem relacyjnym.md",
     "brudnopis/Dodatki/Dodatki.md",
-    "brudnopis/Literatura/Literatura.md",
     "brudnopis/Rozdział 4/media_rozdzial4/Pasted image 20261118175909.png",
     "brudnopis/Rozdział 4/media_rozdzial4/Pasted image 20261118175824.png",
     "brudnopis/Rozdział 4/media_rozdzial4/visualisation(1)-cropped.svg",
