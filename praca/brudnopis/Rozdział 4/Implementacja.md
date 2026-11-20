@@ -247,24 +247,14 @@ Przekazywanie parametrów jako wyrażeń Cypher sprawia, że inicjalizacja jest 
 | Wartość w `.env`     | Apostrofy w `init.sh` | Wyrażenie otrzymane przez cypher-shell | Wynik                                               |
 | -------------------- | --------------------- | -------------------------------------- | --------------------------------------------------- |
 | `hunter2`            | nie                   | `pw => hunter2`                        | błąd: niezdefiniowana zmienna `hunter2`             |
-| `s3cr3t-pass`        | nie                   | `pw => s3cr3t-pass`                    | błąd: niezdefiniowana zmienna `s3cr3t`              |
-| `12345`              | nie                   | `pw => 12345`                          | `12345` (INTEGER)                                   |
 | `1+1`                | nie                   | `pw => 1+1`                            | `2` (INTEGER)                                       |
 | `hunter2`            | tak                   | `pw => 'hunter2'`                      | `"hunter2"` (STRING), poprawnie                     |
 | `it's`               | tak                   | `pw => 'it's'`                         | błąd: apostrof kończy literał                       |
-| `ends\`              | tak                   | `pw => 'ends\'`                        | błąd: niezamknięty literał                          |
-| `a\nb`               | tak                   | `pw => 'a\nb'`                         | `"a⏎b"` (STRING), znak nowej linii zamiast `\n`     |
 | `' + datetime() + '` | tak                   | `pw => '' + datetime() + ''`           | `"2026-11-14T18:53:46.592Z"` (STRING), wykonany kod |
 
 Z poziomu samego Cypher nie da się tego obejść, ponieważ problem występuje już na etapie parsowania wyrażenia, zanim jakakolwiek funkcja mogłaby przetworzyć wartość. Przyjęto więc założenie, że nazwa użytkownika i hasło nie zawierają znaków `'` ani `\`. Pełnym rozwiązaniem byłby dodatkowy skrypt, który odczytuje zmienne środowiskowe i wykonuje polecenia z `security.cypher` przy pomocy drivera Neo4j, przekazując nazwę użytkownika i hasło jako parametry zapytania. Parametry przesyłane przez driver nie są interpretowane jako kod, więc nie wymagają żadnego przetwarzania.
 
-Skrypt jest uruchamiany przy każdym starcie środowiska, a dane bazy, w tym użytkownicy, są zachowywane w wolumenie `neo4j_data`. Dlatego musi on działać poprawnie także wtedy, gdy użytkownik już istnieje, i jednocześnie uwzględniać ewentualną zmianę hasła w `.env`. Rozważono trzy warianty:
-
-- `CREATE USER … IF NOT EXISTS` – przy istniejącym użytkowniku polecenie jest pomijane, więc nowe hasło z `.env` nie zostałoby zastosowane.
-- `ALTER USER … SET PASSWORD` – Neo4j odrzuca ustawienie hasła identycznego z dotychczasowym (błąd `22N89: new password cannot be the same as the old password`), więc każde ponowne uruchomienie bez zmiany hasła kończyłoby się błędem.
-- `CREATE OR REPLACE USER` – użytkownik jest usuwany i tworzony od nowa z hasłem z `.env`.
-
-Wybrano trzeci wariant, żeby móc zmienić hasło użytkownika bez przebudowy całego środowiska Docker Compose.
+Skrypt jest uruchamiany przy każdym starcie środowiska, a dane bazy, w tym użytkownicy, są zachowywane w wolumenie `neo4j_data`. Dlatego musi on działać poprawnie także wtedy, gdy użytkownik już istnieje, i jednocześnie uwzględniać ewentualną zmianę hasła w `.env`. Spełnia to polecenie `CREATE OR REPLACE USER`, które tworzy użytkownika od nowa z bieżącym hasłem – `CREATE USER … IF NOT EXISTS` pominąłby zmianę hasła, a `ALTER USER … SET PASSWORD` kończy się błędem, gdy hasło się nie zmieniło.
 
 5.1.5 Serwis app
 Odpowiada on za backend aplikacji, czyli API dające klientom wygodny dostęp do zawartości grafowej bazy danych.
@@ -424,13 +414,11 @@ Certyfikat i klucz to para wygenerowana dla Neo4j (5.1.1), zawierająca nazwę `
 
 Pierwszy blok `location` obejmuje ścieżki API. Wszystkie punkty końcowe API są udostępniane pod wspólnym prefiksem `/api`, a nginx wybiera blok o najdłuższym pasującym prefiksie [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_core_module.html#location], więc każde żądanie zaczynające się od `/api/` trafia do proxy, a każde inne do aplikacji klienckiej. Ponieważ `proxy_pass` nie zawiera ścieżki, adres jest przekazywany do API bez zmian, łącznie z prefiksem.
 
-Wcześniejsza wersja konfiguracji wymieniała ścieżki API w wyrażeniu regularnym (`/login`, `/teachers`, `/admin` itd.). Takie rozwiązanie wymagało pamiętania o aktualizacji listy przy każdym nowym zasobie, a przede wszystkim powodowało kolizję adresów: widoki aplikacji klienckiej `/login` i `/admin/...` pasowały do wyrażenia, więc po odświeżeniu strony lub wejściu na nią z linku przeglądarka dostawała odpowiedź API w formacie JSON zamiast aplikacji. Wspólny prefiks rozdziela obie przestrzenie adresów raz na zawsze.
-
 Samo `https` w `proxy_pass` włącza szyfrowanie, ale nginx domyślnie nie weryfikuje certyfikatu serwera docelowego [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify]. Byłaby to sytuacja analogiczna do `bolt+ssc` z 5.1.4: połączenie szyfrowane, ale bez pewności, z kim. Dlatego `proxy_ssl_verify` włącza weryfikację, `proxy_ssl_trusted_certificate` wskazuje lokalne CA, a `proxy_ssl_name` i `proxy_ssl_server_name` określają i przekazują w SNI (ang. *Server Name Indication*) nazwę `app` sprawdzaną w certyfikacie API. Połączenie ograniczono do TLS 1.3, ponieważ obie strony są pod kontrolą projektu. Nagłówki `proxy_set_header` przekazują do API dane oryginalnego żądania (host, adres IP klienta, protokół), które inaczej zostałyby utracone na proxy.
 
 Drugi blok obsługuje aplikację jednostronicową (SPA), w której routing odbywa się w przeglądarce. Adresy widoków, np. `/student/plan`, nie odpowiadają plikom na serwerze, więc `try_files` zwraca w takim przypadku `index.html` [CYTOWANIE: https://router.vuejs.org/guide/essentials/history-mode.html]. Bez tego odświeżenie strony kończyłoby się błędem 404.
 
-Wyjątkiem są pliki zbudowanej aplikacji w katalogu `/assets/`. Vite umieszcza w ich nazwach skrót zawartości, np. `CyclesView-D5yd3d5K.js`, więc każda nowa wersja aplikacji ma nowe nazwy plików. Brakujący plik kończy się błędem 404, a nie zwróceniem `index.html`: strona otwarta przed wdrożeniem nowej wersji żąda plików, których już nie ma, a przeglądarka odrzuciłaby otrzymany w ich miejsce dokument HTML (ang. *HyperText Markup Language*) jako niepoprawny moduł JavaScript. Ponieważ zawartość pliku o danej nazwie nigdy się nie zmienia, może on być przechowywany w pamięci podręcznej przeglądarki bezterminowo (`immutable`). Sam `index.html`, wskazujący aktualne nazwy plików, nie jest natomiast buforowany (`no-cache`), dzięki czemu po wdrożeniu przeglądarka od razu pobiera nową wersję. Strony otwarte jeszcze przed wdrożeniem obsługuje router aplikacji klienckiej: gdy nie uda się załadować modułu widoku, przeładowuje stronę jeden raz.
+Wyjątkiem są pliki zbudowanej aplikacji w katalogu `/assets/`, których nazwy zawierają skrót zawartości, np. `CyclesView-D5yd3d5K.js`. Brakujący plik kończy się tu błędem 404, a nie zwróceniem dokumentu HTML (ang. *HyperText Markup Language*) `index.html`, którego przeglądarka i tak nie przyjęłaby jako modułu JavaScript. Ponieważ zawartość pliku o danej nazwie nigdy się nie zmienia, przeglądarka może go przechowywać bezterminowo (`immutable`). Sam `index.html`, wskazujący aktualne nazwy plików, nie jest natomiast buforowany (`no-cache`), dzięki czemu po wdrożeniu nowej wersji przeglądarka od razu ją pobiera.
 
 W `docker-compose.yml` argument `NPM_REGISTRY` korzysta ze składni `${ZMIENNA:-domyślna}`. W przeciwieństwie do `:?` z 5.1.5 brak zmiennej nie blokuje uruchomienia, tylko powoduje użycie publicznego rejestru [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/].
 
@@ -447,11 +435,9 @@ ca.pem       private.key  public.crt
 
 `depends_on: app` oznacza jedynie, że kontener `app` musi być utworzony, ponieważ nginx przy starcie rozwiązuje jego nazwę. Żądania wysłane, zanim uvicorn zacznie nasłuchiwać, otrzymają `502 Bad Gateway`.
 
-Kontener ma nałożone ograniczenia analogiczne do serwisu `app`, dostosowane do nginx, którego proces główny działa jako `root`, a procesy obsługujące żądania jako użytkownik `nginx`:
-- `read_only: true` – atakujący nie może podmienić konfiguracji ani plików aplikacji klienckiej, np. by wstrzyknąć złośliwy skrypt.
+Kontener ma nałożone te same ograniczenia co serwis `app` (`read_only`, `no-new-privileges`, 5.1.5). Różnice wynikają z tego, że proces główny nginx działa jako `root`, a procesy obsługujące żądania jako użytkownik `nginx`:
 - `tmpfs` – nginx wymaga zapisywalnych katalogów `/var/cache/nginx` (bufory proxy) i `/var/run` (plik z identyfikatorem procesu, PID, ang. *Process Identifier*).
 - `cap_drop: ALL` z `cap_add` – przywrócone są tylko uprawnienia niezbędne nginx [CYTOWANIE: https://man7.org/linux/man-pages/man7/capabilities.7.html]: `NET_BIND_SERVICE` (port 443), `SETUID` i `SETGID` (przełączenie na użytkownika `nginx`) oraz `CHOWN` (własność katalogów tymczasowych). Bez `CHOWN` nginx nie uruchamia się.
-- `no-new-privileges:true` – jak w 5.1.5.
 
 We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`, działającego w całości jako zwykły użytkownik na porcie powyżej 1024, co pozwoliłoby odebrać wszystkie uprawnienia jądra.
 
@@ -460,11 +446,6 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 ```
 .
 ├── app
-│   ├── graph_backend
-│   │   ├── auth
-│   │   ├── routers
-│   │   └── database.py
-│   └── schemas
 ├── certificates
 │   └── app
 ├── endpoint_schema
@@ -486,7 +467,7 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 
 Klient Vue jest w całości zawarty w katalogu `frontend/`, wraz z plikiem `Dockerfile` budującym jego obraz i konfiguracją serwera nginx (`nginx.conf`), który go serwuje.
 
-W katalogu `app/` znajduje się backend, w tym warstwa API. W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, niezależne od bazy danych. W podkatalogu `graph_backend/` znajduje się backend grafowy, czyli cały kod zależny od Neo4j. Plik `database.py` tworzy w nim połączenie z bazą za pomocą sterownika, punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, wspólna obsługa błędów w `errors.py`, a zapytania do bazy danych w pozostałych modułach.
+W katalogu `app/` znajduje się backend, w tym warstwa API (szczegółową strukturę przedstawiono w 5.5.1). W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, niezależne od bazy danych. W podkatalogu `graph_backend/` znajduje się backend grafowy, czyli cały kod zależny od Neo4j. Plik `database.py` tworzy w nim połączenie z bazą za pomocą sterownika, punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, wspólna obsługa błędów w `errors.py`, a zapytania do bazy danych w pozostałych modułach.
 
 *todo* W tym samym katalogu, w podkatalogu `relation_backend/`, znajdzie się implementacja relacyjna podobnego systemu. Będzie ona działać w ten sam sposób – poprzez sterownik bazy danych zamiast mapowania obiektowo-relacyjnego. Oba backendy będą korzystać z tych samych modeli Pydantic.
 
@@ -526,31 +507,19 @@ Zgodnie z projektem systemu węzeł grupy przechowuje identyfikator, dzień tygo
 
 Identyfikator (`id`) jest typu `STRING`, nie bardziej intuicyjnego `INTEGER`, ponieważ Neo4j nie obsługuje autoinkrementacji. Identyfikatory liczbowe wymagałyby osobnego, globalnego mechanizmu ich nadawania, z którego korzystałyby wszystkie zapytania tworzące nowe węzły. Alternatywą byłoby wyszukanie w grafie największego istniejącego identyfikatora i zwiększenie go o 1, lecz takie rozwiązanie jest podatne na wyścigi – dwie równoległe transakcje mogą odczytać tę samą wartość i nadać ten sam identyfikator. O wbudowaną autoinkrementację użytkownicy Neo4j proszą co najmniej od 2013 roku [CYTOWANIE: https://gist.github.com/tekiegirl/8012859]. Ten sposób wykorzystano jedynie w punkcie końcowym `GET /admin/people/next-idx`, który podpowiada administratorowi kolejny numer osoby (`idx`). Jest to wyłącznie podpowiedź: jeśli dwóch administratorów otrzyma ten sam numer, drugą próbę utworzenia osoby odrzuci ograniczenie `idx IS KEY`, a API zwróci kod 409.
 
-Do tego celu nie nadaje się również wewnętrzny identyfikator elementu, zwracany przez funkcję `elementId()`. Dokumentacja Neo4j zastrzega, że poza pojedynczą transakcją nie ma żadnych gwarancji co do powiązania identyfikatorów z elementami, a identyfikatory usuniętych węzłów i krawędzi są ponownie wykorzystywane [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]:
+Do tego celu nie nadaje się również wewnętrzny identyfikator elementu, zwracany przez funkcję `elementId()`. Dokumentacja Neo4j zastrzega, że poza pojedynczą transakcją nie ma żadnych gwarancji co do powiązania identyfikatorów z elementami, a identyfikatory usuniętych węzłów i krawędzi są ponownie wykorzystywane [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]. Dokumentacja wprost odradza więc opieranie aplikacji na wewnętrznych identyfikatorach i zaleca identyfikatory generowane przez aplikację.
 
-> *Neo4j reuses its internal IDs when nodes and relationships are deleted. Applications relying on internal Neo4j IDs are, as a result, brittle and can be inaccurate. It is therefore recommended to use application-generated IDs.*
+Problemy te rozwiązuje zastąpienie identyfikatorów liczbowych identyfikatorami UUID (ang. *Universally Unique Identifier*). Wygenerowanie UUID nie wymaga przechowywania stanu ani znajomości identyfikatorów istniejących już w bazie. Cypher udostępnia do tego funkcję `randomUUID()`, która według dokumentacji zwraca „128-bitową wartość z silnymi gwarancjami unikalności” (ang. *a 128-bit value with strong guarantees of uniqueness*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]. W tym projekcie UUID jest identyfikatorem prawie wszystkich typów węzłów. Nowe identyfikatory generuje API funkcją `uuid4()` z biblioteki standardowej Pythona, a dane początkowe mają je zapisane w plikach CSV. Podobne stanowisko prezentują użytkownicy forum społeczności Neo4j, odradzając liczbową autoinkrementację, ponieważ silnik bazy danych powinien przedkładać wydajność i stabilność nad wygodę [CYTOWANIE: https://community.neo4j.com/t/how-to-auto-increment-to-get-unique-value-for-a-new-nodes-field/12815/7].
 
-(tłum.: Neo4j ponownie wykorzystuje wewnętrzne identyfikatory po usunięciu węzłów i krawędzi. W związku z tym aplikacje polegające na wewnętrznych identyfikatorach Neo4j są kruche i mogą działać niepoprawnie. Dlatego zaleca się stosowanie identyfikatorów generowanych przez aplikację.)
+Właściwości `weekday`, `number` i `capacity` są liczbami całkowitymi. Dzień tygodnia naturalniej byłoby zapisać jako typ wyliczeniowy (ang. *enum*), dostępny w większości współczesnych języków programowania i w relacyjnych bazach danych, np. PostgreSQL [CYTOWANIE: https://www.postgresql.org/docs/current/datatype-enum.html]. Neo4j nie obsługuje jednak typów wyliczeniowych i nie pozwala ograniczyć zbioru dopuszczalnych wartości właściwości, dlatego poprawność dnia tygodnia sprawdza warstwa aplikacji – model żądania `GroupCreateRequest` przyjmuje wyłącznie wartości od 1 do 7. Zastąpienie liczby siedmioma węzłami dni tygodnia wymagałoby dodatkowego przejścia po grafie przy każdym odczycie grupy, a baza i tak nie wymusiłaby istnienia krawędzi (4.3.7), dlatego z niego zrezygnowano. Przyjęto, że 1 oznacza poniedziałek, a 7 – niedzielę, zgodnie z normą ISO (ang. *International Organization for Standardization*) 8601 [CYTOWANIE: ISO 8601-1:2019] oraz z numeracją składowej `dayOfWeek` w typach czasowych Neo4j [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/values-and-types/temporal/].
 
-Problemy te rozwiązuje zastąpienie identyfikatorów liczbowych identyfikatorami UUID (ang. *Universally Unique Identifier*). Wygenerowanie UUID nie wymaga przechowywania stanu ani znajomości identyfikatorów istniejących już w bazie. Cypher udostępnia do tego funkcję `randomUUID()`, która według dokumentacji zwraca „128-bitową wartość z silnymi gwarancjami unikalności” (ang. *a 128-bit value with strong guarantees of uniqueness*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]. W tym projekcie UUID jest identyfikatorem prawie wszystkich typów węzłów. Nowe identyfikatory generuje API funkcją `uuid4()` z biblioteki standardowej Pythona, a dane początkowe mają je zapisane w plikach CSV. Podobne stanowisko pojawia się na forum społeczności Neo4j, gdzie jeden z użytkowników, odradzając liczbową autoinkrementację, pisze [CYTOWANIE: https://community.neo4j.com/t/how-to-auto-increment-to-get-unique-value-for-a-new-nodes-field/12815/7]:
-
-> *Database engines must prioritize performance and stability first, flexibility second, and convenience third. Your solution puts convenience first.*
-
-(tłum.: Silniki baz danych muszą stawiać na pierwszym miejscu wydajność i stabilność, na drugim elastyczność, a dopiero na trzecim wygodę. Twoje rozwiązanie stawia wygodę na pierwszym miejscu.)
-
-Właściwości `weekday`, `number` i `capacity` są liczbami całkowitymi. W przypadku `number` i `capacity` nie budzi to wątpliwości, natomiast `weekday` naturalniej byłoby zapisać jako typ wyliczeniowy (ang. *enum*), dostępny w większości współczesnych języków programowania, a także w relacyjnych bazach danych, np. PostgreSQL [CYTOWANIE: https://www.postgresql.org/docs/current/datatype-enum.html]. Neo4j nie obsługuje jednak typów wyliczeniowych i nie pozwala ograniczyć zbioru dopuszczalnych wartości właściwości z poziomu bazy danych, dlatego poprawność dnia tygodnia sprawdzana jest w warstwie aplikacji – model żądania utworzenia grupy (`GroupCreateRequest`) przyjmuje wyłącznie wartości od 1 do 7.
-
-Innym możliwym rozwiązaniem byłoby zastąpienie typu wyliczeniowego węzłami. Zamiast właściwości `weekday: 1` powstałoby siedem węzłów odpowiadających dniom tygodnia (`"Monday"`, `"Tuesday"` itd.), połączonych z węzłem `Group` krawędzią, np. `HAPPENS_ON`. Wadą tego rozwiązania jest to, że odczytanie podstawowych informacji o grupie wymagałoby dodatkowego kroku przejścia po grafie. Ponadto baza danych nie wymusza istnienia krawędzi (4.3.7), więc dopuściłaby utworzenie grupy bez dnia tygodnia.
-
-Uznano, że dzień tygodnia jest zbyt prostą informacją, by wydzielać go do osobnego węzła. Inaczej potraktowano sale, w których odbywają się zajęcia – są one osobnymi węzłami (`Room`), połączonymi z grupą krawędzią `IN_ROOM`:
+Inaczej potraktowano sale, w których odbywają się zajęcia – są one osobnymi węzłami (`Room`), połączonymi z grupą krawędzią `IN_ROOM`:
 
 ```cypher
 	(g)-[:IN_ROOM => {}]->(r),
 ```
 
 Sala, w przeciwieństwie do dnia tygodnia, jest samodzielnym bytem: ma własne właściwości (budynek i numer sali), w jednej sali odbywa się wiele grup, a zbiór sal zmienia się w czasie – powstają nowe budynki, a istniejące sale są wyłączane z użytku. Gdyby budynek i numer sali były właściwościami grupy, zmiana danych sali wymagałaby aktualizacji wszystkich odbywających się w niej grup, a literówka w nazwie budynku tworzyłaby w praktyce nową salę. Jako osobny węzeł sala jest zapisana w jednym miejscu, a ograniczenie unikalności pary budynek–numer sali (`REQUIRE (r.building, r.room_num) IS UNIQUE`) chroni przed duplikatami.
-
-Zbiór dni tygodnia natomiast się nie zmieni: jest to siedem kolejnych wartości, zrozumiałych dla każdego. Trzeba jedynie ustalić konwencję numeracji, ponieważ w zależności od kraju i systemu tydzień zaczyna się w poniedziałek albo w niedzielę. W projekcie przyjęto, że 1 oznacza poniedziałek, a 7 – niedzielę. Jest to decyzja autora, zgodna z jednym ze standardów – normą ISO (ang. *International Organization for Standardization*) 8601, w której tydzień rozpoczyna się w poniedziałek, oznaczony numerem 1 [CYTOWANIE: ISO 8601-1:2019]. Tę samą numerację stosuje Neo4j: dokumentacja typów czasowych opisuje składową `dayOfWeek` jako wartość od 1 do 7, przy czym „pierwszym dniem tygodnia jest poniedziałek” (ang. *the first day of the week is Monday*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/values-and-types/temporal/].
 
 Właściwość `pnp`, określająca parzystość tygodni, w których odbywają się zajęcia, również skorzystałaby na typie wyliczeniowym. Przyjmuje ona jedną z trzech wartości tekstowych: `"P"` (tygodnie parzyste), `"NP"` (tygodnie nieparzyste) oraz `"ALL"` (co tydzień). Parzystość wyznaczana jest na podstawie numeru tygodnia według normy ISO 8601. Tę samą informację mogłyby przechowywać trzy liczby (`0`, `1`, `2`), jednak bez typu wyliczeniowego byłyby to liczby magiczne (ang. *magic numbers*) – programista rozwijający aplikację łatwo mógłby pomylić, czy 0 oznacza tygodnie parzyste, czy nieparzyste. Wartości tekstowe są czytelne same w sobie, a ich poprawność, podobnie jak w przypadku dnia tygodnia, sprawdza warstwa aplikacji – model `GroupCreateRequest` przyjmuje wyłącznie jedną z trzech wymienionych wartości. Rozwiązanie to nie jest w pełni zadowalające, ponieważ sama baza danych nie chroni się przed niepoprawną wartością, ale jest najlepszym, na jakie pozwala Neo4j.
 
@@ -820,7 +789,7 @@ Ponadto API generuje interaktywną dokumentację w standardzie OpenAPI [CYTOWANI
 
 Każdy punkt końcowy jest opisany według tego samego schematu: kto może go wywołać (**Allowed**), kształt żądania (**Request**), kształt odpowiedzi (**Response**) oraz zapytania Cypher, które wykonuje (**Query**). `X?` oznacza pole opcjonalne lub mogące przyjąć wartość `null`, a `List[X]` tablicę JSON. Każdy punkt końcowy poza `POST /login` wymaga nagłówka `Authorization: Bearer <token>`. Ścieżki podawane są względem prefiksu `/api`, np. `GET /subjects` jest dostępny pod adresem `/api/subjects`.
 
-Poniżej opisano wybrane, najważniejsze punkty końcowe - po co najmniej jednym dla każdej roli.
+Poniżej opisano wybrane punkty końcowe. Zapis do grupy i wystawianie oceny omówiono w podrozdziale 5.5, razem z ich implementacją.
 
 5.4.2 Logowanie - POST /login
 
@@ -841,8 +810,6 @@ Jedyny punkt końcowy dostępny bez tokenu. Przyjmuje adres e-mail i hasło, a w
 	"token": String
 }
 ```
-
-Błędny e-mail lub hasło skutkuje kodem 401, a konto zablokowane lub bez żadnej roli kodem 403.
 
 ```cypher
 MATCH (u:User {email: $email})
@@ -959,14 +926,7 @@ GET /me/registrations/8324f6b2-bd39-589e-88a0-a61423325d54/groups?subject_code=W
 }
 ```
 
-Najpierw wykonywane jest sprawdzenie dostępu - student musi mieć przydzieloną turę w tych zapisach, w przeciwnym razie API zwraca kod 403:
-
-```cypher
-MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})
-RETURN reg.id AS id
-```
-
-Następnie pobierane są same grupy:
+Najpierw sprawdzane jest, czy student ma przydzieloną turę w tych zapisach (5.5.7) – w przeciwnym razie API zwraca kod 403. Następnie pobierane są same grupy:
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})
@@ -992,54 +952,7 @@ ORDER BY gt.g_type, g.number
 
 Sala i prowadzący są dołączane przez `OPTIONAL MATCH`, ponieważ nowo utworzona grupa może ich jeszcze nie mieć - wtedy odpowiednie pola mają wartość `null`, a grupa nadal jest zwracana. Liczba zajętych miejsc nie jest przechowywana jako licznik, tylko liczona na bieżąco jako liczba krawędzi `REGISTERED_IN` wchodzących do grupy. Dzięki temu nie istnieje ryzyko rozjechania się licznika z faktycznym stanem.
 
-5.4.5 Zapis do grupy - PUT /me/registered-groups/{group_id}
-Najważniejszy punkt końcowy całego systemu, a zarazem najbardziej obciążony - w momencie otwarcia tury zapisów wywołuje go jednocześnie wielu studentów. Zasobem jest tu miejsce studenta w grupie, wskazane identyfikatorem grupy w ścieżce.
-
-```http
-PUT /me/registered-groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f
-```
-
-Zapis jest odrzucany z kodem 403, gdy student nie ma dostępu do grupy lub jego tura nie trwa, oraz z kodem 409, gdy jest już zapisany do innej grupy tego samego typu z tego przedmiotu albo grupa jest pełna. Ponowny zapis do grupy, w której student już jest, kończy się sukcesem bez żadnych zmian. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem. Poza turą studenta również kończy się kodem 403, a jeśli student nie jest zapisany do grupy – kodem 404.
-
-Wszystkie te warunki są sprawdzane w tym samym zapytaniu, w którym tworzona jest krawędź `REGISTERED_IN`. Nie jest to przypadek - rozbicie sprawdzenia i zapisu na dwa osobne zapytania prowadziłoby do sytuacji wyścigu. Sposób jej rozwiązania został szczegółowo opisany w podrozdziale 5.5.10.
-
-5.4.6 Wystawienie oceny - PUT /groups/{group_id}/students/{student_idx}/grade
-Punkt końcowy prowadzącego. Pozwala wystawić ocenę studentowi zapisanemu do grupy. Grupa i student są wskazani w ścieżce, a treść żądania zawiera wyłącznie ocenę.
-
-```http
-PUT /groups/96992b82-07dc-58c0-b3bf-4d64e58ad87f/students/279413/grade
-```
-
-```json
-// Request
-{
-	"grade": Float
-}
-
-// Response
-{
-	"group_id": String,
-	"student_idx": String,
-	"grade": Float
-}
-```
-
-Ocena musi być jedną z wartości `2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0`. Jest to sprawdzane już przez model Pydantic, więc każda inna wartość jest odrzucana z kodem 422, zanim żądanie w ogóle dotrze do bazy danych. Nauczyciel może wystawiać oceny tylko w grupach, które prowadzi - administrator w dowolnych:
-
-```cypher
-// 1. Sprawdzenie dostępu (tylko dla nauczyciela)
-MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g:Group {id: $group_id})
-RETURN g.id AS id
-
-// 2. Wystawienie oceny
-MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
-SET r.grade = $grade
-RETURN g.id AS group_id, st.idx AS student_idx, r.grade AS grade
-```
-
-Ocena jest właściwością krawędzi `REGISTERED_IN` (4.3.3). Jeśli student nie jest zapisany do grupy, wzorzec nie zostanie dopasowany, oceny nie da się wystawić, a API odpowiada kodem 404.
-
-5.4.7 Dodanie studenta - POST /admin/students
+5.4.5 Dodanie studenta - POST /admin/students
 Punkt końcowy administratora, tworzący nowego studenta i od razu przypisujący go do semestru programu studiów.
 
 ```json
@@ -1253,7 +1166,7 @@ Zapytania w transakcji są wykonywane tą samą funkcją `one()` co w sesji (5.5
 
 Kształt żądań i odpowiedzi został zdefiniowany w katalogu `schemas/` w postaci modeli Pydantic. Pydantic działa w obie strony: dane JSON z żądania zamienia na zwalidowany obiekt Pythona, a wynik zapytania – na odpowiedź JSON. Pliki są podzielone według dziedziny (przedmioty, grupy, opinie itd.), a nazwy modeli stosują konwencję `…Request` dla treści żądania i `…Response` dla odpowiedzi. Kształt odpowiedzi określono dla każdego punktu końcowego zwracającego dane, a kształt żądania – dla każdego, który przyjmuje treść.
 
-Walidacja działa po obu stronach punktu końcowego. Żądanie niezgodne z modelem jest odrzucane z kodem 422, zanim funkcja punktu końcowego zostanie wywołana, więc błędne dane nie docierają do bazy danych (5.4.6). Odpowiedź niezgodna z modelem podanym w `response_model` kończy się kodem 500 (5.5.2), ponieważ jest to błąd serwera, a nie klienta.
+Walidacja działa po obu stronach punktu końcowego. Żądanie niezgodne z modelem jest odrzucane z kodem 422, zanim funkcja punktu końcowego zostanie wywołana, więc błędne dane nie docierają do bazy danych. Odpowiedź niezgodna z modelem podanym w `response_model` kończy się kodem 500 (5.5.2), ponieważ jest to błąd serwera, a nie klienta.
 
 Definiowanie modelu Pydantic polega na stworzeniu klasy dziedziczącej po `BaseModel` i określeniu, jakie pola i jakiego typu ma zawierać. Typ `Optional[X]`, równoważny `X | None`, oznacza, że pole może przyjąć wartość `null` [CYTOWANIE: https://docs.python.org/3/library/typing.html#typing.Optional].
 
@@ -1637,7 +1550,7 @@ Funkcja `_require_registration()` jest najprostszą postacią ReBAC. Sprawdza, c
 
 Kolejnym elementem granularnej kontroli dostępu jest ustalenie, czyich danych dotyczy żądanie. Identyfikator osoby trafia do obiektu `Caller` z roszczenia `idx` tokenu (5.5.6), a do tokenu – z właściwości `idx` węzła użytkownika, odczytanej przy logowaniu (5.4.2). Jest to ten sam identyfikator, którym osoba jest oznaczona w grafie, np. numer indeksu `279413` dla studenta albo `T001` dla prowadzącego. Ponieważ token jest podpisany, klient nie może go zmienić bez unieważnienia podpisu, więc `caller.idx` jest wiarygodny w takim samym stopniu jak role.
 
-Punkty końcowe operujące na danych zalogowanego użytkownika mają w ścieżce prefiks `/me/` – jest ich dziesięć, np. plan studiów, zapisy do grup czy prowadzone grupy. Nie przyjmują one identyfikatora osoby ani w ścieżce, ani w treści żądania – biorą go wyłącznie z tokenu.
+Zgodnie z 4.4.2 punkty końcowe operujące na danych zalogowanego użytkownika (z prefiksem `/me/`, jest ich dziesięć) biorą identyfikator osoby wyłącznie z tokenu.
 
 ```python
 @router.get("/me/enrolments", response_model=MyEnrolmentsResponse)
@@ -1663,8 +1576,6 @@ async def my_enrolments(
 *Punkt końcowy zwracający kierunki i semestry studenta (`routers/student.py`)*
 
 Zapytanie zaczyna się od węzła studenta wskazanego przez `caller.idx` i przechodzi wyłącznie po jego krawędziach, więc z założenia nie może zwrócić danych innego studenta. Taki punkt końcowy nie potrzebuje osobnego sprawdzenia uprawnień ani odpowiedzi 403 – jeśli student nie jest zapisany na żaden kierunek, otrzymuje po prostu pustą listę.
-
-Gdyby identyfikator był przekazywany przez klienta, np. jako `GET /students/{student_idx}/enrolments`, student mógłby podmienić go na numer indeksu kolegi i odczytać jego dane.
 
 Nie zawsze da się uniknąć identyfikatora w żądaniu. Prowadzący, wystawiając ocenę, musi wskazać grupę i studenta, więc ich identyfikatory przychodzą od klienta i trzeba sprawdzić, czy wolno mu z nich skorzystać. Wtedy oba mechanizmy łączą się: jeden koniec ścieżki sprawdzanej przez ReBAC wyznacza `caller.idx` z tokenu, a drugi – identyfikator z żądania.
 
@@ -1697,7 +1608,7 @@ async def set_group_grade(
 
 *Fragment funkcji `set_group_grade()` odpowiedzialny za ReBAC*
 
-W tej funkcji kwerenda sprawdza, czy nauczycielowi wolno wystawić ocenę. Z zależności wyciągana jest informacja o sesji i osobie wołającej ten punkt końcowy. Z ciała zapytania wyciągane są informacje o ocenie, a ze ścieżki zasobu – identyfikatory grupy i studenta. Do sprawdzenia uprawnień wystarczą dwa z nich: `caller.idx` z tokenu i `group_id` ze ścieżki. Kwerenda sprawdza, czy prowadzący o tym identyfikatorze uczy (`TEACHES`) grupę o podanym UUID. Jeśli tak, to zostanie zwrócona grupa. Jeśli nie, to zostanie zwrócone `None`, co skutkuje przedwczesnym zatrzymaniem wykonania funkcji przez błąd 403 Forbidden.
+W tej funkcji kwerenda sprawdza, czy nauczycielowi wolno wystawić ocenę. Z zależności wyciągana jest informacja o sesji i osobie wołającej ten punkt końcowy. Z ciała zapytania wyciągane są informacje o ocenie, a ze ścieżki zasobu – identyfikatory grupy i studenta. Do sprawdzenia uprawnień wystarczą dwa z nich: `caller.idx` z tokenu i `group_id` ze ścieżki. Kwerenda sprawdza, czy prowadzący o tym identyfikatorze uczy (`TEACHES`) grupę o podanym UUID. Jeśli tak, to zostanie zwrócona grupa. Jeśli nie, to zostanie zwrócone `None`, co skutkuje przedwczesnym zatrzymaniem wykonania funkcji przez błąd 403 Forbidden. Sama ocena jest następnie zapisywana we właściwości `grade` krawędzi `REGISTERED_IN` (4.3.3); jeśli student nie jest zapisany do grupy, wzorzec nie zostanie dopasowany, a API odpowiada kodem 404.
 
 Reguła ReBAC sprawia, że podmiana `group_id` na cudzą grupę nic nie daje, ponieważ nie będzie oczekiwanej ścieżki od nauczyciela zaszytego w tokenie do cudzej grupy. 
 
@@ -1814,7 +1725,7 @@ async def register_to_group(
 
 *Zapis do grupy (`routers/student.py`)*
 
-Jeśli grupa nie należy do żadnej rejestracji z turą studenta albo tura nie trwa, kwerenda nie zwraca wiersza (403). W przeciwnym razie zwraca `status`: `"conflict"` lub `"full"` (409) albo `"ok"`, gdy krawędź została utworzona lub już istniała. Kod 204 oznacza sukces bez treści odpowiedzi – funkcja niczego nie zwraca. Kwerenda `_REGISTER` i powody, dla których sprawdzenie i zapis muszą być jednym zapytaniem, zostały opisane w 5.5.10.
+Jeśli grupa nie należy do żadnej rejestracji z turą studenta albo tura nie trwa, kwerenda nie zwraca wiersza (403). W przeciwnym razie zwraca `status`: `"conflict"` lub `"full"` (409) albo `"ok"`, gdy krawędź została utworzona lub już istniała. Wypis z grupy to analogiczne żądanie `DELETE` pod tym samym adresem – poza turą studenta kończy się kodem 403, a jeśli student nie jest zapisany do grupy, kodem 404. Kod 204 oznacza sukces bez treści odpowiedzi – funkcja niczego nie zwraca. Kwerenda `_REGISTER` i powody, dla których sprawdzenie i zapis muszą być jednym zapytaniem, zostały opisane w 5.5.10.
 
 ```http
 PUT /me/registered-groups/c798fc10-c169-58c8-9c55-c0fd2d104535
@@ -2169,3 +2080,52 @@ W tym samym teście (scenariusz D) wysłano jednocześnie dwa żądania `DELETE 
 Blokadę zapisu stosuje się również przy wystawianiu opinii (blokada studenta przed ponownym sprawdzeniem duplikatu, 5.5.9), tworzeniu typu grupy (blokada przedmiotu, by instancja przedmiotu i typ grupy nie powstały dwukrotnie) oraz przypisywaniu studentów do tur (blokada rejestracji, by student nie trafił do dwóch tur tej samej rejestracji).
 
 5.6 Klient
+
+Aplikacja kliencka jest aplikacją jednostronicową (4.1) napisaną we frameworku Vue 3 [CYTOWANIE: https://vuejs.org/guide/introduction.html], z routerem Vue Router i magazynem stanu Pinia [CYTOWANIE: https://pinia.vuejs.org/introduction.html]. Nie zawiera żadnej logiki dostępu do danych – wszystkie informacje pobiera z API (5.5), a jej zadaniem jest jedynie ich wygodne wyświetlenie i zebranie danych do żądań.
+
+Komunikację z API obsługuje jeden moduł `api/client.js`. Funkcja `apiRequest()` dokleja do ścieżki prefiks `/api`, dołącza nagłówek `Authorization` z tokenem i zamienia odpowiedź na obiekt JavaScript. Odpowiedzi z kodem błędu zamienia na wyjątek z komunikatem z pola `detail`, a błędy walidacji (422) – na listę par „pole: komunikat”, które widoki wyświetlają użytkownikowi. Pozostałe funkcje modułu odpowiadają pojedynczym punktom końcowym i są pogrupowane tak jak moduły API (4.5.1), np. `student.register(groupId)` wysyła `PUT /me/registered-groups/{group_id}`.
+
+Formularze administratora odpowiadają kształtom żądań API. Wszędzie tam, gdzie żądanie wymaga identyfikatora istniejącego elementu, np. wydziału przy tworzeniu kierunku czy cyklu przy tworzeniu semestru planu, formularz zamiast pola tekstowego zawiera listę wyboru z czytelnymi nazwami. Listy są wypełniane przy otwarciu widoku równoległymi zapytaniami do punktów końcowych administratora zwracających listy elementów, a jako wartość pola trafia do żądania identyfikator. Spełnia to wymaganie z 3.2 – administrator nie musi znać identyfikatorów. Przy tworzeniu osoby formularz podpowiada kolejny numer `idx` (5.3.1).
+
+Po zalogowaniu token, adres e-mail, identyfikator osoby i lista ról z odpowiedzi `POST /login` (5.4.2) są zapisywane w magazynie stanu i w `sessionStorage`, dzięki czemu przetrwają odświeżenie strony, ale nie zamknięcie karty. Na podstawie ról magazyn wyznacza widoczne zakładki:
+
+```javascript
+visibleTabs(state) {
+  const tabs = []
+  if (state.token) tabs.push({ name: 'catalogue', label: 'Catalogue', path: '/catalogue' })
+  if (state.roles.includes('Student'))
+    tabs.push({ name: 'student', label: 'Student', path: '/student' })
+  if (state.roles.includes('Teacher') || state.roles.includes('Admin'))
+    tabs.push({ name: 'teacher', label: 'Teacher', path: '/teacher' })
+  if (state.roles.includes('Admin'))
+    tabs.push({ name: 'admin', label: 'Admin', path: '/admin' })
+  return tabs
+},
+```
+*Wyznaczanie zakładek na podstawie ról (`stores/auth.js`)*
+
+Zakładki odpowiadają modułom API i mają te same wymagania co do ról, w tym dostęp administratora do zakładki prowadzącego. Osoba z kilkoma rolami widzi kilka zakładek.
+
+Ukrycie zakładki nie blokuje jednak wpisania adresu widoku ręcznie, dlatego trasy routera mają w metadanych wymagane role, sprawdzane przed każdą zmianą widoku:
+
+```javascript
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (to.meta.public) {
+    if (auth.isLoggedIn && to.name === 'login') return auth.defaultRoute
+    return true
+  }
+  if (!auth.isLoggedIn) return { name: 'login', query: { redirect: to.fullPath } }
+  const roles = to.matched.flatMap((r) => r.meta.roles || [])
+  if (roles.length) {
+    const ok = roles.some((role) => /* ... */ auth.roles.includes(role))
+    if (!ok) return auth.defaultRoute
+  }
+  return true
+})
+```
+*Strażnik nawigacji (`router/index.js`)*
+
+Strażnik nawigacji [CYTOWANIE: https://router.vuejs.org/guide/advanced/navigation-guards.html] realizuje trzy przekierowania. Niezalogowany użytkownik trafia na stronę logowania, a adres, na który próbował wejść, jest zapamiętywany w parametrze `redirect`. Zalogowany użytkownik nie może wrócić na stronę logowania. Wejście do widoku niedozwolonego dla ról użytkownika przenosi go na jego widok domyślny – studenta na plan zajęć studenta, prowadzącego na plan zajęć prowadzącego, a pozostałych na pierwszą dostępną zakładkę. Czwarte przekierowanie wykonuje moduł `api/client.js`: odpowiedź 401 na żądanie z tokenem oznacza, że token wygasł, więc klient usuwa go i przenosi użytkownika na stronę logowania.
+
+Wszystkie te mechanizmy służą wyłącznie wygodzie użytkownika i potwierdzeniu, że wszystkoe potrzebne punkty końcowe zostały zaimplementowane.
