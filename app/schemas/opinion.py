@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
@@ -30,7 +30,7 @@ class OpinionItem(BaseModel):
     id: str
     grade: float
     content: Optional[str] = None
-    submit: datetime
+    submit: date
     group_id: str
     course_code: str
     course_name: str

@@ -9,17 +9,28 @@ from app.graph_backend.routers.catalogue import router as catalogue_router
 from app.graph_backend.routers.public import router as public_router
 from app.graph_backend.routers.student import router as student_router
 from app.graph_backend.routers.teacher import router as teacher_router
+from app.relation_backend import errors as relation_errors
+from app.relation_backend.database import close_pool, open_pool
+from app.relation_backend.routers.catalogue import router as rel_catalogue_router
+from app.relation_backend.routers.public import router as rel_public_router
+from app.relation_backend.routers.student import router as rel_student_router
+from app.relation_backend.routers.teacher import router as rel_teacher_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await verify_connectivity()
+    await open_pool()
     yield
+    await close_pool()
     await close_driver()
 
 
 # The whole API lives under /api, so it never shares a path with a page of the frontend.
 API_PREFIX = "/api"
+# The relational backend (chapter 6) implements only the endpoints compared with the graph one.
+# They have the same paths, request and response models, under an extra /rel prefix.
+REL_PREFIX = f"{API_PREFIX}/rel"
 
 app = FastAPI(
     title="mini-usos",
@@ -34,3 +45,8 @@ app.include_router(catalogue_router, prefix=API_PREFIX)
 app.include_router(student_router, prefix=API_PREFIX)
 app.include_router(teacher_router, prefix=API_PREFIX)
 app.include_router(admin_router, prefix=API_PREFIX)
+relation_errors.register_exception_handlers(app)
+app.include_router(rel_public_router, prefix=REL_PREFIX)
+app.include_router(rel_catalogue_router, prefix=REL_PREFIX)
+app.include_router(rel_student_router, prefix=REL_PREFIX)
+app.include_router(rel_teacher_router, prefix=REL_PREFIX)

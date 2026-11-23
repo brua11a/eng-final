@@ -20,7 +20,7 @@ Należy również pozwolić studentowi na odczyt ocen, które otrzymał w ramach
 
 Prowadzący (nauczyciel) powinien mieć wgląd w grupy, które prowadzi. Powinny one też być widoczne na jego kalendarzu, rozróżnione od grup, w których uczestniczy w wypadku, w którym ten jest zarówno studentem jak i nauczycielem. Nauczyciel powinien też móc wyświetlić listę studentów znajdujących się w grupie zajęciowej, którą prowadzi, a także odczytać szczegóły na ich temat. Z założenia, student nie widzi informacji na temat innych studentów.
 
-Na koniec, prowadzący powinien być w stanie wystawić studentowi ocenę z grupy zajęciowej, którą prowadzi. Oceny przyjmują wartości ze skali 2.0-5.0, a każda inna wartość musi zostać odrzucona. Każdy typ zajęć w ramach przedmiotu (np. wykład, laboratorium) ma przypisaną wagę. Ocena z przedmiotu jest średnią ważoną ocen z poszczególnych typów zajęć, a średnia ze studiów jest średnią ocen z przedmiotów ważoną punktami ECTS (ang. *European Credit Transfer and Accumulation System*). Średnia jest widoczna dla prowadzącego w szczegółach studenta, natomiast student widzi oceny z poszczególnych grup zajęciowych.
+Na koniec, prowadzący powinien być w stanie wystawić studentowi ocenę z grupy zajęciowej, którą prowadzi. Oceny przyjmują wartości ze skali 2.0-5.0, a każda inna wartość musi zostać odrzucona. Każdy typ zajęć w ramach przedmiotu (np. wykład, laboratorium) ma przypisaną wagę. Ocena z przedmiotu jest średnią ważoną ocen z poszczególnych typów zajęć. Jeśli którakolwiek z tych ocen jest negatywna (niższa niż 3.0), ocena z przedmiotu wynosi 2.0, ponieważ niezaliczenia jednej formy zajęć nie może zrównoważyć dobra ocena z innej. Średnia ze studiów jest średnią ocen z przedmiotów ważoną punktami ECTS (ang. *European Credit Transfer and Accumulation System*). Średnia jest widoczna dla prowadzącego w szczegółach studenta, natomiast student widzi oceny z poszczególnych grup zajęciowych.
 
 Administrator powinien być w stanie z poziomu aplikacji klienckiej tworzyć wszystkie elementy struktury uczelni i powiązania między nimi, bez bezpośredniego dostępu do bazy danych. Jednocześnie, powinien być w stanie nadawać i odbierać role, aktywować i dezaktywować konta, a także je usuwać. Usunięcie konta odbiera jedynie możliwość logowania, a dane osoby i jej historia pozostają w bazie. Dodatkowo formularze do tworzenia elementów struktury uczelni powinny umożliwiać wybór powiązanych elementów z list, tak aby administrator nie musiał znać ich identyfikatorów "na pamięć" ani wyszukiwać ich osobno.
 
@@ -46,7 +46,7 @@ Tabela 3.1. Funkcje wspólne
 | --------------- | :-----: | :--------: | :-----------: | ------------------------------------------------------------------------------- |
 | Logowanie       |   tak   |    tak     |      tak      | tylko aktywne konta                                                             |
 | Katalog uczelni |   tak   |    tak     |      tak      |                                                                                 |
-| Odczyt opinii   |   tak   |    tak     |      tak      | opinie są anonimowe                                                             |
+| Odczyt opinii   |   tak   |    tak     |      tak      | autor opinii jest niewidoczny dla innych użytkowników (pseudonimizacja)         |
 | Plan zajęć      |   tak   |    tak     |      tak      | student i prowadzący widzą swój plan, administrator plan dowolnego prowadzącego |
 
 Tabela 3.2. Funkcje studenta i prowadzącego
@@ -115,7 +115,7 @@ Aktor: student.
 
 1. Student otwiera listę grup, do których jest zapisany, wraz z ich prowadzącymi.
 2. Dla wybranej grupy i prowadzącego podaje ocenę od 2 do 5 i opcjonalnie komentarz.
-3. System zapisuje opinię. Jest ona widoczna w katalogu przy grupie i przy prowadzącym, bez informacji o autorze.
+3. System zapisuje opinię. Jest ona widoczna w katalogu przy grupie i przy prowadzącym, bez informacji o autorze i z samą datą wystawienia.
 
 Sytuacje alternatywne:
 - Student wystawił już opinię o tej grupie i tym prowadzącym - system odrzuca kolejną.

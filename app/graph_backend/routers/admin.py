@@ -1,11 +1,9 @@
-from datetime import datetime, time
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from neo4j import AsyncSession
 from neo4j.exceptions import ConstraintError
 
 from app.graph_backend.database import get_session
-from app.graph_backend.auth import hash_password, require, roles_from_flags
+from app.graph_backend.auth import hash_password, require, revoke_tokens, roles_from_flags
 from app.graph_backend.query import new_id, one, run
 from app.schemas.academic_cycle import (
     AcademicCycleCreateRequest,
@@ -76,19 +74,10 @@ from app.schemas.subject import SubjectCreateResponse, SubjectUpsertRequest
 from app.schemas.teacher import TeacherCreateRequest, TeacherCreateResponse
 
 from app.graph_backend.errors import conflict, db_err, invalid, not_found
+from app.university_time import local_time, zoned_datetime
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _admin = require("Admin")
-
-
-def _zoned_time(value: time) -> str:
-    text = value.isoformat()
-    return text if value.tzinfo else f"{text}+01:00"
-
-
-def _zoned_datetime(value: datetime) -> str:
-    text = value.isoformat()
-    return text if value.tzinfo else f"{text}+01:00"
 
 
 def _idx_conflict(exc: ConstraintError, idx: str) -> HTTPException:
@@ -197,7 +186,7 @@ async def create_student(
             name=body.name,
             surname=body.surname,
             phone=body.phone,
-            joined=_zoned_datetime(body.joined),
+            joined=zoned_datetime(body.joined),
             photo=body.photo,
         )
     except ConstraintError as exc:
@@ -253,12 +242,14 @@ async def update_user(
     )
     if row is None:
         raise not_found("Account")
+    if not body.active:
+        revoke_tokens(idx)  # the Inactive label is checked only at login
     return UserAccountResponse(idx=row["idx"], active=body.active)
 
 
 _DEACTIVATE = """
 MATCH (u:User {idx: $idx})
-SET u:Inactive, u.deactivated_at = datetime()
+SET u:Inactive, u.deactivated_at = datetime({timezone: 'Europe/Warsaw'})
 RETURN u.idx AS idx
 """
 
@@ -341,7 +332,7 @@ async def add_role(
     elif role == "Student":
         if body.joined is None:
             raise invalid("joined is required")
-        params["joined"] = _zoned_datetime(body.joined)
+        params["joined"] = zoned_datetime(body.joined)
     row = await one(session, _ADD_ROLE[role], **params)
     if row is None:
         raise not_found("Person")
@@ -383,6 +374,7 @@ async def remove_role(
         raise not_found("Person")
     if not row["removed"]:
         raise conflict("Cannot remove last role")
+    revoke_tokens(idx)  # the old token still lists the removed role
     flags = {key: row[key] for key in ("admin", "teacher", "student")}
     flags[role.lower()] = False
     return RolesResponse(idx=row["idx"], email=row["email"], roles=list(roles_from_flags(**flags)))
@@ -456,7 +448,7 @@ async def create_group(
         MATCH (r:Room {id: $room_id})
         CREATE (g:Group {
           id: $id, weekday: $weekday, number: $number, pnp: $pnp,
-          capacity: $capacity, start_time: time($start_time), end_time: time($end_time)
+          capacity: $capacity, start_time: localtime($start_time), end_time: localtime($end_time)
         })-[:OF_TYPE]->(gt),
         (g)-[:IN_ROOM]->(r)
         RETURN g.id AS id, g.weekday AS weekday, gt.g_type AS g_type, g.number AS number,
@@ -472,8 +464,8 @@ async def create_group(
         number=body.number,
         pnp=body.pnp,
         capacity=body.capacity,
-        start_time=_zoned_time(body.start_time),
-        end_time=_zoned_time(body.end_time),
+        start_time=local_time(body.start_time),
+        end_time=local_time(body.end_time),
     )
     if row is None:
         raise not_found("Room, or group type of this subject in this cycle,")
@@ -663,8 +655,8 @@ async def start_registrations(
             "id": new_id(),
             "turn_number": turn.turn_number,
             "date": turn.date.isoformat(),
-            "start": _zoned_time(turn.start),
-            "end": _zoned_time(turn.end),
+            "start": local_time(turn.start),
+            "end": local_time(turn.end),
         }
         for turn in body.turns
     ]
@@ -696,7 +688,7 @@ async def start_registrations(
             UNWIND $turns AS turn
             CREATE (rt:RegistrationTurn {
               id: turn.id, turn_number: turn.turn_number, date: date(turn.date),
-              start_time: time(turn.start), end_time: time(turn.end)
+              start_time: localtime(turn.start), end_time: localtime(turn.end)
             })
             CREATE (reg)-[:HAS_TURN]->(rt)
             RETURN count(rt) AS created
@@ -900,6 +892,7 @@ async def remove_user_account(
     )
     if row is None:
         raise not_found("Account")
+    revoke_tokens(idx)
 
 
 @router.post("/programmes", response_model=ProgrammeCreateResponse, status_code=201)
@@ -1109,7 +1102,7 @@ WITH st, g, CASE
   ELSE "ok"
 END AS status
 FOREACH (_ IN CASE WHEN status = "ok" THEN [1] ELSE [] END |
-  CREATE (st)-[:REGISTERED_IN {registered_at: datetime()}]->(g)
+  CREATE (st)-[:REGISTERED_IN {registered_at: datetime({timezone: 'Europe/Warsaw'})}]->(g)
 )
 RETURN status
 """

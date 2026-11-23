@@ -44,8 +44,9 @@ RETURN reg.id AS id
 # - on the group: concurrent registrations to it wait, so the capacity check is exact.
 _REGISTER = """
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
-// Only during the student's turn.
-WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
+// Only during the student's turn. Turn times are wall-clock (LOCAL TIME) in the university's zone,
+// so the offset is resolved for the turn's date, including summer time.
+WHERE datetime({date: rt.date, time: rt.start_time, timezone: 'Europe/Warsaw'}) <= datetime() < datetime({date: rt.date, time: rt.end_time, timezone: 'Europe/Warsaw'})
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)
 WITH DISTINCT st, g, gt
 SET st.idx = st.idx
@@ -65,7 +66,7 @@ WITH st, g, CASE
 END AS status
 FOREACH (_ IN CASE WHEN status = "ok" THEN [1] ELSE [] END |
   MERGE (st)-[r:REGISTERED_IN]->(g)
-    ON CREATE SET r.registered_at = datetime()
+    ON CREATE SET r.registered_at = datetime({timezone: 'Europe/Warsaw'})
 )
 RETURN status
 """
@@ -78,7 +79,7 @@ _DEREGISTER = """
 MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})
 WITH r, EXISTS {
   MATCH (st)-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g)
-  WHERE datetime({date: rt.date, time: rt.start_time}) <= datetime() < datetime({date: rt.date, time: rt.end_time})
+  WHERE datetime({date: rt.date, time: rt.start_time, timezone: 'Europe/Warsaw'}) <= datetime() < datetime({date: rt.date, time: rt.end_time, timezone: 'Europe/Warsaw'})
 } AS in_turn
 FOREACH (_ IN CASE WHEN in_turn THEN [1] ELSE [] END | DELETE r)
 RETURN in_turn
@@ -437,7 +438,7 @@ async def create_opinion(
         SET st.idx = st.idx
         WITH st, g, t
         WHERE NOT EXISTS { (st)-[:WRITES]->(dup:Opinion)-[:ABOUT]->(g), (dup)-[:ABOUT_TEACHER]->(t) }
-        CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime()})
+        CREATE (o:Opinion {id: $id, grade: $grade, content: $content, submit: datetime({timezone: 'Europe/Warsaw'})})
         CREATE (st)-[:WRITES]->(o)
         CREATE (o)-[:ABOUT]->(g)
         CREATE (o)-[:ABOUT_TEACHER]->(t)

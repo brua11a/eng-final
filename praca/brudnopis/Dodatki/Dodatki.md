@@ -1,6 +1,7 @@
 zrobie pod koniec
 Instrukcja uruchomienia - instaluj docker, docker compose up --build
-poza tym trzeba uruchomic skrypt robiący certy i zainstalowac mkcert
+przed pierwszym uruchomieniem: zainstalować mkcert, wykonać `mkcert -install`, uruchomić `certs.sh` (osobna para kluczy dla neo4j, nginx, app, postgres); po zakończeniu pracy `mkcert -uninstall`
+inicjalizację bazy wykonuje serwis `init` (`init_db.py`), nie trzeba niczego uruchamiać ręcznie
 
 są defaultowe credki by sie pobawic
 

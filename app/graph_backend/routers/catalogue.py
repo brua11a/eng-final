@@ -94,8 +94,8 @@ RETURN
       MATCH (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),
             (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)
       WITH reg,
-           min(datetime({date: rt.date, time: rt.start_time})) AS opens,
-           max(datetime({date: rt.date, time: rt.end_time})) AS closes
+           min(datetime({date: rt.date, time: rt.start_time, timezone: 'Europe/Warsaw'})) AS opens,
+           max(datetime({date: rt.date, time: rt.end_time, timezone: 'Europe/Warsaw'})) AS closes
       WHERE opens <= datetime() < closes
     }
   }] AS cycles
@@ -405,7 +405,9 @@ async def teacher_groups_list(
     return MyTeachingGroupsResponse(groups=await teacher_groups(session, idx))
 
 
-# Opinions are anonymous: the author (WRITES) is never returned.
+# Opinions are pseudonymous: the author (WRITES) stays in the graph, as it enforces one opinion per
+# group and teacher, but is never read here. Only the day of submission is returned: with the exact
+# time a teacher could match an opinion to a student of a small group.
 _OPINIONS = """
 MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
 WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
@@ -416,7 +418,7 @@ RETURN
   o.id AS id,
   o.grade AS grade,
   o.content AS content,
-  o.submit AS submit,
+  date(o.submit) AS submit,
   g.id AS group_id,
   su.code AS course_code,
   su.name AS course_name,

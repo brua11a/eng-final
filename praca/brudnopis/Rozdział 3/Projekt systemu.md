@@ -67,6 +67,8 @@ Każda z etykiet osób ma zdefiniowane właściwości, z których większość j
 
 Aby nie było możliwe utworzenie np. węzła z etykietą `Student`, który nie ma etykiety `Person`, wykorzystano mechanizm etykiet implikowanych. Każda z etykiet ról - `Student`, `Teacher` i `Admin` - implikuje etykietę `Person`, zatem nie da się nadać żadnej z nich bez jednoczesnego nadania etykiety `Person` i uzupełnienia jej wymaganych właściwości. Tak samo etykiety `User` i `Inactive` implikują etykietę `Person`.
 
+Z logicznego punktu widzenia etykieta `Inactive` powinna implikować etykietę `User`, ponieważ dezaktywować można wyłącznie konto. Typ grafu na to nie pozwala: etykieta posiadająca własną definicję, taka jak `User`, nie może być jednocześnie etykietą implikowaną (5.3.1). Regułę tę egzekwuje API – dezaktywacja dotyczy wyłącznie węzłów z etykietą `User`, a usunięcie konta zdejmuje etykiety `User` i `Inactive` jednocześnie. Baza danych sama w sobie dopuszcza jednak węzeł z etykietami `Person` i `Inactive` bez etykiety `User`.
+
 ![[Pasted image 20261110203108.png]]
 
 *Przykładowa próba utworzenia węzła z etykietą `Student` bez właściwości wymaganych przez etykietę `Person`*
@@ -135,15 +137,17 @@ Zajęcia odbywające się na uczelni są podzielone na grupy zajęciowe. Każda 
 
 Grupy zajęciowe są tym, co rzeczywiście interesuje studenta – wszystkie opisane wcześniej elementy istnieją po to, by te grupy zorganizować. Grupę opisuje etykieta `Group`. Jej właściwości to identyfikator, numer grupy w obrębie formy zajęć (`number`) oraz limit miejsc (`capacity`). Na potrzeby organizacji zajęć grupa ma też wyznaczony dzień tygodnia (`weekday`), godzinę rozpoczęcia i zakończenia (`start_time`, `end_time`) oraz tygodnie, w których się odbywa (`pnp`): parzyste (P), nieparzyste (NP) albo każdy tydzień (ALL).
 
+Godziny zajęć są zapisane jako czas lokalny, bez przesunięcia strefy czasowej. Zajęcia zaplanowane na 13:15 odbywają się o 13:15 zarówno zimą, jak i latem. Godzina ze stałym przesunięciem (np. 13:15+01:00) po zmianie czasu na letni odpowiadałaby 14:15 czasu polskiego. Przesunięcie jest wyznaczane dopiero wtedy, gdy godzinę łączy się z konkretną datą, w strefie czasowej uczelni (`Europe/Warsaw`). Właściwości opisujące konkretną chwilę, np. moment zapisu czy wystawienia opinii, pozostają datą i czasem ze strefą.
+
 Identyfikator nie jest konieczny do wskazania grupy: grupę jednoznacznie wyznacza forma zajęć, do której należy, i jej numer. Ten naturalny klucz obejmuje jednak krawędź (`OF_TYPE`), a typ grafu pozwala definiować klucze i ograniczenia unikalności wyłącznie na właściwościach jednego węzła. Unikalności numeru grupy w obrębie formy zajęć nie da się więc wymusić w schemacie. Dlatego grupa otrzymała własny identyfikator, który jest kluczem i pozwala odwołać się do niej bezpośrednio, np. przy zapisie na zajęcia lub wystawianiu opinii.
 
 Grupa łączy się z formą zajęć krawędzią `OF_TYPE`, z salą (`Room`) krawędzią `IN_ROOM`, z prowadzącym lub prowadzącymi krawędzią `TEACHES`, a ze studentami do niej zapisanymi krawędzią `REGISTERED_IN`. Prowadzi do niej także krawędź `OPENS` od zapisów, w których jest dostępna (4.3.4), oraz krawędź `ABOUT` od opinii, które jej dotyczą (4.3.5).
 
 Sala, opisana etykietą `Room`, jest liściem grafu – łączy się wyłącznie z grupami zajęciowymi. Zawiera nazwę budynku (np. „A1”) oraz numer sali (np. „305”). Para budynek i numer sali jest unikalna. Bardziej znormalizowane byłoby wydzielenie budynków do osobnej etykiety `Building`, od której wychodziłyby krawędzie do sal. Dodaje to jednak dodatkowy przeskok w każdym zapytaniu o salę, a budynek nie ma w tym systemie żadnych własnych danych ani powiązań, dlatego uznano to za niepotrzebne. Model nie zabrania przypisania dwóch grup do tej samej sali w tym samym czasie – wykrywanie takich kolizji jest regułą, której typ grafu nie wyraża (zob. 4.3.7).
 
-Krawędź `REGISTERED_IN` pomiędzy studentem a grupą przechowuje moment zapisu (`registered_at`, data i czas ze strefą) oraz ocenę (`grade`), wystawianą później przez prowadzącego (3.2). Do czasu wystawienia ocena jest pusta. Ocena mogłaby być osobną krawędzią, ale prowadziłaby dokładnie tą samą drogą co `REGISTERED_IN`, a zapis na grupę i tak jest warunkiem wystawienia oceny. Dlatego zrezygnowano z osobnej krawędzi. Oceny końcowej z przedmiotu nie zapisuje się nigdzie – jest wyznaczana z ocen z grup i wag form zajęć, więc nie może stać się niespójna z ocenami cząstkowymi.
+Krawędź `REGISTERED_IN` pomiędzy studentem a grupą przechowuje moment zapisu (`registered_at`, data i czas ze strefą) oraz ocenę (`grade`), wystawianą później przez prowadzącego (3.2). Do czasu wystawienia ocena jest pusta. Ocena mogłaby być osobną krawędzią, ale prowadziłaby dokładnie tą samą drogą co `REGISTERED_IN`, a zapis na grupę i tak jest warunkiem wystawienia oceny. Dlatego zrezygnowano z osobnej krawędzi. Ocena końcowa z przedmiotu nie jest przechowywana w grafie. Wyznacza się ją przy odczycie z ocen z grup i wag form zajęć, dzięki czemu zawsze odpowiada bieżącym ocenom cząstkowym. Średnia ważona obejmuje wyłącznie oceny pozytywne: ocena niższa niż 3.0 z którejkolwiek grupy oznacza ocenę 2.0 z przedmiotu (3.2).
 
-Ograniczeniem takiego rozwiązania jest brak historii: poprawienie oceny nadpisuje poprzednią wartość. Gdyby historia ocen była potrzebna, ocenę należałoby zamienić w osobny węzeł, podobnie jak opinię (4.3.5).
+Ograniczeniem takiego rozwiązania jest brak historii: poprawienie oceny nadpisuje poprzednią wartość. Gdyby historia ocen była potrzebna, ocenę należałoby zamienić w osobny węzeł, podobnie jak opinię (4.3.5). Przechowywanie oceny na krawędzi jest świadomym wyborem. Na potrzeby prototypu wystarcza ostatnia wystawiona ocena. Poprawa przedmiotu w kolejnym cyklu tworzy nową krawędź do innej grupy, więc nadpisanie dotyczy jedynie zmiany oceny w obrębie tej samej grupy. W grafie zamiana krawędzi na węzeł jest przy tym tanią refaktoryzacją, którą wskazano jako kierunek dalszego rozwoju.
 
 | Etykieta / krawędź | Właściwość | Typ | Wymagana | Ograniczenia | Opis |
 |---|---|---|---|---|---|
@@ -151,8 +155,8 @@ Ograniczeniem takiego rozwiązania jest brak historii: poprawienie oceny nadpisu
 | | `number` | liczba całkowita | tak | – | numer grupy w obrębie formy zajęć |
 | | `capacity` | liczba całkowita | tak | – | limit miejsc |
 | | `weekday` | liczba całkowita | tak | – | dzień tygodnia |
-| | `start_time` | czas ze strefą | tak | – | godzina rozpoczęcia |
-| | `end_time` | czas ze strefą | tak | – | godzina zakończenia |
+| | `start_time` | czas lokalny | tak | – | godzina rozpoczęcia |
+| | `end_time` | czas lokalny | tak | – | godzina zakończenia |
 | | `pnp` | tekst | tak | – | tygodnie: P, NP lub ALL |
 | `Room` | `id` | tekst | tak | klucz | identyfikator sali |
 | | `building` | tekst | tak | unikalny razem z `room_num` | budynek |
@@ -171,7 +175,7 @@ Zapisy na zajęcia odbywają się osobno dla każdego wydziału i każdego cyklu
 
 Zapisy nie obejmują automatycznie wszystkich grup danego cyklu. Grupy dostępne w danych zapisach wskazuje się jawnie krawędzią `OPENS`. Dzięki temu ta sama grupa może być dostępna w kilku zapisach, np. w głównych i w późniejszych zapisach korekcyjnych, a grupy, na które studenci nie zapisują się samodzielnie, mogą w ogóle nie być udostępniane.
 
-Zapisy dzieli się na tury, opisane etykietą `RegistrationTurn` i połączone z zapisami krawędzią `HAS_TURN`. Tura ma numer (`turn_number`), datę (`date`) oraz godzinę rozpoczęcia i zakończenia (`start_time`, `end_time`). Student jest przydzielany do tury krawędzią `ASSIGNED`, przy czym w ramach jednych zapisów może należeć do najwyżej jednej tury. Zapisywać się na grupy może tylko w czasie trwania swojej tury i tylko na grupy otwarte w zapisach, do których ta tura należy.
+Zapisy dzieli się na tury, opisane etykietą `RegistrationTurn` i połączone z zapisami krawędzią `HAS_TURN`. Tura ma numer (`turn_number`), datę (`date`) oraz godzinę rozpoczęcia i zakończenia (`start_time`, `end_time`), zapisaną jako czas lokalny, podobnie jak godziny zajęć (4.3.3). Student jest przydzielany do tury krawędzią `ASSIGNED`, przy czym w ramach jednych zapisów może należeć do najwyżej jednej tury. Zapisywać się na grupy może tylko w czasie trwania swojej tury i tylko na grupy otwarte w zapisach, do których ta tura należy.
 
 Tura jest osobnym węzłem, ponieważ jedna tura obejmuje wielu studentów, a jeden student uczestniczy w wielu zapisach w kolejnych cyklach. Przesunięcie godzin tury jest więc zmianą jednego węzła, a nie danych wszystkich przydzielonych do niej studentów. Z tego samego powodu daty tur nie są zapisane w zapisach (`Registration`): zapisy mogą mieć dowolną liczbę tur o różnych terminach.
 
@@ -183,8 +187,8 @@ Tura jest osobnym węzłem, ponieważ jedna tura obejmuje wielu studentów, a je
 | `RegistrationTurn` | `id`          | tekst            | tak      | klucz        | identyfikator tury    |
 |                    | `turn_number` | liczba całkowita | tak      | –            | numer tury            |
 |                    | `date`        | data             | tak      | –            | dzień tury            |
-|                    | `start_time`  | czas ze strefą   | tak      | –            | początek tury         |
-|                    | `end_time`    | czas ze strefą   | tak      | –            | koniec tury           |
+|                    | `start_time`  | czas lokalny     | tak      | –            | początek tury         |
+|                    | `end_time`    | czas lokalny     | tak      | –            | koniec tury           |
 *Właściwości etykiet związanych z zapisami*
 
 Sam zapis studenta na grupę jest krawędzią `REGISTERED_IN`, opisaną w 4.3.3. Warunki zapisu – limit miejsc i najwyżej jedna grupa danej formy zajęć w ramach instancji przedmiotu – oraz odporność na wyścigi przy jednoczesnych zapisach wynikają z wymagań (3.2, 3.3). Model danych ich nie wymusza; spełniają je operacje zapisu, opisane w 5.5.10.
@@ -194,6 +198,8 @@ Sam zapis studenta na grupę jest krawędzią `REGISTERED_IN`, opisaną w 4.3.3.
 Studenci mogą oceniać zajęcia, w których uczestniczą i prowadzących tych grup. Opinię opisuje etykieta `Opinion`. Przechowuje identyfikator, ocenę liczbową (`grade`), opcjonalną treść (`content`) oraz moment wystawienia (`submit`). Opinia jest połączona z trzema węzłami: z autorem krawędzią `WRITES` (od studenta do opinii), z grupą, której dotyczy krawędzią `ABOUT` oraz z ocenianym prowadzącym krawędzią `ABOUT_TEACHER`.
 
 Reguły wystawiania opinii określono w 3.4 i 3.5. Ponieważ opinia dotyczy pary grupa i prowadzący, a grupę może prowadzić kilka osób, student może ocenić każdą z nich osobno.
+
+Krawędź `WRITES` jest potrzebna do egzekwowania reguły jednej opinii na parę grupa i prowadzący, dlatego autor opinii pozostaje zapisany w grafie. Inni użytkownicy go nie widzą, ale system może go ustalić. Opinie są więc pseudonimowe. Pełna anonimizacja wymagałaby usunięcia powiązania z autorem, co uniemożliwiłoby wykrywanie powtórzonych opinii.
 
 | Etykieta | Właściwość | Typ | Wymagana | Ograniczenia | Opis                  |
 | --------- | ---------- | ------------------------- | -------- | ------------ | --------------------- |
@@ -252,7 +258,7 @@ Wniosek z tego taki, że dla dużych, ustrukturyzowanych baz grafowych, rozwlek�
 Bazy grafowe domyślnie nie wymuszają schematu, a w tym projekcie dane muszą mieć ściśle określoną strukturę. Dlatego zdefiniowano typ grafu (ang. *graph type*), który wymusza:
 - etykiety implikowane (opisane w 4.3.1),
 - podanie i istnienie właściwości (`NOT NULL`),
-- typy danych właściwości (m.in. tekst, liczby całkowite i zmiennoprzecinkowe, daty, godziny i znaczniki czasu ze strefą czasową),
+- typy danych właściwości (m.in. tekst, liczby całkowite i zmiennoprzecinkowe, daty, godziny lokalne i znaczniki czasu ze strefą czasową),
 - klucze i ograniczenia unikalności (również złożone, np. budynek i numer sali, rok i semestr cyklu akademickiego),
 - typy węzłów na obu końcach każdego typu krawędzi (np. krawędź `TEACHES` może prowadzić tylko od prowadzącego do grupy).
 
@@ -278,9 +284,11 @@ Po poprawnym zalogowaniu API wydaje token JWT (ang. *JSON Web Token*) [CYTOWANIE
 
 Wybrano JWT, ponieważ jednym z celów pracy jest porównanie wydajności backendu grafowego i relacyjnego. Sprawdzanie tożsamości w bazie przy każdym żądaniu dodawałoby do każdego pomiaru stały narzut, niezwiązany z właściwą operacją, który zaciemniałby różnice między backendami. Przy JWT każde żądanie wykonuje wyłącznie zapytania potrzebne do realizacji samej operacji.
 
-Ceną bezstanowości jest to, że zmiany ról i dezaktywacja konta zaczynają obowiązywać dopiero przy kolejnym logowaniu - wcześniej wydany token pozostaje ważny do wygaśnięcia.
+Ceną bezstanowości jest to, że token zawiera role z chwili logowania i pozostaje ważny do wygaśnięcia, nawet jeśli w międzyczasie zmieniono role osoby lub dezaktywowano jej konto. W przypadku ról studenta i prowadzącego skutki są ograniczone. Kwerendy tych modułów zaczynają się od węzła osoby z etykietą roli, np. `(st:Student {idx: ...})`, więc po odebraniu etykiety nie dopasowują niczego i żądanie zostaje odrzucone. Funkcje administracyjne nie przechodzą po żadnej ścieżce zaczynającej się od administratora. Bez dodatkowego mechanizmu odebranie roli `Admin` zaczęłoby więc obowiązywać dopiero po wygaśnięciu tokenu, czyli nawet po 12 godzinach.
 
-Gdyby ten narzut nie miał znaczenia, można by rozważyć rozwiązanie, w którym token JWT przechowuje jedynie identyfikator osoby i adres e-mail, a role i aktywność konta są sprawdzane na początku każdej kwerendy. Dzięki temu zmiany wchodziłyby w życie od razu. Odczyt etykiety z węzła jest tani [CYTOWANIE], a więc jest to również jak najbardziej poprawne rozwiązanie.
+Z tego powodu API samo unieważnia tokeny, bez odczytu z bazy danych. Token zawiera moment wydania, a API przechowuje w pamięci moment ostatniej zmiany uprawnień każdej osoby: odebrania roli, dezaktywacji lub usunięcia konta. Tokeny wydane przed tym momentem są odrzucane, więc osoba musi zalogować się ponownie i otrzymuje token z aktualnymi rolami. Lista unieważnień znika przy ponownym uruchomieniu API. Dlatego odrzucane są również wszystkie tokeny wydane przed startem procesu, a restart wylogowuje wszystkich użytkowników. Rozwiązanie zakłada działanie jednego procesu API, co w prototypie jest spełnione.
+
+Alternatywą byłoby przechowywanie w tokenie jedynie identyfikatora osoby i adresu e-mail oraz sprawdzanie ról i aktywności konta na początku każdej kwerendy. Odczyt etykiety z węzła jest tani [CYTOWANIE], jednak dodawałby zapytanie do każdego żądania, a więc stały narzut do pomiarów porównujących oba backendy.
 
 W rzeczywistym wdrożeniu uczelnianym naturalne byłoby oddanie logowania uczelnianemu systemowi pojedynczego logowania (SSO, ang. *Single Sign-On*), co jednak wykracza poza zakres prototypu.
 
@@ -354,7 +362,7 @@ Punkty końcowe podzielono na moduły odpowiadające tabelom macierzy uprawnień
 | admin | `Admin` | tworzenie i modyfikacja danych: osób, kont, ról, oferty dydaktycznej, sal, cykli i zapisów; zapis studenta do grupy z pominięciem tur |
 *Moduły interfejsu API*
 
-Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: wymaga zalogowania, ponieważ zawiera dane osobowe prowadzących i opinie. Opinie zwracane są w nim bez informacji o autorze, ponieważ zgodnie z wymaganiami (3.4) są anonimowe.
+Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: wymaga zalogowania, ponieważ zawiera dane osobowe prowadzących i opinie. Opinie zwracane są w nim bez informacji o autorze (3.4) i z samą datą wystawienia. Dokładny czas wystawienia w połączeniu z listą studentów grupy pozwalałby prowadzącemu typować autora opinii w małych grupach.
 
 4.5.2 Konwencje
 

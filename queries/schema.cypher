@@ -44,8 +44,8 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		number :: INTEGER NOT NULL,
 		pnp :: STRING NOT NULL,
 		capacity :: INTEGER NOT NULL,
-		start_time :: ZONED TIME NOT NULL,
-		end_time :: ZONED TIME NOT NULL
+		start_time :: LOCAL TIME NOT NULL,
+		end_time :: LOCAL TIME NOT NULL
 	}) REQUIRE g.id IS KEY,
 
 	(gt:GroupType => {
@@ -108,8 +108,8 @@ CYPHER 25 ALTER CURRENT GRAPH TYPE SET {
 		id :: STRING,
 		turn_number :: INTEGER NOT NULL,
 		date :: DATE NOT NULL,
-		start_time :: ZONED TIME NOT NULL,
-		end_time :: ZONED TIME NOT NULL
+		start_time :: LOCAL TIME NOT NULL,
+		end_time :: LOCAL TIME NOT NULL
 	}) REQUIRE rt.id IS KEY,
 
 	(st)-[:WRITES => {}]->(o),

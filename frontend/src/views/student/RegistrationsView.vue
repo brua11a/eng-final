@@ -29,6 +29,8 @@ const onListScreen = computed(() => !selected.value)
 
 // The server accepts (de)registration only during the student's turn; the buttons follow it.
 // `now` ticks so a turn that starts while the page is open enables them without a reload.
+// Turn hours are wall-clock time in Warsaw (no offset), read here in the browser's zone;
+// the server decides anyway, so a browser in another zone only shows the buttons at the wrong time.
 const now = ref(Date.now())
 let clock = null
 

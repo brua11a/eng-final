@@ -1,4 +1,5 @@
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -49,11 +50,31 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+# Token revocation, kept in the API's memory, without any lookup in the database.
+# A token stays valid until it expires, so changing a person's roles or deactivating or deleting
+# their account records the moment here, and tokens issued to that person before it are refused.
+# The list is lost on restart, so tokens issued before the process started are refused as well:
+# a restart logs everyone out instead of reviving revoked tokens. It assumes a single API process.
+_STARTED = time.time()
+_revoked_before: dict[str, float] = {}
+
+
+def revoke_tokens(idx: str) -> None:
+    """Refuse every token issued to this person until now; they must log in again."""
+    _revoked_before[idx] = time.time()
+
+
+def _revoked(idx: str | None, issued: float) -> bool:
+    return issued < _STARTED or (idx is not None and issued < _revoked_before.get(idx, 0.0))
+
+
 def create_token(caller: Caller) -> str:
     payload = {
         "sub": caller.email,
         "idx": caller.idx,
         "roles": list(caller.roles),
+        # Fractional seconds: a login right after a revocation must not count as issued before it.
+        "iat": time.time(),
         "exp": datetime.now(timezone.utc) + timedelta(hours=12),
     }
     return jwt.encode(payload, _secret, algorithm=_algorithm)
@@ -64,8 +85,10 @@ async def get_caller(
 ) -> Caller:
     try:
         payload = jwt.decode(
-            creds.credentials, _secret, algorithms=[_algorithm], options={"require": ["sub", "exp"]}
+            creds.credentials, _secret, algorithms=[_algorithm], options={"require": ["sub", "iat", "exp"]}
         )
+        if _revoked(payload.get("idx"), float(payload["iat"])):
+            raise unauthorized("Token revoked")
         raw = payload.get("roles")
         if not isinstance(raw, list) or any(role not in ("Student", "Teacher", "Admin") for role in raw):
             raise unauthorized("Invalid token")

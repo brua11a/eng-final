@@ -61,13 +61,14 @@ async def setup():
         }
         await s.run("""
             CREATE (reg:Registration {id: $reg, name: 'TEST', reg_type: 'TEST'})
-            CREATE (reg)-[:HAS_TURN]->(:RegistrationTurn {id: $turn, turn_number: 1, date: date(),
-                start_time: time() - duration('PT20M'), end_time: time() + duration('PT20M')})
+            CREATE (reg)-[:HAS_TURN]->(:RegistrationTurn {id: $turn, turn_number: 1, date: date({timezone: 'Europe/Warsaw'}),
+                start_time: localtime({timezone: 'Europe/Warsaw'}) - duration('PT20M'),
+                end_time: localtime({timezone: 'Europe/Warsaw'}) + duration('PT20M')})
             WITH reg
             UNWIND $groups AS gr
             MATCH (gt:GroupType {id: gr.type})
             CREATE (reg)-[:OPENS]->(g:Group {id: gr.id, weekday: 1, number: 99, pnp: 'ALL',
-                capacity: gr.capacity, start_time: time('08:00+01:00'), end_time: time('09:00+01:00')})
+                capacity: gr.capacity, start_time: localtime('08:00'), end_time: localtime('09:00')})
             CREATE (g)-[:OF_TYPE]->(gt)""",
             reg=reg, turn=turn,
             groups=[{"id": g, "type": t, "capacity": c} for g, t, c in groups.values()])
@@ -82,10 +83,10 @@ async def setup():
                 degree: 'mgr', working_since: date(), joined: datetime()})""", idx=person)
     secret = os.environ["JWT_SECRET"]
     tokens = {idx: jwt.encode({"sub": f"{idx}@test", "idx": idx, "roles": ["Student"],
-                               "exp": int(time.time()) + 600}, secret, algorithm="HS256")
+                               "iat": time.time(), "exp": int(time.time()) + 600}, secret, algorithm="HS256")
               for idx in students}
     admin = jwt.encode({"sub": "admin@test", "idx": TAG + "admin", "roles": ["Admin"],
-                        "exp": int(time.time()) + 600}, secret, algorithm="HS256")
+                        "iat": time.time(), "exp": int(time.time()) + 600}, secret, algorithm="HS256")
     return {"reg": reg, "turn": turn, "groups": {k: v[0] for k, v in groups.items()},
             "students": students, "tokens": tokens, "person": person, "admin": admin}
 
