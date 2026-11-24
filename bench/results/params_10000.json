@@ -1,0 +1,175 @@
+{
+ "params": {
+  "teacher": "T040049",
+  "group_id": "00076e12-7855-5332-9b1e-05d9307e7291",
+  "graded_student": "307504",
+  "grade": 4.5,
+  "group_size": 16,
+  "student": "300000",
+  "email": "300000@student.example.edu",
+  "registration": "40c6246b-4e52-5ed5-9e0c-83071f537d4e",
+  "subject": "W01P1-S70",
+  "opinion_teacher": "T010042",
+  "opinions": 14
+ },
+ "runs": 50,
+ "warmup": 10,
+ "queries": [
+  {
+   "endpoint": "POST /login",
+   "backend": "neo4j",
+   "query_no": 0,
+   "query": "\nMATCH (u:User {email: $email})\nRETURN\n  u.passwd_hash AS passwd_hash,\n  u.email AS email,\n  u.idx AS idx,\n  u:Inactive AS inactive,\n  u:Admin AS admin,\n  u:Teacher AS teacher,\n  u:Student AS student\n"
+  },
+  {
+   "endpoint": "POST /login",
+   "backend": "postgres",
+   "query_no": 0,
+   "query": "\nSELECT\n  u.passwd_hash,\n  u.email,\n  u.idx,\n  i.idx IS NOT NULL AS inactive,\n  a.idx IS NOT NULL AS admin,\n  t.idx IS NOT NULL AS teacher,\n  s.idx IS NOT NULL AS student\nFROM app_user u\nLEFT JOIN inactive i ON i.idx = u.idx\nLEFT JOIN admin a ON a.idx = u.idx\nLEFT JOIN teacher t ON t.idx = u.idx\nLEFT JOIN student s ON s.idx = u.idx\nWHERE u.email = %(email)s\n"
+  },
+  {
+   "endpoint": "GET /subjects",
+   "backend": "neo4j",
+   "query_no": 0,
+   "query": "\nMATCH (ac:AcademicCycle)\nRETURN ac.id AS id, ac.year AS year, ac.season AS season\n"
+  },
+  {
+   "endpoint": "GET /subjects",
+   "backend": "neo4j",
+   "query_no": 1,
+   "query": "\nMATCH (su:Subject)\nWHERE ($name IS NULL OR toLower(su.name) CONTAINS toLower($name))\n  AND ($code IS NULL OR toLower(su.code) CONTAINS toLower($code))\nRETURN\n  su.code AS code,\n  su.name AS name,\n  su.ects AS ects,\n  COLLECT {\n    MATCH (su)<-[:INCLUDES]-(:CurriculumTerm)<-[:HAS_TERM]-(:Curriculum)<-[:HAS_CURRICULUM]-(:Programme)-[:OFFERED_BY]->(fa:Faculty)\n    RETURN DISTINCT fa.name\n  } AS faculties,\n  [cycle_id IN $cycle_ids | {\n    offered: EXISTS {\n      (su)<-[:INCLUDES]-(:CurriculumTerm)-[:TAUGHT_IN]->(:AcademicCycle {id: cycle_id})\n    },\n    group_count: COUNT {\n      (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),\n      (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)\n    },\n    // Registration has no dates of its own: its period runs from the start of its first turn\n    // to the end of its last one.\n    registration_open: EXISTS {\n      MATCH (su)<-[:INSTANCE_OF]-(si:SubjectInstance)-[:OFFERED_IN]->(:AcademicCycle {id: cycle_id}),\n            (si)-[:HAS_TYPE]->(:GroupType)<-[:OF_TYPE]-(:Group)<-[:OPENS]-(reg:Registration)-[:HAS_TURN]->(rt:RegistrationTurn)\n      WITH reg,\n           min(datetime({date: rt.date, time: rt.start_time, timezone: 'Europe/Warsaw'})) AS opens,\n           max(datetime({date: rt.date, time: rt.end_time, timezone: 'Europe/Warsaw'})) AS closes\n      WHERE opens <= datetime() < closes\n    }\n  }] AS cycles\nORDER BY su.name\n"
+  },
+  {
+   "endpoint": "GET /subjects",
+   "backend": "postgres",
+   "query_no": 0,
+   "query": "SELECT id, year, season FROM academic_cycle"
+  },
+  {
+   "endpoint": "GET /subjects",
+   "backend": "postgres",
+   "query_no": 1,
+   "query": "\nSELECT\n  su.code,\n  su.name,\n  se.ects,\n  ARRAY(\n    SELECT DISTINCT fa.name\n    FROM term_subject ts\n    JOIN curriculum_term ct ON ct.id = ts.term_id\n    JOIN curriculum c ON c.id = ct.curriculum_id\n    JOIN programme p ON p.id = c.programme_id\n    JOIN faculty fa ON fa.id = p.faculty_id\n    WHERE ts.subject_code = su.code\n  ) AS faculties,\n  ARRAY(\n    SELECT json_build_object(\n      'offered', EXISTS (\n        SELECT 1\n        FROM term_subject ts\n        JOIN taught_in ti ON ti.term_id = ts.term_id\n        WHERE ts.subject_code = su.code AND ti.cycle_id = cyc.id\n      ),\n      'group_count', (\n        SELECT count(*)\n        FROM group_type gt\n        JOIN class_group g ON g.group_type_id = gt.id\n        WHERE gt.subject_code = su.code AND gt.cycle_id = cyc.id\n      ),\n      -- A registration has no dates of its own: its period runs from the start of its first\n      -- turn to the end of its last one.\n      'registration_open', EXISTS (\n        SELECT 1\n        FROM group_type gt\n        JOIN class_group g ON g.group_type_id = gt.id\n        JOIN opens o ON o.group_id = g.id\n        JOIN registration_turn rt ON rt.registration_id = o.registration_id\n        WHERE gt.subject_code = su.code AND gt.cycle_id = cyc.id\n        GROUP BY o.registration_id\n        HAVING min((rt.date + rt.start_time) AT TIME ZONE 'Europe/Warsaw') <= now()\n           AND now() < max((rt.date + rt.end_time) AT TIME ZONE 'Europe/Warsaw')\n      )\n    )\n    FROM unnest(%(cycle_ids)s::text[]) WITH ORDINALITY AS cyc (id, ord)\n    ORDER BY cyc.ord\n  ) AS cycles\nFROM subject su\nLEFT JOIN subject_ects se ON se.subject_code = su.code\nWHERE (%(name)s::text IS NULL OR strpos(lower(su.name), lower(%(name)s)) > 0)\n  AND (%(code)s::text IS NULL OR strpos(lower(su.code), lower(%(code)s)) > 0)\nORDER BY su.name COLLATE \"C\"\n"
+  },
+  {
+   "endpoint": "GET /opinions",
+   "backend": "neo4j",
+   "query_no": 0,
+   "query": "\nMATCH (t:Teacher {idx: $teacher_idx})<-[:ABOUT_TEACHER]-(o:Opinion)-[:ABOUT]->(g:Group)\nWHERE $group_id IS NULL OR g.id = $group_id\n\nMATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)\nMATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)\nRETURN\n  o.id AS id,\n  o.grade AS grade,\n  o.content AS content,\n  date(o.submit) AS submit,\n  g.id AS group_id,\n  su.code AS course_code,\n  su.name AS course_name,\n  gt.g_type AS g_type,\n  ac.year + \" \" + ac.season AS cycle,\n  t.idx AS teacher_idx,\n  t.name + \" \" + t.surname AS teacher\nORDER BY o.submit DESC\n"
+  },
+  {
+   "endpoint": "GET /opinions",
+   "backend": "postgres",
+   "query_no": 0,
+   "query": "\nSELECT\n  o.id,\n  o.grade::float8 AS grade,\n  oc.content,\n  -- Only the day: with the exact time a teacher could match an opinion to a student of a small group.\n  (o.submit AT TIME ZONE 'Europe/Warsaw')::date AS submit,\n  g.id AS group_id,\n  su.code AS course_code,\n  su.name AS course_name,\n  gt.g_type,\n  ac.year || ' ' || ac.season AS cycle,\n  tp.idx AS teacher_idx,\n  tp.name || ' ' || tp.surname AS teacher\nFROM opinion o\nLEFT JOIN opinion_content oc ON oc.opinion_id = o.id\nJOIN class_group g ON g.id = o.group_id\nJOIN person tp ON tp.idx = o.teacher_idx\nJOIN group_type gt ON gt.id = g.group_type_id\nJOIN subject su ON su.code = gt.subject_code\nJOIN academic_cycle ac ON ac.id = gt.cycle_id\nWHERE (%(teacher_idx)s::text IS NULL OR o.teacher_idx = %(teacher_idx)s)\n  AND (%(group_id)s::text IS NULL OR o.group_id = %(group_id)s)\nORDER BY o.submit DESC\n"
+  },
+  {
+   "endpoint": "GET /me/registrations/{id}/groups",
+   "backend": "neo4j",
+   "query_no": 0,
+   "query": "\nMATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(:RegistrationTurn)<-[:HAS_TURN]-(reg:Registration {id: $registration_id})\nRETURN reg.id AS id\n"
+  },
+  {
+   "endpoint": "GET /me/registrations/{id}/groups",
+   "backend": "neo4j",
+   "query_no": 1,
+   "query": "\n        MATCH (st:Student {idx: $student_idx})\n        MATCH (reg:Registration {id: $registration_id})-[:OPENS]->(g:Group)\n        MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(:SubjectInstance)-[:INSTANCE_OF]->(:Subject {code: $subject_code})\n        OPTIONAL MATCH (g)-[:IN_ROOM]->(r:Room)\n        OPTIONAL MATCH (t:Teacher)-[:TEACHES]->(g)\n        OPTIONAL MATCH (st)-[mine:REGISTERED_IN]->(g)\n        RETURN\n          g.id AS id,\n          gt.g_type AS g_type,\n          g.number AS number,\n          g.weekday AS weekday,\n          g.start_time AS start,\n          g.end_time AS end,\n          g.capacity AS capacity,\n          size([(g)<-[:REGISTERED_IN]-() | 1]) AS filled,\n          r.building + \" \" + r.room_num AS room,\n          t.name + \" \" + t.surname AS teacher,\n          mine IS NOT NULL AS registered\n        ORDER BY gt.g_type, g.number\n        "
+  },
+  {
+   "endpoint": "GET /me/registrations/{id}/groups",
+   "backend": "postgres",
+   "query_no": 0,
+   "query": "\nSELECT registration_id AS id\nFROM assigned\nWHERE student_idx = %(student_idx)s AND registration_id = %(registration_id)s\n"
+  },
+  {
+   "endpoint": "GET /me/registrations/{id}/groups",
+   "backend": "postgres",
+   "query_no": 1,
+   "query": "\nSELECT\n  g.id,\n  gt.g_type,\n  g.number,\n  g.weekday,\n  g.start_time AS start,\n  g.end_time AS \"end\",\n  g.capacity,\n  (SELECT count(*) FROM registered_in ri WHERE ri.group_id = g.id) AS filled,\n  r.building || ' ' || r.room_num AS room,\n  tp.name || ' ' || tp.surname AS teacher,\n  EXISTS (\n    SELECT 1 FROM registered_in ri\n    WHERE ri.group_id = g.id AND ri.student_idx = %(student_idx)s\n  ) AS registered\nFROM opens o\nJOIN class_group g ON g.id = o.group_id\nJOIN group_type gt ON gt.id = g.group_type_id\nLEFT JOIN in_room ir ON ir.group_id = g.id\nLEFT JOIN room r ON r.id = ir.room_id\nLEFT JOIN teaches te ON te.group_id = g.id\nLEFT JOIN person tp ON tp.idx = te.teacher_idx\nWHERE o.registration_id = %(registration_id)s\n  AND gt.subject_code = %(subject_code)s\nORDER BY gt.g_type COLLATE \"C\", g.number\n"
+  },
+  {
+   "endpoint": "GET /groups/{id}/students",
+   "backend": "neo4j",
+   "query_no": 0,
+   "query": "\n            MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g:Group {id: $group_id})\n            RETURN g.id AS id\n            "
+  },
+  {
+   "endpoint": "GET /groups/{id}/students",
+   "backend": "neo4j",
+   "query_no": 1,
+   "query": "\n        MATCH (g:Group {id: $group_id})\n        MATCH (st:Student)-[r:REGISTERED_IN]->(g)\n        RETURN\n          st.idx AS idx,\n          st.name AS name,\n          st.surname AS surname,\n          st.phone AS phone,\n          st.photo AS photo,\n          st.joined AS joined,\n          r.grade AS grade\n        ORDER BY st.surname, st.name\n        "
+  },
+  {
+   "endpoint": "GET /groups/{id}/students",
+   "backend": "postgres",
+   "query_no": 0,
+   "query": "\nSELECT group_id AS id FROM teaches\nWHERE teacher_idx = %(teacher_idx)s AND group_id = %(group_id)s\n"
+  },
+  {
+   "endpoint": "GET /groups/{id}/students",
+   "backend": "postgres",
+   "query_no": 1,
+   "query": "\nSELECT\n  p.idx,\n  p.name,\n  p.surname,\n  p.phone,\n  ph.photo,\n  s.joined,\n  gr.grade::float8 AS grade\nFROM registered_in ri\nJOIN student s ON s.idx = ri.student_idx\nJOIN person p ON p.idx = s.idx\nLEFT JOIN person_photo ph ON ph.idx = p.idx\nLEFT JOIN grade gr ON gr.student_idx = ri.student_idx AND gr.group_id = ri.group_id\nWHERE ri.group_id = %(group_id)s\nORDER BY p.surname COLLATE \"C\", p.name COLLATE \"C\"\n"
+  },
+  {
+   "endpoint": "GET /students/{idx}",
+   "backend": "neo4j",
+   "query_no": 0,
+   "query": "\n            MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(:Group)<-[:REGISTERED_IN]-(st:Student {idx: $student_idx})\n            RETURN st.idx AS idx\n            "
+  },
+  {
+   "endpoint": "GET /students/{idx}",
+   "backend": "neo4j",
+   "query_no": 1,
+   "query": "\nMATCH (st:Student {idx: $student_idx})\nRETURN\n  st.idx AS idx,\n  st.name AS name,\n  st.surname AS surname,\n  st.phone AS phone,\n  st.photo AS photo,\n  st.joined AS joined,\n  COLLECT { MATCH (st)-[:ENROLLED]->(ct:CurriculumTerm) RETURN ct.id } AS term_ids\n"
+  },
+  {
+   "endpoint": "GET /students/{idx}",
+   "backend": "neo4j",
+   "query_no": 2,
+   "query": "\nMATCH (st:Student {idx: $student_idx})-[:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)\nWITH DISTINCT st, si\nMATCH (si)-[:INSTANCE_OF]->(su:Subject)\nMATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)\nMATCH (si)-[:HAS_TYPE]->(gt:GroupType)\nOPTIONAL MATCH (st)-[r:REGISTERED_IN]->(:Group)-[:OF_TYPE]->(gt)\nRETURN\n  su.code AS subject,\n  su.ects AS ects,\n  ac.year AS year,\n  ac.season AS season,\n  gt.id AS type,\n  gt.weight AS weight,\n  r.grade AS grade\n"
+  },
+  {
+   "endpoint": "GET /students/{idx}",
+   "backend": "postgres",
+   "query_no": 0,
+   "query": "\nSELECT ri.student_idx AS idx\nFROM teaches te\nJOIN registered_in ri ON ri.group_id = te.group_id\nWHERE te.teacher_idx = %(teacher_idx)s AND ri.student_idx = %(student_idx)s\nLIMIT 1\n"
+  },
+  {
+   "endpoint": "GET /students/{idx}",
+   "backend": "postgres",
+   "query_no": 1,
+   "query": "\nSELECT\n  p.idx,\n  p.name,\n  p.surname,\n  p.phone,\n  ph.photo,\n  s.joined,\n  ARRAY(SELECT e.term_id FROM enrolled e WHERE e.student_idx = s.idx) AS term_ids\nFROM student s\nJOIN person p ON p.idx = s.idx\nLEFT JOIN person_photo ph ON ph.idx = p.idx\nWHERE s.idx = %(student_idx)s\n"
+  },
+  {
+   "endpoint": "GET /students/{idx}",
+   "backend": "postgres",
+   "query_no": 2,
+   "query": "\nSELECT\n  su.code AS subject,\n  se.ects,\n  ac.year,\n  ac.season,\n  gt.id AS type,\n  gt.weight,\n  mine.grade::float8 AS grade\nFROM (\n  SELECT DISTINCT gt0.subject_code, gt0.cycle_id\n  FROM registered_in ri\n  JOIN class_group g ON g.id = ri.group_id\n  JOIN group_type gt0 ON gt0.id = g.group_type_id\n  WHERE ri.student_idx = %(student_idx)s\n) si\nJOIN subject su ON su.code = si.subject_code\nLEFT JOIN subject_ects se ON se.subject_code = su.code\nJOIN academic_cycle ac ON ac.id = si.cycle_id\nJOIN group_type gt ON gt.subject_code = si.subject_code AND gt.cycle_id = si.cycle_id\nLEFT JOIN (\n  SELECT gr.grade, g.group_type_id\n  FROM grade gr\n  JOIN class_group g ON g.id = gr.group_id\n  WHERE gr.student_idx = %(student_idx)s\n) mine ON mine.group_type_id = gt.id\n"
+  },
+  {
+   "endpoint": "PUT /groups/{id}/students/{idx}/grade",
+   "backend": "neo4j",
+   "query_no": 0,
+   "query": "\n            MATCH (t:Teacher {idx: $teacher_idx})-[:TEACHES]->(g:Group {id: $group_id})\n            RETURN g.id AS id\n            "
+  },
+  {
+   "endpoint": "PUT /groups/{id}/students/{idx}/grade",
+   "backend": "neo4j",
+   "query_no": 1,
+   "query": "\n        MATCH (st:Student {idx: $student_idx})-[r:REGISTERED_IN]->(g:Group {id: $group_id})\n        SET r.grade = $grade\n        RETURN g.id AS group_id, st.idx AS student_idx, r.grade AS grade\n        "
+  },
+  {
+   "endpoint": "PUT /groups/{id}/students/{idx}/grade",
+   "backend": "postgres",
+   "query_no": 0,
+   "query": "\nSELECT group_id AS id FROM teaches\nWHERE teacher_idx = %(teacher_idx)s AND group_id = %(group_id)s\n"
+  },
+  {
+   "endpoint": "PUT /groups/{id}/students/{idx}/grade",
+   "backend": "postgres",
+   "query_no": 1,
+   "query": "\nINSERT INTO grade (student_idx, group_id, grade)\nSELECT student_idx, group_id, %(grade)s\nFROM registered_in\nWHERE student_idx = %(student_idx)s AND group_id = %(group_id)s\nON CONFLICT (student_idx, group_id) DO UPDATE SET grade = excluded.grade\nRETURNING group_id, student_idx, grade::float8 AS grade\n"
+  }
+ ]
+}

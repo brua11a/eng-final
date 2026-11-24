@@ -636,10 +636,23 @@ GET /opinions?teacher_idx=T001
 
 **Query**
 
+The first MATCH depends on the parameters, so the query always starts from a node found through
+its key index. With `teacher_idx` (optionally narrowed by `group_id`):
+
 ```cypher
-MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
-WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
-  AND ($group_id IS NULL OR g.id = $group_id)
+MATCH (t:Teacher {idx: $teacher_idx})<-[:ABOUT_TEACHER]-(o:Opinion)-[:ABOUT]->(g:Group)
+WHERE $group_id IS NULL OR g.id = $group_id
+```
+
+With `group_id` only:
+
+```cypher
+MATCH (g:Group {id: $group_id})<-[:ABOUT]-(o:Opinion)-[:ABOUT_TEACHER]->(t:Teacher)
+```
+
+followed in both cases by:
+
+```cypher
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
 MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 RETURN o.id AS id, o.grade AS grade, o.content AS content, o.submit AS submit,

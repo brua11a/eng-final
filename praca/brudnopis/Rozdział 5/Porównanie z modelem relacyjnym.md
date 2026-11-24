@@ -23,7 +23,7 @@ Krawędzie odwzorowano przy użyciu kluczy obcych, zgodnie z ich kardynalności�
 - relacje N:M wydzielono do tabel łączących z kluczem głównym złożonym z dwóch kluczy obcych (`term_subject`, `teaches`, `works_at`, `enrolled`, `opens`). Tabela `registered_in` przechowuje dodatkowo datę zapisu (`registered_at`), a `assigned` kolumnę potrzebną do wymuszenia ograniczenia z 6.2.3,
 - opcjonalne relacje N:1 (`TAUGHT_IN`, `IN_ROOM`) zapisano w osobnych tabelach (`taught_in`, `in_room`) z kluczem głównym będącym kluczem obcym do tabeli nadrzędnej, aby uniknąć kolumn dopuszczających wartość `NULL`.
 
-Z tego samego powodu w osobnych tabelach umieszczono opcjonalne właściwości (`person_photo`, `subject_ects`, `opinion_content`) oraz ocenę z krawędzi `REGISTERED_IN` (`grade`), gdzie brak wartości odpowiada brakowi wiersza. Łącznie schemat obejmuje 31 tabel.
+Z tego samego powodu w osobnych tabelach umieszczono opcjonalne właściwości (`person_photo`, `subject_ects`, `opinion_content`) oraz ocenę z krawędzi `REGISTERED_IN` (`grade`), gdzie brak wartości odpowiada brakowi wiersza. Łącznie schemat obejmuje 32 tabele.
 
 6.2.2 Osoby i role bez wieloetykietowości
 
@@ -99,7 +99,7 @@ Przy uruchamianiu kontenera należało uwzględnić jeszcze dwie kwestie technic
 
 6.4 Backend relacyjny
 
-Implementacja relacyjna znajduje się w katalogu `app/relation_backend/` i powiela układ modułów backendu grafowego (`database.py`, `query.py`, `errors.py`, `routers/`). Obejmuje osiem punktów końcowych dobranych tak, by reprezentowały zapytania różnej złożoności (7.4.2): logowanie, katalog przedmiotów, listę opinii, grupy dostępne w zapisach, zapis na grupę, dane studenta ze średnią, listę studentów w grupie oraz wystawienie oceny. Poza modelami i warstwą uwierzytelniania (`require`, `Caller`, 5.5.6–5.5.7) oba backendy współdzielą funkcje dziedzinowe, takie jak `average_grade()` (5.5.5), a wydawane tokeny JWT są między nimi wymienne.
+Implementacja relacyjna znajduje się w katalogu `app/relation_backend/` i powiela układ modułów backendu grafowego (`database.py`, `query.py`, `errors.py`, `routers/`). Obejmuje osiem punktów końcowych dobranych tak, by reprezentowały zapytania różnej złożoności (7.8.1): logowanie, katalog przedmiotów, listę opinii, grupy dostępne w zapisach, zapis na grupę, dane studenta ze średnią, listę studentów w grupie oraz wystawienie oceny. Poza modelami i warstwą uwierzytelniania (`require`, `Caller`, 5.5.6–5.5.7) oba backendy współdzielą funkcje dziedzinowe, takie jak `average_grade()` (5.5.5), a wydawane tokeny JWT są między nimi wymienne.
 
 Różnice względem wersji grafowej wynikają bezpośrednio ze sterownika i silnika bazy:
 - Połączenia udostępnia współdzielona pula `psycopg_pool` (analogicznie do sterownika Neo4j w 5.5.3). Każde żądanie działa w jednej transakcji, którą zależność `get_conn()` zatwierdza po zakończeniu obsługi lub wycofuje przy wyjątku (w 5.5.3 pojedyncze zapytania korzystają z transakcji automatycznych).
@@ -116,13 +116,13 @@ WHERE te.teacher_idx = %(teacher_idx)s AND ri.student_idx = %(student_idx)s
 LIMIT 1
 ```
 
-Zgodność odpowiedzi obu implementacji zweryfikowano testem z 7.4.1.
+Zgodność odpowiedzi obu implementacji zweryfikowano testem z 7.8.1.
 
 6.4.1 Współbieżność w PostgreSQL
 
 Domyślnym poziomem izolacji w PostgreSQL, podobnie jak w Neo4j, jest *read committed*, jednak jego realizacja różni się istotnym szczegółem. Każda instrukcja SQL widzi migawkę (ang. *snapshot*) danych z momentu swojego rozpoczęcia. Jeżeli transakcja czekała na blokadę wiersza, po jej zwolnieniu baza ponownie odczytuje tylko ten konkretny wiersz, podczas gdy pozostałe dane – na przykład liczba zapisanych do grupy – nadal pochodzą ze starej migawki [CYTOWANIE: https://www.postgresql.org/docs/current/transaction-iso.html].
 
-Z tego powodu przeniesienie wzorca z 5.5.10, czyli połączenie blokady i sprawdzenia warunków w jednym zapytaniu, nie chroni przed przepełnieniem grupy (7.3.2):
+Z tego powodu przeniesienie wzorca z 5.5.10, czyli połączenie blokady i sprawdzenia warunków w jednym zapytaniu, nie chroni przed przepełnieniem grupy (7.3):
 
 ```sql
 WITH locked AS (
@@ -142,4 +142,4 @@ Zapis na grupę rozbito więc na trzy instrukcje wykonywane w ramach jednej tran
 
 Aby zapobiec zakleszczeniom, blokady zakłada się w tej samej kolejności co w grafie (najpierw student, potem grupa). SQL oferuje przy tym jawną składnię blokady wiersza (`FOR UPDATE`), dzięki czemu zbędny jest pozorny zapis jak w języku Cypher (`SET g.capacity = g.capacity`). PostgreSQL udostępnia także poziom izolacji *serializable*, jednak wymaga on obsługi i ponawiania transakcji odrzuconych przez bazę, dlatego pozostano przy jawnych blokadach.
 
-Poprawność tego rozwiązania oraz nieskuteczność wariantu jednoinstrukcyjnego potwierdził test współbieżności (7.3.2).
+Poprawność tego rozwiązania oraz nieskuteczność wariantu jednoinstrukcyjnego potwierdził test współbieżności (7.3).

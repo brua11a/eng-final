@@ -1,12 +1,13 @@
 4.1 Architektura systemu
 
-System składa się z trzech warstw: klienta webowego, interfejsu programistycznego aplikacji (API) oraz bazy danych. Warstwa API występuje w dwóch wymiennych wariantach: z backendem grafowym, korzystającym z bazy Neo4j, oraz z backendem relacyjnym. Wszystkie warstwy uruchamiane są w osobnych kontenerach, a schemat i dane początkowe bazy wczytuje jednorazowy proces inicjalizacji.
+System składa się z trzech warstw: klienta webowego, interfejsu programistycznego aplikacji (API) oraz bazy danych. Bazą danych platformy jest Neo4j. Na potrzeby porównania z modelem relacyjnym (rozdział 6) wybrane punkty końcowe zaimplementowano dodatkowo z wykorzystaniem bazy PostgreSQL. Wszystkie warstwy uruchamiane są w osobnych kontenerach, a schemat i dane początkowe bazy wczytuje jednorazowy proces inicjalizacji.
 
 ```mermaid
 flowchart LR
     P[Przeglądarka] -- HTTPS --> N[nginx: klient webowy]
     N -- "/api/*: żądania REST/JSON z tokenem" --> A[API]
-    A -- "konto API: odczyt i zapis danych" --> D[(Baza danych)]
+    A -- "konto API: odczyt i zapis danych" --> D[(Neo4j)]
+    A -. "porównanie (/api/rel/*)" .-> R[(PostgreSQL)]
     I[Proces inicjalizacji] -- "konto administratora: schemat, import" --> D
 ```
 *Elementy systemu i komunikacja między nimi*
@@ -21,7 +22,7 @@ Baza danych przechowuje wszystkie dane systemu i sama pilnuje ich struktury wedl
 
 4.2 Warstwa dostępu do danych
 
-Model danych zostanie odwzorowany również w postaci relacyjnej, a zapytania obu wariantów porównane pod względem liczby złączeń i czasu wykonania. Dlatego warstwę API zaprojektowano tak, aby baza danych była w niej wymienna. Backend grafowy i relacyjny udostępniają te same punkty końcowe i korzystają z tych samych modeli żądań i odpowiedzi. Klient nie wie, z którym backendem się komunikuje, a każda operacja ma w obu wariantach identyczny kontrakt, więc porównaniu podlega wyłącznie jej realizacja po stronie bazy danych.
+Model danych zostanie odwzorowany również w postaci relacyjnej, a zapytania obu wariantów porównane pod względem liczby złączeń i czasu wykonania. Dlatego kod zależny od bazy danych oddzielono od reszty API. Backend relacyjny działa w tym samym procesie pod prefiksem `/api/rel`, z tymi samymi ścieżkami i modelami co jego grafowe odpowiedniki, więc porównaniu podlega wyłącznie realizacja operacji po stronie bazy danych. Klient webowy korzysta tylko z backendu grafowego.
 
 Backendy komunikują się z bazą bezpośrednio przez sterownik, wykonując ręcznie napisane zapytania: w języku Cypher dla Neo4j i w języku SQL dla bazy relacyjnej. Zrezygnowano z warstwy mapowania obiektowo-grafowego (OGM, ang. *Object-Graph Mapping*) i obiektowo-relacyjnego (ORM, ang. *Object-Relational Mapping*). Oficjalna biblioteka Neo4j-OGM jest dostępna jedynie dla języka Java [CYTOWANIE: Neo4j-OGM], a dla języka Python istnieje rozwijana w ramach Neo4j Labs biblioteka neomodel [CYTOWANIE: neomodel]. Ponieważ warstwa mapowania generuje zapytania automatycznie, porównanie odzwierciedlałoby sposób ich generowania przez dwie różne biblioteki, utrudniając ocenę samych modeli danych. Ręcznie pisane zapytania dają ponadto pełną kontrolę nad ich treścią.
 

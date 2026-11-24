@@ -1,0 +1,607 @@
+scale,students,endpoint,backend,query_no,operator,count
+seed,29,POST /login,neo4j,0,ProduceResults,1
+seed,29,POST /login,neo4j,0,Projection,1
+seed,29,POST /login,neo4j,0,CacheProperties,1
+seed,29,POST /login,neo4j,0,NodeUniqueIndexSeek,1
+seed,29,POST /login,postgres,0,Nested Loop (Left),2
+seed,29,POST /login,postgres,0,Hash Join (Right),2
+seed,29,POST /login,postgres,0,Seq Scan,5
+seed,29,POST /login,postgres,0,Hash,2
+seed,29,GET /subjects,neo4j,0,ProduceResults,1
+seed,29,GET /subjects,neo4j,0,Projection,1
+seed,29,GET /subjects,neo4j,0,NodeIndexScan,1
+seed,29,GET /subjects,neo4j,1,ProduceResults,1
+seed,29,GET /subjects,neo4j,1,Projection,2
+seed,29,GET /subjects,neo4j,1,Apply,1
+seed,29,GET /subjects,neo4j,1,Sort,1
+seed,29,GET /subjects,neo4j,1,Filter,1
+seed,29,GET /subjects,neo4j,1,NodeIndexScan,1
+seed,29,GET /subjects,neo4j,1,EagerAggregation,1
+seed,29,GET /subjects,neo4j,1,Distinct,1
+seed,29,GET /subjects,neo4j,1,Expand(All),4
+seed,29,GET /subjects,neo4j,1,Argument,1
+seed,29,GET /subjects,postgres,0,Seq Scan,1
+seed,29,GET /subjects,postgres,1,Sort,3
+seed,29,GET /subjects,postgres,1,Hash Join (Left),1
+seed,29,GET /subjects,postgres,1,Seq Scan,12
+seed,29,GET /subjects,postgres,1,Hash,5
+seed,29,GET /subjects,postgres,1,Unique,1
+seed,29,GET /subjects,postgres,1,Nested Loop (Inner),5
+seed,29,GET /subjects,postgres,1,Hash Join (Inner),4
+seed,29,GET /subjects,postgres,1,Index Scan,3
+seed,29,GET /subjects,postgres,1,Materialize,2
+seed,29,GET /subjects,postgres,1,Function Scan,1
+seed,29,GET /subjects,postgres,1,Aggregate,2
+seed,29,GET /opinions,neo4j,0,ProduceResults,1
+seed,29,GET /opinions,neo4j,0,Projection,2
+seed,29,GET /opinions,neo4j,0,CacheProperties,2
+seed,29,GET /opinions,neo4j,0,Sort,1
+seed,29,GET /opinions,neo4j,0,Expand(All),6
+seed,29,GET /opinions,neo4j,0,Filter,2
+seed,29,GET /opinions,neo4j,0,NodeUniqueIndexSeek,1
+seed,29,GET /opinions,postgres,0,Sort,1
+seed,29,GET /opinions,postgres,0,Nested Loop (Inner),3
+seed,29,GET /opinions,postgres,0,Seq Scan,5
+seed,29,GET /opinions,postgres,0,Hash Join (Inner),2
+seed,29,GET /opinions,postgres,0,Hash,3
+seed,29,GET /opinions,postgres,0,Hash Join (Right),1
+seed,29,GET /opinions,postgres,0,Index Scan,2
+seed,29,GET /opinions,postgres,0,Memoize,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,0,ProduceResults,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,0,Projection,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,0,Filter,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,0,Expand(All),2
+seed,29,GET /me/registrations/{id}/groups,neo4j,0,NodeUniqueIndexSeek,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,ProduceResults,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,Projection,2
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,CacheProperties,2
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(All),2
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(Into),1
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,Sort,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,CartesianProduct,1
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,Filter,2
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,Expand(All),4
+seed,29,GET /me/registrations/{id}/groups,neo4j,1,NodeUniqueIndexSeek,2
+seed,29,GET /me/registrations/{id}/groups,postgres,0,Seq Scan,1
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Sort,1
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Left),4
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Inner),1
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Hash Join (Inner),1
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Seq Scan,4
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Hash,1
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Index Scan,5
+seed,29,GET /me/registrations/{id}/groups,postgres,1,Aggregate,1
+seed,29,GET /groups/{id}/students,neo4j,0,ProduceResults,1
+seed,29,GET /groups/{id}/students,neo4j,0,Projection,1
+seed,29,GET /groups/{id}/students,neo4j,0,Filter,1
+seed,29,GET /groups/{id}/students,neo4j,0,Expand(All),1
+seed,29,GET /groups/{id}/students,neo4j,0,NodeUniqueIndexSeek,1
+seed,29,GET /groups/{id}/students,neo4j,1,ProduceResults,1
+seed,29,GET /groups/{id}/students,neo4j,1,Projection,2
+seed,29,GET /groups/{id}/students,neo4j,1,CacheProperties,2
+seed,29,GET /groups/{id}/students,neo4j,1,Sort,1
+seed,29,GET /groups/{id}/students,neo4j,1,Expand(All),1
+seed,29,GET /groups/{id}/students,neo4j,1,NodeUniqueIndexSeek,1
+seed,29,GET /groups/{id}/students,postgres,0,Seq Scan,1
+seed,29,GET /groups/{id}/students,postgres,1,Sort,1
+seed,29,GET /groups/{id}/students,postgres,1,Nested Loop (Left),2
+seed,29,GET /groups/{id}/students,postgres,1,Nested Loop (Inner),1
+seed,29,GET /groups/{id}/students,postgres,1,Hash Join (Inner),1
+seed,29,GET /groups/{id}/students,postgres,1,Seq Scan,3
+seed,29,GET /groups/{id}/students,postgres,1,Hash,1
+seed,29,GET /groups/{id}/students,postgres,1,Index Scan,2
+seed,29,GET /students/{idx},neo4j,0,ProduceResults,1
+seed,29,GET /students/{idx},neo4j,0,Projection,1
+seed,29,GET /students/{idx},neo4j,0,Filter,2
+seed,29,GET /students/{idx},neo4j,0,Expand(All),2
+seed,29,GET /students/{idx},neo4j,0,NodeUniqueIndexSeek,1
+seed,29,GET /students/{idx},neo4j,1,ProduceResults,1
+seed,29,GET /students/{idx},neo4j,1,Projection,2
+seed,29,GET /students/{idx},neo4j,1,CacheProperties,1
+seed,29,GET /students/{idx},neo4j,1,Apply,1
+seed,29,GET /students/{idx},neo4j,1,Filter,1
+seed,29,GET /students/{idx},neo4j,1,NodeUniqueIndexSeek,1
+seed,29,GET /students/{idx},neo4j,1,EagerAggregation,1
+seed,29,GET /students/{idx},neo4j,1,Expand(All),1
+seed,29,GET /students/{idx},neo4j,1,Argument,1
+seed,29,GET /students/{idx},neo4j,2,ProduceResults,1
+seed,29,GET /students/{idx},neo4j,2,Projection,1
+seed,29,GET /students/{idx},neo4j,2,Apply,1
+seed,29,GET /students/{idx},neo4j,2,Expand(All),7
+seed,29,GET /students/{idx},neo4j,2,Distinct,1
+seed,29,GET /students/{idx},neo4j,2,Filter,1
+seed,29,GET /students/{idx},neo4j,2,NodeUniqueIndexSeek,1
+seed,29,GET /students/{idx},neo4j,2,Optional,1
+seed,29,GET /students/{idx},neo4j,2,CacheProperties,1
+seed,29,GET /students/{idx},neo4j,2,Expand(Into),1
+seed,29,GET /students/{idx},neo4j,2,Argument,1
+seed,29,GET /students/{idx},postgres,0,Limit,1
+seed,29,GET /students/{idx},postgres,0,Hash Join (Inner),1
+seed,29,GET /students/{idx},postgres,0,Seq Scan,2
+seed,29,GET /students/{idx},postgres,0,Hash,1
+seed,29,GET /students/{idx},postgres,1,Nested Loop (Left),1
+seed,29,GET /students/{idx},postgres,1,Nested Loop (Inner),1
+seed,29,GET /students/{idx},postgres,1,Seq Scan,4
+seed,29,GET /students/{idx},postgres,2,Nested Loop (Left),2
+seed,29,GET /students/{idx},postgres,2,Nested Loop (Inner),3
+seed,29,GET /students/{idx},postgres,2,Hash Join (Inner),3
+seed,29,GET /students/{idx},postgres,2,Seq Scan,4
+seed,29,GET /students/{idx},postgres,2,Hash,3
+seed,29,GET /students/{idx},postgres,2,Unique,1
+seed,29,GET /students/{idx},postgres,2,Sort,1
+seed,29,GET /students/{idx},postgres,2,Index Scan,5
+seed,29,GET /students/{idx},postgres,2,Memoize,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,0,ProduceResults,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Projection,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Filter,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Expand(All),1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,0,NodeUniqueIndexSeek,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,1,ProduceResults,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Projection,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,1,SetProperty,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Filter,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Expand(All),1
+seed,29,PUT /groups/{id}/students/{idx}/grade,neo4j,1,NodeUniqueIndexSeek(Locking),1
+seed,29,PUT /groups/{id}/students/{idx}/grade,postgres,0,Seq Scan,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,postgres,1,ModifyTable,1
+seed,29,PUT /groups/{id}/students/{idx}/grade,postgres,1,Seq Scan,1
+1000,1000,POST /login,neo4j,0,ProduceResults,1
+1000,1000,POST /login,neo4j,0,Projection,1
+1000,1000,POST /login,neo4j,0,CacheProperties,1
+1000,1000,POST /login,neo4j,0,NodeUniqueIndexSeek,1
+1000,1000,POST /login,postgres,0,Nested Loop (Left),3
+1000,1000,POST /login,postgres,0,Hash Join (Right),1
+1000,1000,POST /login,postgres,0,Seq Scan,3
+1000,1000,POST /login,postgres,0,Hash,1
+1000,1000,POST /login,postgres,0,Index Scan,1
+1000,1000,POST /login,postgres,0,Index Only Scan,1
+1000,1000,GET /subjects,neo4j,0,ProduceResults,1
+1000,1000,GET /subjects,neo4j,0,Projection,1
+1000,1000,GET /subjects,neo4j,0,NodeIndexScan,1
+1000,1000,GET /subjects,neo4j,1,ProduceResults,1
+1000,1000,GET /subjects,neo4j,1,Projection,2
+1000,1000,GET /subjects,neo4j,1,Apply,1
+1000,1000,GET /subjects,neo4j,1,Sort,1
+1000,1000,GET /subjects,neo4j,1,Filter,1
+1000,1000,GET /subjects,neo4j,1,NodeIndexScan,1
+1000,1000,GET /subjects,neo4j,1,EagerAggregation,1
+1000,1000,GET /subjects,neo4j,1,Distinct,1
+1000,1000,GET /subjects,neo4j,1,Expand(All),4
+1000,1000,GET /subjects,neo4j,1,Argument,1
+1000,1000,GET /subjects,postgres,0,Seq Scan,1
+1000,1000,GET /subjects,postgres,1,Sort,3
+1000,1000,GET /subjects,postgres,1,Hash Join (Left),1
+1000,1000,GET /subjects,postgres,1,Seq Scan,6
+1000,1000,GET /subjects,postgres,1,Hash,4
+1000,1000,GET /subjects,postgres,1,Unique,1
+1000,1000,GET /subjects,postgres,1,Nested Loop (Inner),6
+1000,1000,GET /subjects,postgres,1,Hash Join (Inner),3
+1000,1000,GET /subjects,postgres,1,Index Scan,7
+1000,1000,GET /subjects,postgres,1,Materialize,1
+1000,1000,GET /subjects,postgres,1,Function Scan,1
+1000,1000,GET /subjects,postgres,1,Aggregate,2
+1000,1000,GET /subjects,postgres,1,Bitmap Heap Scan,2
+1000,1000,GET /subjects,postgres,1,Bitmap Index Scan,2
+1000,1000,GET /opinions,neo4j,0,ProduceResults,1
+1000,1000,GET /opinions,neo4j,0,Projection,2
+1000,1000,GET /opinions,neo4j,0,CacheProperties,2
+1000,1000,GET /opinions,neo4j,0,Sort,1
+1000,1000,GET /opinions,neo4j,0,Expand(All),6
+1000,1000,GET /opinions,neo4j,0,Filter,2
+1000,1000,GET /opinions,neo4j,0,NodeUniqueIndexSeek,1
+1000,1000,GET /opinions,postgres,0,Sort,1
+1000,1000,GET /opinions,postgres,0,Nested Loop (Inner),4
+1000,1000,GET /opinions,postgres,0,Index Scan,4
+1000,1000,GET /opinions,postgres,0,Hash Join (Inner),1
+1000,1000,GET /opinions,postgres,0,Seq Scan,3
+1000,1000,GET /opinions,postgres,0,Hash,2
+1000,1000,GET /opinions,postgres,0,Hash Join (Right),1
+1000,1000,GET /opinions,postgres,0,Memoize,1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,0,ProduceResults,1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,0,Projection,1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,0,Filter,2
+1000,1000,GET /me/registrations/{id}/groups,neo4j,0,Expand(All),2
+1000,1000,GET /me/registrations/{id}/groups,neo4j,0,NodeUniqueIndexSeek,1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,ProduceResults,1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,Projection,2
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,CacheProperties,2
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(All),2
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(Into),1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,Sort,1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,CartesianProduct,1
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,Filter,2
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,Expand(All),4
+1000,1000,GET /me/registrations/{id}/groups,neo4j,1,NodeUniqueIndexSeek,2
+1000,1000,GET /me/registrations/{id}/groups,postgres,0,Index Only Scan,1
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Sort,1
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Left),4
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Inner),2
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Bitmap Heap Scan,3
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Bitmap Index Scan,3
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Index Scan,5
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Aggregate,1
+1000,1000,GET /me/registrations/{id}/groups,postgres,1,Index Only Scan,1
+1000,1000,GET /groups/{id}/students,neo4j,0,ProduceResults,1
+1000,1000,GET /groups/{id}/students,neo4j,0,Projection,1
+1000,1000,GET /groups/{id}/students,neo4j,0,Filter,2
+1000,1000,GET /groups/{id}/students,neo4j,0,Expand(All),1
+1000,1000,GET /groups/{id}/students,neo4j,0,NodeUniqueIndexSeek,1
+1000,1000,GET /groups/{id}/students,neo4j,1,ProduceResults,1
+1000,1000,GET /groups/{id}/students,neo4j,1,Projection,2
+1000,1000,GET /groups/{id}/students,neo4j,1,CacheProperties,2
+1000,1000,GET /groups/{id}/students,neo4j,1,Sort,1
+1000,1000,GET /groups/{id}/students,neo4j,1,Expand(All),1
+1000,1000,GET /groups/{id}/students,neo4j,1,NodeUniqueIndexSeek,1
+1000,1000,GET /groups/{id}/students,postgres,0,Index Scan,1
+1000,1000,GET /groups/{id}/students,postgres,1,Sort,1
+1000,1000,GET /groups/{id}/students,postgres,1,Nested Loop (Left),2
+1000,1000,GET /groups/{id}/students,postgres,1,Nested Loop (Inner),1
+1000,1000,GET /groups/{id}/students,postgres,1,Hash Join (Inner),1
+1000,1000,GET /groups/{id}/students,postgres,1,Seq Scan,1
+1000,1000,GET /groups/{id}/students,postgres,1,Hash,1
+1000,1000,GET /groups/{id}/students,postgres,1,Bitmap Heap Scan,1
+1000,1000,GET /groups/{id}/students,postgres,1,Bitmap Index Scan,1
+1000,1000,GET /groups/{id}/students,postgres,1,Index Scan,3
+1000,1000,GET /students/{idx},neo4j,0,ProduceResults,1
+1000,1000,GET /students/{idx},neo4j,0,Projection,1
+1000,1000,GET /students/{idx},neo4j,0,Filter,2
+1000,1000,GET /students/{idx},neo4j,0,Expand(All),2
+1000,1000,GET /students/{idx},neo4j,0,NodeUniqueIndexSeek,1
+1000,1000,GET /students/{idx},neo4j,1,ProduceResults,1
+1000,1000,GET /students/{idx},neo4j,1,Projection,2
+1000,1000,GET /students/{idx},neo4j,1,CacheProperties,1
+1000,1000,GET /students/{idx},neo4j,1,Apply,1
+1000,1000,GET /students/{idx},neo4j,1,Filter,1
+1000,1000,GET /students/{idx},neo4j,1,NodeUniqueIndexSeek,1
+1000,1000,GET /students/{idx},neo4j,1,EagerAggregation,1
+1000,1000,GET /students/{idx},neo4j,1,Expand(All),1
+1000,1000,GET /students/{idx},neo4j,1,Argument,1
+1000,1000,GET /students/{idx},neo4j,2,ProduceResults,1
+1000,1000,GET /students/{idx},neo4j,2,Projection,1
+1000,1000,GET /students/{idx},neo4j,2,Apply,1
+1000,1000,GET /students/{idx},neo4j,2,Expand(All),7
+1000,1000,GET /students/{idx},neo4j,2,Distinct,1
+1000,1000,GET /students/{idx},neo4j,2,Filter,1
+1000,1000,GET /students/{idx},neo4j,2,NodeUniqueIndexSeek,1
+1000,1000,GET /students/{idx},neo4j,2,Optional,1
+1000,1000,GET /students/{idx},neo4j,2,CacheProperties,1
+1000,1000,GET /students/{idx},neo4j,2,Expand(Into),1
+1000,1000,GET /students/{idx},neo4j,2,Argument,1
+1000,1000,GET /students/{idx},postgres,0,Limit,1
+1000,1000,GET /students/{idx},postgres,0,Hash Join (Inner),1
+1000,1000,GET /students/{idx},postgres,0,Index Only Scan,1
+1000,1000,GET /students/{idx},postgres,0,Hash,1
+1000,1000,GET /students/{idx},postgres,0,Bitmap Heap Scan,1
+1000,1000,GET /students/{idx},postgres,0,Bitmap Index Scan,1
+1000,1000,GET /students/{idx},postgres,1,Nested Loop (Left),1
+1000,1000,GET /students/{idx},postgres,1,Nested Loop (Inner),1
+1000,1000,GET /students/{idx},postgres,1,Index Scan,2
+1000,1000,GET /students/{idx},postgres,1,Seq Scan,1
+1000,1000,GET /students/{idx},postgres,1,Index Only Scan,1
+1000,1000,GET /students/{idx},postgres,2,Nested Loop (Left),2
+1000,1000,GET /students/{idx},postgres,2,Nested Loop (Inner),3
+1000,1000,GET /students/{idx},postgres,2,Hash Join (Inner),3
+1000,1000,GET /students/{idx},postgres,2,Seq Scan,3
+1000,1000,GET /students/{idx},postgres,2,Hash,3
+1000,1000,GET /students/{idx},postgres,2,Unique,1
+1000,1000,GET /students/{idx},postgres,2,Sort,1
+1000,1000,GET /students/{idx},postgres,2,Index Only Scan,1
+1000,1000,GET /students/{idx},postgres,2,Index Scan,5
+1000,1000,GET /students/{idx},postgres,2,Memoize,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,ProduceResults,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Projection,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Filter,2
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Expand(All),1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,NodeUniqueIndexSeek,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,ProduceResults,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Projection,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,SetProperty,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Filter,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Expand(All),1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,NodeUniqueIndexSeek(Locking),1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,postgres,0,Index Scan,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,postgres,1,ModifyTable,1
+1000,1000,PUT /groups/{id}/students/{idx}/grade,postgres,1,Index Only Scan,1
+3000,3000,POST /login,neo4j,0,ProduceResults,1
+3000,3000,POST /login,neo4j,0,Projection,1
+3000,3000,POST /login,neo4j,0,CacheProperties,1
+3000,3000,POST /login,neo4j,0,NodeUniqueIndexSeek,1
+3000,3000,POST /login,postgres,0,Nested Loop (Left),3
+3000,3000,POST /login,postgres,0,Hash Join (Right),1
+3000,3000,POST /login,postgres,0,Seq Scan,3
+3000,3000,POST /login,postgres,0,Hash,1
+3000,3000,POST /login,postgres,0,Index Scan,1
+3000,3000,POST /login,postgres,0,Index Only Scan,1
+3000,3000,GET /subjects,neo4j,0,ProduceResults,1
+3000,3000,GET /subjects,neo4j,0,Projection,1
+3000,3000,GET /subjects,neo4j,0,NodeIndexScan,1
+3000,3000,GET /subjects,neo4j,1,ProduceResults,1
+3000,3000,GET /subjects,neo4j,1,Projection,2
+3000,3000,GET /subjects,neo4j,1,Apply,1
+3000,3000,GET /subjects,neo4j,1,Sort,1
+3000,3000,GET /subjects,neo4j,1,Filter,1
+3000,3000,GET /subjects,neo4j,1,NodeIndexScan,1
+3000,3000,GET /subjects,neo4j,1,EagerAggregation,1
+3000,3000,GET /subjects,neo4j,1,Distinct,1
+3000,3000,GET /subjects,neo4j,1,Expand(All),4
+3000,3000,GET /subjects,neo4j,1,Argument,1
+3000,3000,GET /subjects,postgres,0,Seq Scan,1
+3000,3000,GET /subjects,postgres,1,Sort,2
+3000,3000,GET /subjects,postgres,1,Hash Join (Left),1
+3000,3000,GET /subjects,postgres,1,Seq Scan,6
+3000,3000,GET /subjects,postgres,1,Hash,4
+3000,3000,GET /subjects,postgres,1,Unique,1
+3000,3000,GET /subjects,postgres,1,Nested Loop (Inner),6
+3000,3000,GET /subjects,postgres,1,Hash Join (Inner),3
+3000,3000,GET /subjects,postgres,1,Index Scan,7
+3000,3000,GET /subjects,postgres,1,Materialize,1
+3000,3000,GET /subjects,postgres,1,Function Scan,1
+3000,3000,GET /subjects,postgres,1,Aggregate,2
+3000,3000,GET /subjects,postgres,1,Index Only Scan,1
+3000,3000,GET /subjects,postgres,1,Bitmap Heap Scan,1
+3000,3000,GET /subjects,postgres,1,Bitmap Index Scan,1
+3000,3000,GET /opinions,neo4j,0,ProduceResults,1
+3000,3000,GET /opinions,neo4j,0,Projection,2
+3000,3000,GET /opinions,neo4j,0,CacheProperties,2
+3000,3000,GET /opinions,neo4j,0,Sort,1
+3000,3000,GET /opinions,neo4j,0,Expand(All),6
+3000,3000,GET /opinions,neo4j,0,Filter,2
+3000,3000,GET /opinions,neo4j,0,NodeUniqueIndexSeek,1
+3000,3000,GET /opinions,postgres,0,Sort,1
+3000,3000,GET /opinions,postgres,0,Nested Loop (Inner),5
+3000,3000,GET /opinions,postgres,0,Index Scan,5
+3000,3000,GET /opinions,postgres,0,Hash Join (Right),1
+3000,3000,GET /opinions,postgres,0,Seq Scan,1
+3000,3000,GET /opinions,postgres,0,Hash,1
+3000,3000,GET /opinions,postgres,0,Bitmap Heap Scan,1
+3000,3000,GET /opinions,postgres,0,Bitmap Index Scan,1
+3000,3000,GET /opinions,postgres,0,Memoize,1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,0,ProduceResults,1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,0,Projection,1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,0,Filter,2
+3000,3000,GET /me/registrations/{id}/groups,neo4j,0,Expand(All),2
+3000,3000,GET /me/registrations/{id}/groups,neo4j,0,NodeUniqueIndexSeek,1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,ProduceResults,1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,Projection,2
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,CacheProperties,2
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(All),2
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(Into),1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,Sort,1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,CartesianProduct,1
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,Filter,2
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,Expand(All),4
+3000,3000,GET /me/registrations/{id}/groups,neo4j,1,NodeUniqueIndexSeek,2
+3000,3000,GET /me/registrations/{id}/groups,postgres,0,Index Only Scan,1
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Sort,1
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Left),4
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Inner),2
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Bitmap Heap Scan,2
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Bitmap Index Scan,2
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Index Scan,5
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Aggregate,1
+3000,3000,GET /me/registrations/{id}/groups,postgres,1,Index Only Scan,2
+3000,3000,GET /groups/{id}/students,neo4j,0,ProduceResults,1
+3000,3000,GET /groups/{id}/students,neo4j,0,Projection,1
+3000,3000,GET /groups/{id}/students,neo4j,0,Filter,2
+3000,3000,GET /groups/{id}/students,neo4j,0,Expand(All),1
+3000,3000,GET /groups/{id}/students,neo4j,0,NodeUniqueIndexSeek,1
+3000,3000,GET /groups/{id}/students,neo4j,1,ProduceResults,1
+3000,3000,GET /groups/{id}/students,neo4j,1,Projection,2
+3000,3000,GET /groups/{id}/students,neo4j,1,CacheProperties,2
+3000,3000,GET /groups/{id}/students,neo4j,1,Sort,1
+3000,3000,GET /groups/{id}/students,neo4j,1,Expand(All),1
+3000,3000,GET /groups/{id}/students,neo4j,1,NodeUniqueIndexSeek,1
+3000,3000,GET /groups/{id}/students,postgres,0,Index Only Scan,1
+3000,3000,GET /groups/{id}/students,postgres,1,Sort,1
+3000,3000,GET /groups/{id}/students,postgres,1,Nested Loop (Left),2
+3000,3000,GET /groups/{id}/students,postgres,1,Nested Loop (Inner),1
+3000,3000,GET /groups/{id}/students,postgres,1,Hash Join (Inner),1
+3000,3000,GET /groups/{id}/students,postgres,1,Seq Scan,1
+3000,3000,GET /groups/{id}/students,postgres,1,Hash,1
+3000,3000,GET /groups/{id}/students,postgres,1,Bitmap Heap Scan,1
+3000,3000,GET /groups/{id}/students,postgres,1,Bitmap Index Scan,1
+3000,3000,GET /groups/{id}/students,postgres,1,Index Scan,3
+3000,3000,GET /students/{idx},neo4j,0,ProduceResults,1
+3000,3000,GET /students/{idx},neo4j,0,Projection,1
+3000,3000,GET /students/{idx},neo4j,0,Filter,2
+3000,3000,GET /students/{idx},neo4j,0,Expand(All),2
+3000,3000,GET /students/{idx},neo4j,0,NodeUniqueIndexSeek,1
+3000,3000,GET /students/{idx},neo4j,1,ProduceResults,1
+3000,3000,GET /students/{idx},neo4j,1,Projection,2
+3000,3000,GET /students/{idx},neo4j,1,CacheProperties,1
+3000,3000,GET /students/{idx},neo4j,1,Apply,1
+3000,3000,GET /students/{idx},neo4j,1,Filter,1
+3000,3000,GET /students/{idx},neo4j,1,NodeUniqueIndexSeek,1
+3000,3000,GET /students/{idx},neo4j,1,EagerAggregation,1
+3000,3000,GET /students/{idx},neo4j,1,Expand(All),1
+3000,3000,GET /students/{idx},neo4j,1,Argument,1
+3000,3000,GET /students/{idx},neo4j,2,ProduceResults,1
+3000,3000,GET /students/{idx},neo4j,2,Projection,1
+3000,3000,GET /students/{idx},neo4j,2,Apply,1
+3000,3000,GET /students/{idx},neo4j,2,Expand(All),7
+3000,3000,GET /students/{idx},neo4j,2,Distinct,1
+3000,3000,GET /students/{idx},neo4j,2,Filter,1
+3000,3000,GET /students/{idx},neo4j,2,NodeUniqueIndexSeek,1
+3000,3000,GET /students/{idx},neo4j,2,Optional,1
+3000,3000,GET /students/{idx},neo4j,2,CacheProperties,1
+3000,3000,GET /students/{idx},neo4j,2,Expand(Into),1
+3000,3000,GET /students/{idx},neo4j,2,Argument,1
+3000,3000,GET /students/{idx},postgres,0,Limit,1
+3000,3000,GET /students/{idx},postgres,0,Merge Join (Inner),1
+3000,3000,GET /students/{idx},postgres,0,Index Only Scan,2
+3000,3000,GET /students/{idx},postgres,1,Nested Loop (Left),1
+3000,3000,GET /students/{idx},postgres,1,Nested Loop (Inner),1
+3000,3000,GET /students/{idx},postgres,1,Index Scan,3
+3000,3000,GET /students/{idx},postgres,1,Index Only Scan,1
+3000,3000,GET /students/{idx},postgres,2,Nested Loop (Left),2
+3000,3000,GET /students/{idx},postgres,2,Nested Loop (Inner),3
+3000,3000,GET /students/{idx},postgres,2,Hash Join (Inner),3
+3000,3000,GET /students/{idx},postgres,2,Aggregate,1
+3000,3000,GET /students/{idx},postgres,2,Seq Scan,3
+3000,3000,GET /students/{idx},postgres,2,Hash,3
+3000,3000,GET /students/{idx},postgres,2,Index Only Scan,2
+3000,3000,GET /students/{idx},postgres,2,Index Scan,4
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,ProduceResults,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Projection,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Filter,2
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Expand(All),1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,NodeUniqueIndexSeek,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,ProduceResults,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Projection,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,SetProperty,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Filter,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Expand(All),1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,NodeUniqueIndexSeek(Locking),1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,postgres,0,Index Only Scan,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,postgres,1,ModifyTable,1
+3000,3000,PUT /groups/{id}/students/{idx}/grade,postgres,1,Index Only Scan,1
+10000,10000,POST /login,neo4j,0,ProduceResults,1
+10000,10000,POST /login,neo4j,0,Projection,1
+10000,10000,POST /login,neo4j,0,CacheProperties,1
+10000,10000,POST /login,neo4j,0,NodeUniqueIndexSeek,1
+10000,10000,POST /login,postgres,0,Nested Loop (Left),4
+10000,10000,POST /login,postgres,0,Index Scan,1
+10000,10000,POST /login,postgres,0,Seq Scan,2
+10000,10000,POST /login,postgres,0,Index Only Scan,2
+10000,10000,GET /subjects,neo4j,0,ProduceResults,1
+10000,10000,GET /subjects,neo4j,0,Projection,1
+10000,10000,GET /subjects,neo4j,0,CacheProperties,1
+10000,10000,GET /subjects,neo4j,0,NodeIndexScan,1
+10000,10000,GET /subjects,neo4j,1,ProduceResults,1
+10000,10000,GET /subjects,neo4j,1,Projection,2
+10000,10000,GET /subjects,neo4j,1,Apply,1
+10000,10000,GET /subjects,neo4j,1,Sort,1
+10000,10000,GET /subjects,neo4j,1,Filter,1
+10000,10000,GET /subjects,neo4j,1,NodeIndexScan,1
+10000,10000,GET /subjects,neo4j,1,EagerAggregation,1
+10000,10000,GET /subjects,neo4j,1,Distinct,1
+10000,10000,GET /subjects,neo4j,1,Expand(All),4
+10000,10000,GET /subjects,neo4j,1,Argument,1
+10000,10000,GET /subjects,postgres,0,Seq Scan,1
+10000,10000,GET /subjects,postgres,1,Sort,2
+10000,10000,GET /subjects,postgres,1,Hash Join (Left),1
+10000,10000,GET /subjects,postgres,1,Seq Scan,6
+10000,10000,GET /subjects,postgres,1,Hash,4
+10000,10000,GET /subjects,postgres,1,Unique,1
+10000,10000,GET /subjects,postgres,1,Nested Loop (Inner),6
+10000,10000,GET /subjects,postgres,1,Hash Join (Inner),3
+10000,10000,GET /subjects,postgres,1,Index Scan,7
+10000,10000,GET /subjects,postgres,1,Materialize,1
+10000,10000,GET /subjects,postgres,1,Function Scan,1
+10000,10000,GET /subjects,postgres,1,Aggregate,2
+10000,10000,GET /subjects,postgres,1,Index Only Scan,1
+10000,10000,GET /subjects,postgres,1,Bitmap Heap Scan,1
+10000,10000,GET /subjects,postgres,1,Bitmap Index Scan,1
+10000,10000,GET /opinions,neo4j,0,ProduceResults,1
+10000,10000,GET /opinions,neo4j,0,Projection,2
+10000,10000,GET /opinions,neo4j,0,CacheProperties,2
+10000,10000,GET /opinions,neo4j,0,Sort,1
+10000,10000,GET /opinions,neo4j,0,Expand(All),6
+10000,10000,GET /opinions,neo4j,0,Filter,2
+10000,10000,GET /opinions,neo4j,0,NodeUniqueIndexSeek,1
+10000,10000,GET /opinions,postgres,0,Sort,1
+10000,10000,GET /opinions,postgres,0,Nested Loop (Inner),5
+10000,10000,GET /opinions,postgres,0,Index Scan,6
+10000,10000,GET /opinions,postgres,0,Hash Join (Right),1
+10000,10000,GET /opinions,postgres,0,Seq Scan,1
+10000,10000,GET /opinions,postgres,0,Hash,1
+10000,10000,GET /opinions,postgres,0,Memoize,1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,0,ProduceResults,1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,0,Projection,1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,0,Filter,2
+10000,10000,GET /me/registrations/{id}/groups,neo4j,0,Expand(All),2
+10000,10000,GET /me/registrations/{id}/groups,neo4j,0,NodeUniqueIndexSeek,1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,ProduceResults,1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,Projection,2
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,CacheProperties,2
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(All),2
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,OptionalExpand(Into),1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,Sort,1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,CartesianProduct,1
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,Filter,2
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,Expand(All),4
+10000,10000,GET /me/registrations/{id}/groups,neo4j,1,NodeUniqueIndexSeek,2
+10000,10000,GET /me/registrations/{id}/groups,postgres,0,Index Only Scan,1
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Sort,1
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Left),4
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Nested Loop (Inner),2
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Index Scan,5
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Bitmap Heap Scan,1
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Bitmap Index Scan,1
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Index Only Scan,3
+10000,10000,GET /me/registrations/{id}/groups,postgres,1,Aggregate,1
+10000,10000,GET /groups/{id}/students,neo4j,0,ProduceResults,1
+10000,10000,GET /groups/{id}/students,neo4j,0,Projection,1
+10000,10000,GET /groups/{id}/students,neo4j,0,Filter,2
+10000,10000,GET /groups/{id}/students,neo4j,0,Expand(All),1
+10000,10000,GET /groups/{id}/students,neo4j,0,NodeUniqueIndexSeek,1
+10000,10000,GET /groups/{id}/students,neo4j,1,ProduceResults,1
+10000,10000,GET /groups/{id}/students,neo4j,1,Projection,2
+10000,10000,GET /groups/{id}/students,neo4j,1,CacheProperties,2
+10000,10000,GET /groups/{id}/students,neo4j,1,Sort,1
+10000,10000,GET /groups/{id}/students,neo4j,1,Expand(All),1
+10000,10000,GET /groups/{id}/students,neo4j,1,NodeUniqueIndexSeek,1
+10000,10000,GET /groups/{id}/students,postgres,0,Index Only Scan,1
+10000,10000,GET /groups/{id}/students,postgres,1,Sort,1
+10000,10000,GET /groups/{id}/students,postgres,1,Nested Loop (Left),2
+10000,10000,GET /groups/{id}/students,postgres,1,Nested Loop (Inner),1
+10000,10000,GET /groups/{id}/students,postgres,1,Hash Join (Inner),1
+10000,10000,GET /groups/{id}/students,postgres,1,Seq Scan,1
+10000,10000,GET /groups/{id}/students,postgres,1,Hash,1
+10000,10000,GET /groups/{id}/students,postgres,1,Bitmap Heap Scan,1
+10000,10000,GET /groups/{id}/students,postgres,1,Bitmap Index Scan,1
+10000,10000,GET /groups/{id}/students,postgres,1,Index Scan,3
+10000,10000,GET /students/{idx},neo4j,0,ProduceResults,1
+10000,10000,GET /students/{idx},neo4j,0,Projection,1
+10000,10000,GET /students/{idx},neo4j,0,Filter,2
+10000,10000,GET /students/{idx},neo4j,0,Expand(All),2
+10000,10000,GET /students/{idx},neo4j,0,NodeUniqueIndexSeek,1
+10000,10000,GET /students/{idx},neo4j,1,ProduceResults,1
+10000,10000,GET /students/{idx},neo4j,1,Projection,2
+10000,10000,GET /students/{idx},neo4j,1,CacheProperties,1
+10000,10000,GET /students/{idx},neo4j,1,Apply,1
+10000,10000,GET /students/{idx},neo4j,1,Filter,1
+10000,10000,GET /students/{idx},neo4j,1,NodeUniqueIndexSeek,1
+10000,10000,GET /students/{idx},neo4j,1,EagerAggregation,1
+10000,10000,GET /students/{idx},neo4j,1,Expand(All),1
+10000,10000,GET /students/{idx},neo4j,1,Argument,1
+10000,10000,GET /students/{idx},neo4j,2,ProduceResults,1
+10000,10000,GET /students/{idx},neo4j,2,Projection,1
+10000,10000,GET /students/{idx},neo4j,2,Apply,1
+10000,10000,GET /students/{idx},neo4j,2,Expand(All),7
+10000,10000,GET /students/{idx},neo4j,2,Distinct,1
+10000,10000,GET /students/{idx},neo4j,2,Filter,1
+10000,10000,GET /students/{idx},neo4j,2,NodeUniqueIndexSeek,1
+10000,10000,GET /students/{idx},neo4j,2,Optional,1
+10000,10000,GET /students/{idx},neo4j,2,CacheProperties,1
+10000,10000,GET /students/{idx},neo4j,2,Expand(Into),1
+10000,10000,GET /students/{idx},neo4j,2,Argument,1
+10000,10000,GET /students/{idx},postgres,0,Limit,1
+10000,10000,GET /students/{idx},postgres,0,Merge Join (Inner),1
+10000,10000,GET /students/{idx},postgres,0,Index Only Scan,2
+10000,10000,GET /students/{idx},postgres,1,Nested Loop (Left),1
+10000,10000,GET /students/{idx},postgres,1,Nested Loop (Inner),1
+10000,10000,GET /students/{idx},postgres,1,Index Scan,3
+10000,10000,GET /students/{idx},postgres,1,Index Only Scan,1
+10000,10000,GET /students/{idx},postgres,2,Nested Loop (Left),2
+10000,10000,GET /students/{idx},postgres,2,Nested Loop (Inner),6
+10000,10000,GET /students/{idx},postgres,2,Unique,1
+10000,10000,GET /students/{idx},postgres,2,Sort,1
+10000,10000,GET /students/{idx},postgres,2,Index Only Scan,2
+10000,10000,GET /students/{idx},postgres,2,Index Scan,6
+10000,10000,GET /students/{idx},postgres,2,Materialize,1
+10000,10000,GET /students/{idx},postgres,2,Seq Scan,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,ProduceResults,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Projection,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Filter,2
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,Expand(All),1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,0,NodeUniqueIndexSeek,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,ProduceResults,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Projection,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,SetProperty,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Filter,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,Expand(All),1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,neo4j,1,NodeUniqueIndexSeek(Locking),1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,postgres,0,Index Only Scan,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,postgres,1,ModifyTable,1
+10000,10000,PUT /groups/{id}/students/{idx}/grade,postgres,1,Index Only Scan,1

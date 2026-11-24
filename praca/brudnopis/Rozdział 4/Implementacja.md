@@ -32,7 +32,7 @@ We wdrożeniu produkcyjnym certyfikat serwera webowego zostałby zastąpiony cer
 
 5.1.2 Docker Compose
 
-Konfiguracja wszystkich serwisów znajduje się w pliku `docker-compose.yml` w repozytorium. Kolejne sekcje opisują decyzje dotyczące poszczególnych serwisów.
+Konfiguracja wszystkich serwisów znajduje się w pliku `docker-compose.yml` w repozytorium. Kolejne sekcje opisują decyzje dotyczące poszczególnych serwisów, z wyjątkiem serwisu `postgres`, opisanego w 6.3.
 
 Docker Compose pozwala na jednoczesne uruchamianie wszystkich kontenerów i proste zarządzanie nimi. Dodatkowo, dzięki niemu można ładować zmienne środowiskowe do tych kontenerów. Są one pobierane z pliku `.env` na potrzeby prototypu. We wdrożeniu produkcyjnym zmienne te powinny pochodzić z dedykowanego magazynu sekretów, np. HashiCorp Vault.
 
@@ -139,7 +139,6 @@ Skrypt jest uruchamiany przy każdym starcie środowiska, a dane bazy, w tym uż
 
 5.1.5 Serwis app
 Odpowiada on za backend aplikacji, czyli API dające klientom wygodny dostęp do zawartości grafowej bazy danych.
-
 Serwis `app` jest budowany z pliku `Dockerfile` w katalogu głównym repozytorium, bazującego na obrazie `python:3.14-slim`. Zależności z `requirements.txt` są instalowane przed skopiowaniem kodu aplikacji. Dzięki temu przy zmianie samego kodu Docker ponownie wykorzystuje warstwę z zainstalowanymi pakietami.
 
 Obraz tworzy użytkownika systemowego `api` o UID 10001, bez katalogu domowego, i z jego uprawnieniami uruchamia aplikację. Przejęcie procesu aplikacji nie daje więc atakującemu uprawnień użytkownika `root`. Aplikację uruchamia serwer uvicorn na porcie 8000, pod adresem `0.0.0.0`, dzięki czemu jest ona osiągalna z innych kontenerów, np. z serwera nginx.
@@ -160,6 +159,8 @@ W produkcyjnym wdrożeniu port 8000 w tym kontenerze nie powinien być wystawion
 
 Zmienne środowiskowe przekazują aplikacji konfigurację w postaci adresu bazy danych (`NEO4J_URI`) i danych uwierzytelniających użytkownika systemowego stworzonego przez serwis `init` (`NEO4J_USER` i `NEO4J_PASSWORD`). Dodatkowo przekazywany jest `JWT_SECRET` potrzebny do podpisywania tokenów wydawanych przez API oraz `SSL_CERT_FILE`, czyli ścieżka do certyfikatu. Dzięki tej zmiennej certyfikat zostaje załadowany do zaufanych certyfikatów, co pozwala później z nich korzystać.
 
+Zmienne `PG_CONNINFO` i `PG_PASSWORD` służą backendowi relacyjnemu (6.3).
+
 Składnia `${ZMIENNA:?komunikat}` sprawia, że Docker Compose odmawia uruchomienia, jeśli zmienna nie jest ustawiona w `.env` [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/].
 
 Wolumeny montują certyfikat CA (`/ca.pem`) oraz certyfikat i klucz API (`/certs`), oba w trybie tylko do odczytu.
@@ -170,7 +171,7 @@ Pozostałe opcje ograniczają możliwości kontenera na wypadek przejęcia aplik
 - `cap_drop: ALL` – odbiera procesowi wszystkie uprawnienia jądra Linux (ang. *capabilities*), np. możliwość zmiany właściciela plików czy obsługi surowych gniazd sieciowych. Aplikacja nasłuchuje na porcie 8000, powyżej 1024, więc żadne z nich nie jest jej potrzebne.
 - `no-new-privileges:true` – uniemożliwia procesowi uzyskanie nowych uprawnień, np. przez uruchomienie programu z bitem setuid. Uzupełnia to działanie jako nieuprzywilejowany użytkownik `api`.
 
-`depends_on` z warunkiem `service_completed_successfully` sprawia, że API startuje dopiero po pomyślnym zakończeniu serwisu `init`, czyli gdy baza zawiera już schemat, dane i konto `app_rw`. Gdyby inicjalizacja się nie powiodła, API w ogóle nie zostanie uruchomione.
+`depends_on` z warunkiem `service_completed_successfully` sprawia, że API startuje dopiero po pomyślnym zakończeniu serwisu `init`, czyli gdy baza zawiera już schemat, dane i konto `app_rw`. Gdyby inicjalizacja się nie powiodła, API w ogóle nie zostanie uruchomione. Analogicznie API czeka na gotowość serwisu `postgres` (6.3).
 
 
 5.1.6 Serwis frontend
@@ -244,6 +245,9 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 │   ├── edges
 │   └── nodes
 ├── queries
+├── sql
+├── bench
+├── tests
 ├── .env.example
 ├── certs.sh
 ├── docker-compose.yml
@@ -256,7 +260,7 @@ Klient Vue jest w całości zawarty w katalogu `frontend/`, wraz z plikiem `Dock
 
 W katalogu `app/` znajduje się backend, w tym warstwa API (szczegółową strukturę przedstawiono w 5.5.1). W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, niezależne od bazy danych. W podkatalogu `graph_backend/` znajduje się backend grafowy, czyli cały kod zależny od Neo4j. Plik `database.py` tworzy w nim połączenie z bazą za pomocą sterownika, punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, wspólna obsługa błędów w `errors.py`, a zapytania do bazy danych w pozostałych modułach.
 
-*todo* W tym samym katalogu, w podkatalogu `relation_backend/`, znajdzie się implementacja relacyjna podobnego systemu. Będzie ona działać w ten sam sposób – poprzez sterownik bazy danych zamiast mapowania obiektowo-relacyjnego. Oba backendy będą korzystać z tych samych modeli Pydantic.
+Podkatalog `relation_backend/` oraz katalogi `sql/`, `bench/` i `tests/` dotyczą porównania z modelem relacyjnym i testów (rozdziały 6 i 7).
 
 Ponieważ eksploracja bazy danych jest szczególnym celem tej pracy, poświęcono jej dużą część repozytorium. Katalog `import/` zawiera dane początkowe, a katalog `queries/` – instrukcje w języku Cypher wykonywane przy inicjalizacji bazy danych przez skrypt `init_db.py` (5.1.4, 5.3). Katalog `endpoint_schema/` zawiera dokumentację punktów końcowych API (5.4).
 
@@ -705,7 +709,7 @@ Funkcja `lifespan` obejmuje cały czas działania aplikacji [CYTOWANIE: https://
 
 *Dokumentacja metody `verify_connectivity` [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/async_api.html#neo4j.AsyncDriver.verify_connectivity]*
 
-Przy starcie `verify_connectivity()` sprawdza, czy sterownik może połączyć się z bazą i zalogować. Jeśli baza jest niedostępna, aplikacja nie uruchamia się wcale. Przy zamknięciu `close_driver()` zamyka sterownik wraz z jego pulą połączeń.
+Przy starcie `verify_connectivity()` sprawdza, czy sterownik może połączyć się z bazą i zalogować. Jeśli baza jest niedostępna, aplikacja nie uruchamia się wcale. Przy zamknięciu `close_driver()` zamyka sterownik wraz z jego pulą połączeń. Analogiczne funkcje `open_pool()` i `close_pool()` obsługują pulę połączeń backendu relacyjnego (6.4).
 
 Na poziomie całej aplikacji są rejestrowane procedury obsługi wyjątków (ang. *exception handlers*). Określają one, jaki kod statusu i jaki komunikat w formacie JSON zwrócić, gdy podczas obsługi żądania zostanie zgłoszony wyjątek danego typu [CYTOWANIE: https://fastapi.tiangolo.com/tutorial/handling-errors/#install-custom-exception-handlers]. Zdefiniowano je w funkcji `register_exception_handlers()` w pliku `errors.py`.
 
@@ -713,7 +717,7 @@ Dzięki temu punkty końcowe nie muszą same przechwytywać błędów bazy danyc
 
 W tym samym pliku zdefiniowano funkcje pomocnicze tworzące `HTTPException` dla najczęstszych kodów: `unauthorized` (401), `forbidden` (403), `not_found` (404), `conflict` (409) i `invalid` (422). Punkty końcowe zgłaszają błędy wyłącznie przez nie, co pozwala ustandaryzować odpowiedzi.
 
-Na końcu `app/__init__.py` podłączane są routery z katalogu `routers/` (5.5.1), pogrupowane według ról użytkowników. Każdy jest dołączany z argumentem `prefix=API_PREFIX`, więc wszystkie punkty końcowe zaczynają się od `/api`.
+Na końcu `app/__init__.py` podłączane są routery z katalogu `routers/` (5.5.1), pogrupowane według ról użytkowników. Każdy jest dołączany z argumentem `prefix=API_PREFIX`, więc wszystkie punkty końcowe zaczynają się od `/api`. Routery backendu relacyjnego otrzymują prefiks `/api/rel` (4.2).
 
 5.5.3 Połączenie z bazą danych
 
@@ -800,7 +804,7 @@ $2b$12$.lG2u6PuGdo7F5TdxxeEDuTQiGb/6nF5zkc04Qq9sf0SfD0egQsmq
 
 Kolejne fragmenty oddzielone znakiem `$` to wariant algorytmu (`2b`), koszt (`12`), a następnie 22 znaki soli i 31 znaków właściwego skrótu [CYTOWANIE: https://www.usenix.org/legacy/events/usenix99/provos/provos.pdf]. Skrót zawiera więc wszystko, co jest potrzebne do jego weryfikacji poprzez odtworzenie.
 
-Koszt obliczeniowy jest wyraźnie odczuwalny: na maszynie testowej (7.1) żądanie `POST /login` z istniejącym adresem trwa ok. 184 ms (7.2.1), z czego niemal cały czas zajmuje bcrypt. Dla pojedynczego logowania jest to niezauważalne, ale atakującemu, który zdobyłby skróty z bazy, ogranicza liczbę sprawdzanych haseł do kilku na sekundę na jeden rdzeń procesora.
+Koszt obliczeniowy jest wyraźnie odczuwalny: na maszynie testowej (7.1) żądanie `POST /login` z istniejącym adresem trwa ok. 184 ms (7.2.2), z czego niemal cały czas zajmuje bcrypt. Dla pojedynczego logowania jest to niezauważalne, ale atakującemu, który zdobyłby skróty z bazy, ogranicza liczbę sprawdzanych haseł do kilku na sekundę na jeden rdzeń procesora.
 
 Algorytm bcrypt uwzględnia wyłącznie pierwsze 72 bajty hasła. Wcześniejsze wersje biblioteki obcinały dłuższe hasła bez ostrzeżenia, zgodnie z oryginalną implementacją zaproponowaną przez OpenBSD. Od wersji 5.0.0 zgłaszany jest wyjątek `ValueError` [CYTOWANIE: https://github.com/pyca/bcrypt/blob/main/CHANGELOG.rst].
 
@@ -854,7 +858,7 @@ async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)
 
 Brak użytkownika i błędne hasło obsługuje ten sam warunek, z tym samym komunikatem. Sama treść odpowiedzi nie wystarcza jednak, żeby ukryć istnienie konta. W jednej z pierwszych implementacji, gdy użytkownik nie istniał, warunek kończył się przed wywołaniem `verify_password()`, więc bcrypt się nie wykonywał.
 
-Odpowiedź dla nieistniejącego konta przychodziła przez to wyraźnie szybciej niż dla istniejącego konta z błędnym hasłem. Po samym czasie odpowiedzi dało się więc sprawdzić, czy konto o danym adresie istnieje (atak czasowy, ang. *timing attack*) [CYTOWANIE: OWASP Authentication Cheat Sheet, https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-responses]. Pomiary przed poprawką i po niej przedstawiono w 7.2.1.
+Odpowiedź dla nieistniejącego konta przychodziła przez to wyraźnie szybciej niż dla istniejącego konta z błędnym hasłem. Po samym czasie odpowiedzi dało się więc sprawdzić, czy konto o danym adresie istnieje (atak czasowy, ang. *timing attack*) [CYTOWANIE: OWASP Authentication Cheat Sheet, https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-responses]. Pomiary przed poprawką i po niej przedstawiono w 7.2.2.
 
 Obecnie, gdy użytkownik nie istnieje, hasło jest sprawdzane względem `DUMMY_PASSWORD_HASH`, czyli skrótu losowego hasła, wyliczanego raz przy starcie aplikacji z tym samym kosztem co prawdziwe skróty. bcrypt wykonuje się zawsze, a wynik i tak jest odrzucany warunkiem `row is None`.
 
@@ -1105,7 +1109,7 @@ Punkty końcowe, zdefiniowane w katalogu `routers/`, są wszystkie zbudowane w b
 
 > Kroki oznaczone *(FastAPI)* nie wymagają kodu w treści funkcji – wynikają z deklaracji w dekoratorze i argumentach.
 
-Dzięki kolejności kroków 3 i 4 walidacja treści żądania nie zdradza nic użytkownikowi bez uprawnień (7.2.2).
+Dzięki kolejności kroków 3 i 4 walidacja treści żądania nie zdradza nic użytkownikowi bez uprawnień (7.2.1).
 
 Wszystkie kroki przechodzi punkt końcowy `GET /students/{student_idx}`, zwracający prowadzącemu lub administratorowi szczegóły studenta wraz ze średnią ocen:
 
@@ -1213,10 +1217,22 @@ Kwerenda sprawdzająca odpowiada na trzy pytania naraz. Każdy kolejny wzorzec j
 
 Opinie są widoczne w katalogu przy grupie i przy prowadzącym, bez informacji o autorze (3.4). Punkt końcowy przyjmuje dwa opcjonalne parametry zapytania, `teacher_idx` i `group_id`, z których przynajmniej jeden musi być podany – inaczej zwraca 422.
 
+Zapytanie zaczyna się od węzła wskazanego w żądaniu. Jeśli podano prowadzącego, pierwsza klauzula ma postać:
+
 ```cypher
-MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
-WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
-  AND ($group_id IS NULL OR g.id = $group_id)
+MATCH (t:Teacher {idx: $teacher_idx})<-[:ABOUT_TEACHER]-(o:Opinion)-[:ABOUT]->(g:Group)
+WHERE $group_id IS NULL OR g.id = $group_id
+```
+
+a jeśli tylko grupę:
+
+```cypher
+MATCH (g:Group {id: $group_id})<-[:ABOUT]-(o:Opinion)-[:ABOUT_TEACHER]->(t:Teacher)
+```
+
+Funkcja punktu końcowego wybiera jedną z nich i dołącza do niej wspólną dalszą część:
+
+```cypher
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
 MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 RETURN
@@ -1227,7 +1243,9 @@ RETURN
 ORDER BY o.submit DESC
 ```
 
-*Kwerenda zwracająca opinie (`routers/catalogue.py`)*
+*Wspólna część kwerendy zwracającej opinie (`routers/catalogue.py`)*
+
+Pierwsza wersja obsługiwała oba parametry jednym warunkiem `WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx) AND ($group_id IS NULL OR g.id = $group_id)`. Neo4j przechowuje jeden plan dla danej treści zapytania, więc plan musiał działać także przy pustym parametrze i nie mógł zacząć się od wyszukania prowadzącego w indeksie. Zapytanie przeglądało więc wszystkie opinie w bazie i dopiero potem je filtrowało, co ujawniła diagnostyka zapytań w 7.8.3. Rozdzielenie zapytania sprawia, że zaczyna się ono od wyszukania jednego węzła w indeksie klucza (`NodeUniqueIndexSeek`), a jego koszt zależy tylko od liczby opinii o danym prowadzącym lub grupie.
 
 Zapytanie pomija krawędź `WRITES`, dzięki czemu dane autora nie są odczytywane z bazy i nie trafiają do odpowiedzi. Sama krawędź pozostaje jednak w grafie, aby wykrywać powtórzone opinie, dlatego opinie są pseudonimowe (4.3.5). Z tego samego względu kwerenda zwraca wyłącznie datę wystawienia opinii. W małej grupie dokładny czas wystawienia pozwalałby prowadzącemu typować autora na podstawie listy zapisanych studentów. Średnia ocen z opinii (`avg_grade`) jest liczona w Pythonie.
 
@@ -1333,7 +1351,7 @@ Dopiero po założeniu blokad kwerenda oblicza warunki. Przy *read committed* tr
 
 Warunkowy zapis realizuje `FOREACH` po liście jednoelementowej albo pustej – jest to standardowy sposób na wykonanie zapisu tylko przy spełnionym warunku w Cypher bez podzapytań. `MERGE` zamiast `CREATE` sprawia, że ponowny zapis do tej samej grupy niczego nie zmienia, zgodnie z idempotentnością metody `PUT` (4.5.2).
 
-Działanie blokad sprawdzono testem współbieżności opisanym w 7.3.1. Wykazał on również, że ta sama kwerenda bez dwóch linii `SET` dopuszcza przepełnienie grupy.
+Działanie blokad sprawdzono testem współbieżności opisanym w 7.3. Wykazał on również, że ta sama kwerenda bez dwóch linii `SET` dopuszcza przepełnienie grupy.
 
 Ten sam wzorzec zastosowano przy zapisie dziekańskim (`POST /admin/groups/students`), który pomija sprawdzenie tury, a parametrem `ignore_capacity` pozwala pominąć również limit miejsc (3.2). W odróżnieniu od zapisu studenta, ponowny zapis do tej samej grupy zwraca tu 409, ponieważ jest to metoda `POST`.
 
@@ -1345,9 +1363,9 @@ Każda osoba musi mieć przynajmniej jedną rolę, więc odebranie ostatniej rol
 _LOCK_PERSON = "MATCH (p:Person {idx: $idx}) SET p.idx = p.idx RETURN p.idx AS idx"
 ```
 
-Kwerenda usuwająca rolę ponownie sprawdza liczbę ról już po założeniu blokady. Do ich odczytu wykorzystano funkcję `labels(p)`, ponieważ predykat etykiety (np. `p:Admin`) po oczekiwaniu na blokadę może jeszcze zwracać etykietę usuniętą chwilę wcześniej przez równoległą transakcję. Działanie blokady potwierdził test współbieżności (7.3.1, scenariusz D).
+Kwerenda usuwająca rolę ponownie sprawdza liczbę ról już po założeniu blokady. Do ich odczytu wykorzystano funkcję `labels(p)`, ponieważ predykat etykiety (np. `p:Admin`) po oczekiwaniu na blokadę może jeszcze zwracać etykietę usuniętą chwilę wcześniej przez równoległą transakcję. Działanie blokady potwierdził test współbieżności (7.3, scenariusz D).
 
-Po odebraniu roli API unieważnia tokeny osoby (5.5.6), ponieważ wcześniej wydany token nadal zawiera odebraną rolę. Skutek braku unieważnienia zależał od roli. Kwerendy studenta i prowadzącego zaczynają się od węzła z etykietą roli, np. `(t:Teacher {idx: $teacher_idx})-[:TEACHES]->`, więc po odebraniu etykiety nie dopasowywały niczego i żądanie kończyło się kodem 403. Punkty końcowe administratora sprawdzają natomiast tylko rolę zapisaną w tokenie. Bez unieważniania osoba pozbawiona roli administratora mogłaby więc nadal korzystać z jego punktów końcowych, aż do wygaśnięcia tokenu (7.2.4).
+Po odebraniu roli API unieważnia tokeny osoby (5.5.6), ponieważ wcześniej wydany token nadal zawiera odebraną rolę. Skutek braku unieważnienia zależał od roli. Kwerendy studenta i prowadzącego zaczynają się od węzła z etykietą roli, np. `(t:Teacher {idx: $teacher_idx})-[:TEACHES]->`, więc po odebraniu etykiety nie dopasowywały niczego i żądanie kończyło się kodem 403. Punkty końcowe administratora sprawdzają natomiast tylko rolę zapisaną w tokenie. Bez unieważniania osoba pozbawiona roli administratora mogłaby więc nadal korzystać z jego punktów końcowych, aż do wygaśnięcia tokenu (7.2.3).
 
 **Pozostałe miejsca**
 

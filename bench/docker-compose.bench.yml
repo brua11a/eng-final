@@ -1,0 +1,10 @@
+# Nakładka na docker-compose.yml dla pomiarów w różnych skalach danych (bench/run.py).
+# Zastępuje katalogi z danymi początkowymi danymi z bench/generate.py; Compose łączy
+# wolumeny po ścieżce w kontenerze, więc pozostałe montowania zostają bez zmian.
+services:
+  neo4j:
+    volumes:
+      - ${BENCH_DATA:?set BENCH_DATA}/import:/import:ro
+  postgres:
+    volumes:
+      - ${BENCH_DATA:?set BENCH_DATA}/sql:/data:ro

@@ -72,7 +72,7 @@ WHERE (%(name)s::text IS NULL OR strpos(lower(su.name), lower(%(name)s)) > 0)
 ORDER BY su.name COLLATE "C"
 """
 
-# Counterpart of graph_backend/routers/catalogue.py::_OPINIONS.
+# Counterpart of graph_backend/routers/catalogue.py::_OPINIONS_BY_TEACHER/_OPINIONS_BY_GROUP + _OPINIONS_RETURN.
 # Opinions are anonymous: opinion.student_idx is never read.
 OPINIONS = """
 SELECT

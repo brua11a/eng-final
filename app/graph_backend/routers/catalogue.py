@@ -408,10 +408,18 @@ async def teacher_groups_list(
 # Opinions are pseudonymous: the author (WRITES) stays in the graph, as it enforces one opinion per
 # group and teacher, but is never read here. Only the day of submission is returned: with the exact
 # time a teacher could match an opinion to a student of a small group.
-_OPINIONS = """
-MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
-WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
-  AND ($group_id IS NULL OR g.id = $group_id)
+# The query starts from the node given in the request, found through the index on its key
+# (Teacher.idx or Group.id), and only then follows the edges to its opinions. A single query with
+# `WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)` cannot do that: its one cached plan must also
+# work for an empty parameter, so it scanned every Opinion node (7.8.5).
+_OPINIONS_BY_TEACHER = """
+MATCH (t:Teacher {idx: $teacher_idx})<-[:ABOUT_TEACHER]-(o:Opinion)-[:ABOUT]->(g:Group)
+WHERE $group_id IS NULL OR g.id = $group_id
+"""
+_OPINIONS_BY_GROUP = """
+MATCH (g:Group {id: $group_id})<-[:ABOUT]-(o:Opinion)-[:ABOUT_TEACHER]->(t:Teacher)
+"""
+_OPINIONS_RETURN = """
 MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
 MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
 RETURN
@@ -439,7 +447,8 @@ async def list_opinions(
 ) -> OpinionListResponse:
     if not teacher_idx and not group_id:
         raise invalid("teacher_idx or group_id is required")
-    rows = await run(session, _OPINIONS, teacher_idx=teacher_idx, group_id=group_id)
+    start = _OPINIONS_BY_TEACHER if teacher_idx else _OPINIONS_BY_GROUP
+    rows = await run(session, start + _OPINIONS_RETURN, teacher_idx=teacher_idx, group_id=group_id)
     opinions = [OpinionItem(**row) for row in rows]
     avg = sum(o.grade for o in opinions) / len(opinions) if opinions else None
     return OpinionListResponse(opinions=opinions, avg_grade=avg)

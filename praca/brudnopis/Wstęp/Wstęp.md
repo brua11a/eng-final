@@ -37,4 +37,4 @@ Poza zakresem pracy pozostają inne funkcje systemu USOS, w szczególności obs�
 Napiszę jak bede wiedział jakie są rozdziały
 
 1.4 Wykorzystanie narzędzi sztucznej inteligencji
-W pracy korzystano z narzędzi sztucznej inteligencji (AI, ang. *Artificial Intelligence*) – modeli Claude Opus 5.5 i Claude Haiku 5.5 od firmy Anthropic, przede wszystkim do generowania danych testowych, testów jednostkowych oraz kodu aplikacji po stronie klienckiej. Wykorzystano je również do szukania w dokumentacji konkretnych cytatów, redagowania tekstu pracy inżynierskiej i formatowania dokumentu w LaTeX. 
+W pracy korzystano z narzędzi sztucznej inteligencji (AI, ang. *Artificial Intelligence*) takich jak Claude Code i Antigravity. Wykorzystywano modele Claude Opus 5.5 oraz Claude Haiku 5.5 od firmy Anthropic, a także Gemini Neon 4 od firmy Google. Służyły one do generowania danych testowych, przeprowadzania i pisania testów oraz do pisania kodu aplikacji klienckiej. Wykorzystano je również do szukania w dokumentacji konkretnych cytatów, redagowania tekstu pracy inżynierskiej i formatowania dokumentu w LaTeX. 

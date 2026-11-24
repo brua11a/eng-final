@@ -62,7 +62,11 @@ LOAD CSV WITH HEADERS FROM "file:///edges/student_registered.csv" AS row
 MATCH (st:Student {idx: row.student_idx})
 MATCH (g:Group {id: row.group_id})
 MERGE (st)-[r:REGISTERED_IN]->(g)
-SET r.registered_at = datetime(row.registered_at);
+SET r.registered_at = datetime(row.registered_at)
+// Optional grade column; an empty or missing value leaves a grade set later through the API.
+FOREACH (_ IN CASE WHEN coalesce(row.grade, "") <> "" THEN [1] ELSE [] END |
+  SET r.grade = toFloat(row.grade)
+);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/opinion_writes.csv" AS row
 MATCH (o:Opinion {id: row.opinion_id})
