@@ -38,7 +38,8 @@ SELECT
 FROM opens o
 JOIN class_group g ON g.id = o.group_id
 JOIN group_type gt ON gt.id = g.group_type_id
-LEFT JOIN room r ON r.id = g.room_id
+LEFT JOIN in_room ir ON ir.group_id = g.id
+LEFT JOIN room r ON r.id = ir.room_id
 LEFT JOIN teaches te ON te.group_id = g.id
 LEFT JOIN person tp ON tp.idx = te.teacher_idx
 WHERE o.registration_id = %(registration_id)s
@@ -90,13 +91,13 @@ WITH checks AS (
         AND other.group_type_id = %(group_type_id)s
         AND other.id <> %(group_id)s
     ) AS conflict,
-    (SELECT count(*) FROM registered_in WHERE group_id = %(group_id)s) >= %(capacity)s AS full
+    (SELECT count(*) FROM registered_in WHERE group_id = %(group_id)s) >= %(capacity)s AS is_full
 ),
 decision AS (
   SELECT CASE
     WHEN already THEN 'ok'
     WHEN conflict THEN 'conflict'
-    WHEN full THEN 'full'
+    WHEN is_full THEN 'full'
     ELSE 'ok'
   END AS status
   FROM checks

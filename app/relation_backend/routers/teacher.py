@@ -37,11 +37,12 @@ SELECT
   p.name,
   p.surname,
   p.phone,
-  p.photo,
+  ph.photo,
   s.joined,
   ARRAY(SELECT e.term_id FROM enrolled e WHERE e.student_idx = s.idx) AS term_ids
 FROM student s
 JOIN person p ON p.idx = s.idx
+LEFT JOIN person_photo ph ON ph.idx = p.idx
 WHERE s.idx = %(student_idx)s
 """
 
@@ -50,7 +51,7 @@ WHERE s.idx = %(student_idx)s
 STUDENT_GRADES = """
 SELECT
   su.code AS subject,
-  su.ects,
+  se.ects,
   ac.year,
   ac.season,
   gt.id AS type,
@@ -64,13 +65,14 @@ FROM (
   WHERE ri.student_idx = %(student_idx)s
 ) si
 JOIN subject su ON su.code = si.subject_code
+LEFT JOIN subject_ects se ON se.subject_code = su.code
 JOIN academic_cycle ac ON ac.id = si.cycle_id
 JOIN group_type gt ON gt.subject_code = si.subject_code AND gt.cycle_id = si.cycle_id
 LEFT JOIN (
-  SELECT ri.grade, g.group_type_id
-  FROM registered_in ri
-  JOIN class_group g ON g.id = ri.group_id
-  WHERE ri.student_idx = %(student_idx)s
+  SELECT gr.grade, g.group_type_id
+  FROM grade gr
+  JOIN class_group g ON g.id = gr.group_id
+  WHERE gr.student_idx = %(student_idx)s
 ) mine ON mine.group_type_id = gt.id
 """
 
@@ -80,20 +82,26 @@ SELECT
   p.name,
   p.surname,
   p.phone,
-  p.photo,
+  ph.photo,
   s.joined,
-  ri.grade::float8 AS grade
+  gr.grade::float8 AS grade
 FROM registered_in ri
 JOIN student s ON s.idx = ri.student_idx
 JOIN person p ON p.idx = s.idx
+LEFT JOIN person_photo ph ON ph.idx = p.idx
+LEFT JOIN grade gr ON gr.student_idx = ri.student_idx AND gr.group_id = ri.group_id
 WHERE ri.group_id = %(group_id)s
 ORDER BY p.surname COLLATE "C", p.name COLLATE "C"
 """
 
+# The grade has its own table, so setting it is an upsert. The row is taken from registered_in:
+# when the student is not registered in the group nothing is inserted and nothing is returned (404).
 SET_GRADE = """
-UPDATE registered_in
-SET grade = %(grade)s
+INSERT INTO grade (student_idx, group_id, grade)
+SELECT student_idx, group_id, %(grade)s
+FROM registered_in
 WHERE student_idx = %(student_idx)s AND group_id = %(group_id)s
+ON CONFLICT (student_idx, group_id) DO UPDATE SET grade = excluded.grade
 RETURNING group_id, student_idx, grade::float8 AS grade
 """
 

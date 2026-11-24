@@ -10,17 +10,18 @@ from app.schemas.auth import LoginRequest, LoginResponse
 router = APIRouter(tags=["relational: public"])
 
 # Counterpart of graph_backend/routers/public.py::_LOGIN.
-# Roles are separate tables, so each role is one LEFT JOIN instead of a label check.
+# Roles and deactivation are separate tables, so each one is a LEFT JOIN instead of a label check.
 LOGIN = """
 SELECT
   u.passwd_hash,
   u.email,
   u.idx,
-  u.deactivated_at IS NOT NULL AS inactive,
+  i.idx IS NOT NULL AS inactive,
   a.idx IS NOT NULL AS admin,
   t.idx IS NOT NULL AS teacher,
   s.idx IS NOT NULL AS student
 FROM app_user u
+LEFT JOIN inactive i ON i.idx = u.idx
 LEFT JOIN admin a ON a.idx = u.idx
 LEFT JOIN teacher t ON t.idx = u.idx
 LEFT JOIN student s ON s.idx = u.idx

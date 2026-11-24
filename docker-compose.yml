@@ -64,7 +64,7 @@ services:
       PG_APP_PASSWORD: ${PG_APP_PASSWORD:?set PG_APP_PASSWORD in .env}
     volumes:
       - pg_data:/var/lib/postgresql
-      - ./import:/import:ro
+      - ./sql/data:/data:ro
       - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ./sql/02_import.sql:/docker-entrypoint-initdb.d/02_import.sql:ro
       - ./sql/03_security.sh:/docker-entrypoint-initdb.d/03_security.sh:ro

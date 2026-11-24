@@ -24,7 +24,7 @@ SUBJECTS = """
 SELECT
   su.code,
   su.name,
-  su.ects,
+  se.ects,
   ARRAY(
     SELECT DISTINCT fa.name
     FROM term_subject ts
@@ -39,8 +39,8 @@ SELECT
       'offered', EXISTS (
         SELECT 1
         FROM term_subject ts
-        JOIN curriculum_term ct ON ct.id = ts.term_id
-        WHERE ts.subject_code = su.code AND ct.cycle_id = cyc.id
+        JOIN taught_in ti ON ti.term_id = ts.term_id
+        WHERE ts.subject_code = su.code AND ti.cycle_id = cyc.id
       ),
       'group_count', (
         SELECT count(*)
@@ -66,6 +66,7 @@ SELECT
     ORDER BY cyc.ord
   ) AS cycles
 FROM subject su
+LEFT JOIN subject_ects se ON se.subject_code = su.code
 WHERE (%(name)s::text IS NULL OR strpos(lower(su.name), lower(%(name)s)) > 0)
   AND (%(code)s::text IS NULL OR strpos(lower(su.code), lower(%(code)s)) > 0)
 ORDER BY su.name COLLATE "C"
@@ -77,7 +78,7 @@ OPINIONS = """
 SELECT
   o.id,
   o.grade::float8 AS grade,
-  o.content,
+  oc.content,
   -- Only the day: with the exact time a teacher could match an opinion to a student of a small group.
   (o.submit AT TIME ZONE 'Europe/Warsaw')::date AS submit,
   g.id AS group_id,
@@ -88,6 +89,7 @@ SELECT
   tp.idx AS teacher_idx,
   tp.name || ' ' || tp.surname AS teacher
 FROM opinion o
+LEFT JOIN opinion_content oc ON oc.opinion_id = o.id
 JOIN class_group g ON g.id = o.group_id
 JOIN person tp ON tp.idx = o.teacher_idx
 JOIN group_type gt ON gt.id = g.group_type_id

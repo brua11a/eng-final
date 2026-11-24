@@ -1,6 +1,11 @@
 -- Relational counterpart of the graph model (queries/schema.cypher).
 -- Each node label becomes a table; N:1 edges become foreign-key columns,
 -- N:M edges become join tables. Cardinality follows the edge table in the thesis (4.3.6).
+--
+-- No column accepts NULL. An optional property or an optional N:1 edge is a separate table
+-- whose primary key is also the foreign key to the row it belongs to (1:0..1). A missing value
+-- is a missing row. ON DELETE CASCADE: such a row is part of its owner, like a property is part
+-- of a node or an edge in the graph, and disappears with it.
 
 -- People ---------------------------------------------------------------------
 -- No multi-labelling in SQL: shared data lives in `person`, every role is its own table
@@ -10,8 +15,12 @@ CREATE TABLE person (
     name     text NOT NULL,
     surname  text NOT NULL,
     phone    text NOT NULL,
-    photo    text,
     UNIQUE (name, surname, phone)
+);
+
+CREATE TABLE person_photo (                                      -- optional Person.photo
+    idx   text PRIMARY KEY REFERENCES person (idx) ON DELETE CASCADE,
+    photo text NOT NULL
 );
 
 CREATE TABLE student (
@@ -29,12 +38,18 @@ CREATE TABLE admin (
     idx text PRIMARY KEY REFERENCES person (idx)
 );
 
--- Login data (label User). Inactive is a nullable column instead of a separate label.
+-- Login data (label User).
 CREATE TABLE app_user (
-    idx            text PRIMARY KEY REFERENCES person (idx),
-    email          text NOT NULL UNIQUE,
-    passwd_hash    text NOT NULL,
-    deactivated_at timestamptz
+    idx         text PRIMARY KEY REFERENCES person (idx),
+    email       text NOT NULL UNIQUE,
+    passwd_hash text NOT NULL
+);
+
+-- Label Inactive. It references app_user, not person: only an account can be deactivated,
+-- which the graph type cannot express (Inactive => User is not allowed, 5.3.1).
+CREATE TABLE inactive (
+    idx            text PRIMARY KEY REFERENCES app_user (idx) ON DELETE CASCADE,
+    deactivated_at timestamptz NOT NULL
 );
 
 -- Teaching offer --------------------------------------------------------------
@@ -68,14 +83,22 @@ CREATE TABLE academic_cycle (
 CREATE TABLE curriculum_term (
     id            text PRIMARY KEY,
     sem           integer NOT NULL CHECK (sem > 0),
-    curriculum_id text NOT NULL REFERENCES curriculum (id),     -- HAS_TERM (1:N)
-    cycle_id      text REFERENCES academic_cycle (id)           -- TAUGHT_IN (N:1, optional)
+    curriculum_id text NOT NULL REFERENCES curriculum (id)      -- HAS_TERM (1:N)
+);
+
+CREATE TABLE taught_in (                                         -- TAUGHT_IN (N:0..1)
+    term_id  text PRIMARY KEY REFERENCES curriculum_term (id) ON DELETE CASCADE,
+    cycle_id text NOT NULL REFERENCES academic_cycle (id)
 );
 
 CREATE TABLE subject (
     code text PRIMARY KEY,
-    name text NOT NULL,
-    ects integer CHECK (ects >= 0)
+    name text NOT NULL
+);
+
+CREATE TABLE subject_ects (                                      -- optional Subject.ects
+    subject_code text PRIMARY KEY REFERENCES subject (code) ON DELETE CASCADE,
+    ects         integer NOT NULL CHECK (ects >= 0)
 );
 
 CREATE TABLE term_subject (                                     -- INCLUDES (N:M)
@@ -119,8 +142,12 @@ CREATE TABLE class_group (
     end_time      time NOT NULL,
     pnp           text NOT NULL CHECK (pnp IN ('P', 'NP', 'ALL')),
     group_type_id text NOT NULL REFERENCES group_type (id),      -- OF_TYPE (N:1)
-    room_id       text REFERENCES room (id),                     -- IN_ROOM (N:1)
     UNIQUE (group_type_id, number)        -- natural key that the graph type cannot express
+);
+
+CREATE TABLE in_room (                                           -- IN_ROOM (N:0..1)
+    group_id text PRIMARY KEY REFERENCES class_group (id) ON DELETE CASCADE,
+    room_id  text NOT NULL REFERENCES room (id)
 );
 
 CREATE TABLE teaches (                                           -- TEACHES (N:M)
@@ -145,8 +172,16 @@ CREATE TABLE registered_in (                                     -- REGISTERED_I
     student_idx   text REFERENCES student (idx),
     group_id      text REFERENCES class_group (id),
     registered_at timestamptz NOT NULL DEFAULT now(),
-    grade         numeric(2, 1) CHECK (grade IN (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)),
     PRIMARY KEY (student_idx, group_id)
+);
+
+-- Optional REGISTERED_IN.grade: a grade can only exist for an existing registration.
+CREATE TABLE grade (
+    student_idx text,
+    group_id    text,
+    grade       numeric(2, 1) NOT NULL CHECK (grade IN (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)),
+    PRIMARY KEY (student_idx, group_id),
+    FOREIGN KEY (student_idx, group_id) REFERENCES registered_in (student_idx, group_id) ON DELETE CASCADE
 );
 
 -- Registrations ---------------------------------------------------------------
@@ -189,7 +224,6 @@ CREATE TABLE assigned (
 CREATE TABLE opinion (
     id          text PRIMARY KEY,
     grade       numeric(2, 1) NOT NULL CHECK (grade IN (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)),
-    content     text,
     submit      timestamptz NOT NULL,
     student_idx text NOT NULL REFERENCES student (idx),          -- WRITES (1:N)
     group_id    text NOT NULL REFERENCES class_group (id),       -- ABOUT (N:1)
@@ -197,15 +231,20 @@ CREATE TABLE opinion (
     UNIQUE (student_idx, group_id, teacher_idx)                  -- one opinion per triple
 );
 
+CREATE TABLE opinion_content (                                   -- optional Opinion.content
+    opinion_id text PRIMARY KEY REFERENCES opinion (id) ON DELETE CASCADE,
+    content    text NOT NULL
+);
+
 -- Indexes on foreign keys used for traversal in the compared queries.
 -- (PostgreSQL indexes primary keys and UNIQUE columns automatically, but not foreign keys.)
 CREATE INDEX ON programme (faculty_id);
 CREATE INDEX ON curriculum (programme_id);
 CREATE INDEX ON curriculum_term (curriculum_id);
-CREATE INDEX ON curriculum_term (cycle_id);
+CREATE INDEX ON taught_in (cycle_id);
 CREATE INDEX ON term_subject (subject_code);
 CREATE INDEX ON group_type (subject_code, cycle_id);
-CREATE INDEX ON class_group (room_id);
+CREATE INDEX ON in_room (room_id);
 CREATE INDEX ON teaches (group_id);
 CREATE INDEX ON enrolled (term_id);
 CREATE INDEX ON registered_in (group_id);
