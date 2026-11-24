@@ -7,12 +7,14 @@
 - **CSV** – ang. *Comma-Separated Values*
 - **DNS** – ang. *Domain Name System*
 - **ECTS** – ang. *European Credit Transfer and Accumulation System*
+- **GQL** – ang. *Graph Query Language*
 - **HMAC** – ang. *Hash-based Message Authentication Code*
 - **HTML** – ang. *HyperText Markup Language*
 - **HTTP** – ang. *Hypertext Transfer Protocol*
 - **HTTPS** – ang. *Hypertext Transfer Protocol Secure*
 - **IP** – ang. *Internet Protocol*
 - **ISO** – ang. *International Organization for Standardization*
+- **JIT** – ang. *Just-In-Time*
 - **JSON** – ang. *JavaScript Object Notation*
 - **JWT** – ang. *JSON Web Token*
 - **OGM** – ang. *Object-Graph Mapping*
@@ -35,4 +37,5 @@
 - **URI** – ang. *Uniform Resource Identifier*
 - **URL** – ang. *Uniform Resource Locator*
 - **USOS** – Uniwersytecki System Obsługi Studiów
+- **UTC** – ang. *Coordinated Universal Time*
 - **UUID** – ang. *Universally Unique Identifier*

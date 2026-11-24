@@ -16,7 +16,7 @@ Ze względu na dużą liczbę tabel diagram wygenerowany przez narzędzie DBeave
 
 6.2.1 Przekształcenie grafu w tabele
 
-Schemat relacyjny zaprojektowano w trzeciej postaci normalnej (3NF), odwzorowując model grafowy z 4.3. Większość typów węzłów przeniesiono wprost – każdej etykiecie odpowiada tabela, a właściwościom kolumny. Wyjątkiem są osoby (6.2.2) oraz grupy zajęciowe: słowo `group` jest w SQL zastrzeżone, dlatego etykiecie `Group` odpowiada tabela `class_group`.
+Schemat relacyjny zaprojektowano w 3NF, odwzorowując model grafowy z 4.3. Większość typów węzłów przeniesiono wprost – każdej etykiecie odpowiada tabela, a właściwościom kolumny. Wyjątkiem są osoby (6.2.2) oraz grupy zajęciowe: słowo `group` jest w SQL zastrzeżone, dlatego etykiecie `Group` odpowiada tabela `class_group`.
 
 Krawędzie odwzorowano przy użyciu kluczy obcych, zgodnie z ich kardynalnością (4.3.6):
 - relacje N:1 i 1:N zapisano jako kolumnę z kluczem obcym po stronie „wielu”, np. `programme.faculty_id` (`OFFERED_BY`) czy `class_group.group_type_id` (`OF_TYPE`),
@@ -47,6 +47,8 @@ LEFT JOIN teacher t ON t.idx = u.idx
 LEFT JOIN student s ON s.idx = u.idx
 WHERE u.email = %(email)s
 ```
+
+*Zapytanie logowania w SQL (`relation_backend/routers/public.py`)*
 
 6.2.3 Ograniczenia wymuszane przez bazę relacyjną
 
@@ -83,6 +85,8 @@ COPY person       FROM '/data/person.csv'       WITH (FORMAT csv, HEADER match);
 COPY person_photo FROM '/data/person_photo.csv' WITH (FORMAT csv, HEADER match);
 ```
 
+*Fragment skryptu importu danych `02_import.sql`*
+
 Opcja `HEADER match` dodatkowo weryfikuje zgodność nagłówków pliku z nazwami kolumn w tabeli [CYTOWANIE: https://www.postgresql.org/docs/current/sql-copy.html].
 
 Konto API tworzone w `03_security.sh` otrzymuje wyłącznie uprawnienia `SELECT`, `INSERT`, `UPDATE` i `DELETE` na tabelach. Nie ma prawa modyfikować schematu ani przypisanej roli `pg_read_server_files` (odpowiednik `DENY LOAD` w Neo4j). Nazwę i hasło konta przekazano jako zmienne narzędzia `psql`:
@@ -90,6 +94,8 @@ Konto API tworzone w `03_security.sh` otrzymuje wyłącznie uprawnienia `SELECT`
 ```sql
 CREATE ROLE :"user" LOGIN PASSWORD :'pw';
 ```
+
+*Utworzenie konta API w PostgreSQL za pomocą zmiennych `psql` (`03_security.sh`)*
 
 Narzędzie `psql` automatycznie ujmuje takie zmienne w odpowiednie znaki ograniczające (`:"user"` jako identyfikator, `:'pw'` jako literał) i zabezpiecza znaki specjalne [CYTOWANIE: https://www.postgresql.org/docs/current/app-psql.html]. Dzięki temu znaki takie jak apostrof w haśle nie powodują błędu ani wstrzyknięcia SQL, więc nie trzeba było pisać osobnego skryptu w Pythonie jak dla `cypher-shell` (5.1.4).
 
@@ -106,7 +112,7 @@ Różnice względem wersji grafowej wynikają bezpośrednio ze sterownika i siln
 - Funkcje `run()` i `one()` zachowują sygnatury z 5.5.5 i przekazują parametry osobno od treści zapytania (`%(name)s`). Ponieważ `psycopg` zwraca standardowe typy Pythona (`datetime`, `Decimal`), nie ma potrzeby stosowania funkcji `native()`.
 - Moduł `errors.py` obsługuje wyjątki `psycopg` analogicznie do 5.5.2: naruszenie ograniczenia (`IntegrityError`) zwraca kod 409, błędna wartość (`DataError`) kod 400, a pozostałe błędy kod 500.
 
-Kontrola dostępu oparta na relacjach (ReBAC, 5.5.7) odzwierciedla te same zależności co w grafie, przy czym przejścia po krawędziach odpowiadają tu złączeniom tabel – na przykład przy sprawdzaniu, czy prowadzący uczy danego studenta:
+Mechanizm ReBAC (5.5.7) odzwierciedla te same zależności co w grafie, przy czym przejścia po krawędziach odpowiadają tu złączeniom tabel – na przykład przy sprawdzaniu, czy prowadzący uczy danego studenta:
 
 ```sql
 SELECT ri.student_idx AS idx
@@ -115,6 +121,8 @@ JOIN registered_in ri ON ri.group_id = te.group_id
 WHERE te.teacher_idx = %(teacher_idx)s AND ri.student_idx = %(student_idx)s
 LIMIT 1
 ```
+
+*Sprawdzenie ReBAC dla szczegółów studenta w SQL*
 
 Zgodność odpowiedzi obu implementacji zweryfikowano testem z 7.8.1.
 

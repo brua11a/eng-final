@@ -7,6 +7,6 @@ Projekt i implementacja uczelnianego systemu zarządzania danymi z RBAC opartego
 
 Design and Implementation of a University Platform for Data Management with Dedicated RBAC Using a Graph Database
 
-dr inż., Tomasz Szandała
+dr inż. Tomasz Szandała
 
 Słowa kluczowe: graf, bazy danych, RBAC

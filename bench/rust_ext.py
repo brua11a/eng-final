@@ -55,7 +55,7 @@ def main() -> None:
         build_image()
         for variant in ("python", "rust"):
             if variant == "rust":
-                sh(*cmd, "-f", str(OVERRIDE), "up", "-d", "--no-build", "--force-recreate", "app", env=env)
+                sh(*cmd, "-f", str(OVERRIDE), "up", "-d", "--no-build", "--no-deps", "--force-recreate", "app", env=env)
                 wait_ready()
                 check = sh(*cmd, "exec", "-T", "app", "python", "-c",
                            "import importlib.metadata as m; print(m.version('neo4j-rust-ext'))", env=env).strip()

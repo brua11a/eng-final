@@ -44,22 +44,22 @@ MATCH (gt:GroupType {id: row.group_type_id})
 MERGE (g)-[:OF_TYPE]->(gt);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/teacher_group.csv" AS row
-MATCH (t:Teacher {idx: row.teacher_idx})
+MATCH (t:Person:Teacher {idx: row.teacher_idx}) USING INDEX t:Person(idx)
 MATCH (g:Group {id: row.group_id})
 MERGE (t)-[:TEACHES]->(g);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/teacher_faculty.csv" AS row
-MATCH (t:Teacher {idx: row.teacher_idx})
+MATCH (t:Person:Teacher {idx: row.teacher_idx}) USING INDEX t:Person(idx)
 MATCH (fa:Faculty {id: row.faculty_id})
 MERGE (t)-[:WORKS_AT]->(fa);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/student_enrolled.csv" AS row
-MATCH (st:Student {idx: row.student_idx})
+MATCH (st:Person:Student {idx: row.student_idx}) USING INDEX st:Person(idx)
 MATCH (ct:CurriculumTerm {id: row.term_id})
 MERGE (st)-[:ENROLLED]->(ct);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/student_registered.csv" AS row
-MATCH (st:Student {idx: row.student_idx})
+MATCH (st:Person:Student {idx: row.student_idx}) USING INDEX st:Person(idx)
 MATCH (g:Group {id: row.group_id})
 MERGE (st)-[r:REGISTERED_IN]->(g)
 SET r.registered_at = datetime(row.registered_at)
@@ -70,7 +70,7 @@ FOREACH (_ IN CASE WHEN coalesce(row.grade, "") <> "" THEN [1] ELSE [] END |
 
 LOAD CSV WITH HEADERS FROM "file:///edges/opinion_writes.csv" AS row
 MATCH (o:Opinion {id: row.opinion_id})
-MATCH (st:Student {idx: row.student_idx})
+MATCH (st:Person:Student {idx: row.student_idx}) USING INDEX st:Person(idx)
 MERGE (st)-[:WRITES]->(o);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/opinion_about_group.csv" AS row
@@ -80,7 +80,7 @@ MERGE (o)-[:ABOUT]->(g);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/opinion_about_teacher.csv" AS row
 MATCH (o:Opinion {id: row.opinion_id})
-MATCH (t:Teacher {idx: row.teacher_idx})
+MATCH (t:Person:Teacher {idx: row.teacher_idx}) USING INDEX t:Person(idx)
 MERGE (o)-[:ABOUT_TEACHER]->(t);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/registration_for_cycle.csv" AS row
@@ -104,6 +104,6 @@ MATCH (g:Group {id: row.group_id})
 MERGE (reg)-[:OPENS]->(g);
 
 LOAD CSV WITH HEADERS FROM "file:///edges/turn_assignments.csv" AS row
-MATCH (st:Student {idx: row.student_idx})
+MATCH (st:Person:Student {idx: row.student_idx}) USING INDEX st:Person(idx)
 MATCH (rt:RegistrationTurn {id: row.turn_id})
 MERGE (st)-[:ASSIGNED]->(rt);

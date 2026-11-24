@@ -9,21 +9,21 @@ Szyfrowanie TLS (ang. *Transport Layer Security*) w projekcie obejmuje cztery po
 
 Do wygenerowania certyfikatów wykorzystano narzędzie mkcert [CYTOWANIE: https://github.com/FiloSottile/mkcert]. Tworzy ono na komputerze programisty lokalny urząd certyfikacji, a polecenie `mkcert -install` dodaje jego certyfikat główny do systemowego magazynu zaufanych certyfikatów oraz do magazynów przeglądarek. Certyfikaty podpisane przez to CA są przez przeglądarkę akceptowane bez ostrzeżeń, w przeciwieństwie do certyfikatów samopodpisanych (ang. *self-signed*), które każda przeglądarka oznacza jako niezaufane. Jednocześnie, w odróżnieniu od certyfikatów samopodpisanych, możliwa jest pełna weryfikacja certyfikatu po stronie klientów, łącznie ze sprawdzeniem nazwy hosta.
 
-Certyfikaty generuje skrypt `certs.sh` (dostępny w repozytorium), który należy uruchomić przed pierwszym `docker compose up`. Skrypt kopiuje do projektu certyfikat lokalnego CA, a następnie dla każdego serwisu wywołuje funkcję `cert`, generującą parę certyfikatu i klucza.
+Certyfikaty generuje skrypt `certs.sh`, który należy uruchomić przed pierwszym `docker compose up`. Skrypt kopiuje do projektu certyfikat lokalnego CA, a następnie dla każdego serwisu wywołuje funkcję `cert`, generującą parę certyfikatu i klucza.
 
 `mkcert -CAROOT` zwraca ścieżkę katalogu lokalnego CA. Do projektu kopiowany jest wyłącznie publiczny certyfikat główny `rootCA.pem`, zapisywany jako `ca.pem`. Klucz prywatny CA (`rootCA-key.pem`) nie opuszcza tego katalogu, więc nie trafia do żadnego kontenera. Plik `ca.pem` służy klientom do weryfikacji certyfikatu serwera.
 
 Klucz prywatny lokalnego CA wymaga szczególnej ochrony. Polecenie `mkcert -install` dodaje certyfikat CA do magazynów zaufanych certyfikatów systemu i przeglądarek jako certyfikat główny. Certyfikat ten nie zawiera ograniczeń nazw (rozszerzenie *Name Constraints*) i jest ważny przez 10 lat. Wyciek pliku `rootCA-key.pem` pozwoliłby więc wystawić certyfikat dla dowolnej domeny, akceptowany na tej maszynie bez ostrzeżeń. Atakujący w pozycji pośrednika (ang. *Man-in-the-Middle*) mógłby wtedy odczytywać i modyfikować dowolny ruch HTTPS tego komputera, również niezwiązany z projektem. Dlatego klucz jest czytelny wyłącznie dla właściciela katalogu mkcert, a po zakończeniu pracy z projektem należy usunąć CA z magazynów poleceniem `mkcert -uninstall` [CYTOWANIE: https://github.com/FiloSottile/mkcert].
 
 Funkcja `cert` tworzy dla wskazanego serwisu katalog `certificates/<serwis>/` z certyfikatem `public.crt` i kluczem prywatnym `private.key`. Pozostałe argumenty to nazwy hosta, zapisywane w polu Subject Alternative Name certyfikatu:
-- Neo4j: `neo4j` – nazwa serwisu w Docker Compose, pod którą kontenery `init` i `app` łączą się z bazą (`bolt+s://neo4j:7687`). Docker udostępnia w sieci projektu wewnętrzny serwer DNS (ang. *Domain Name System*), który rozwiązuje nazwy serwisów na adresy IP (ang. *Internet Protocol*) kontenerów [CYTOWANIE: https://docs.docker.com/compose/how-tos/networking/]. Schemat `bolt+s` wymaga, by nazwa w adresie zgadzała się z nazwą w certyfikacie. Druga nazwa, `localhost`, służy do otwierania konsoli Neo4j w przeglądarce oraz do łączenia się narzędzi programistycznych z przekierowanym portem 7687.
+- Neo4j: `neo4j` – nazwa serwisu w Docker Compose, pod którą kontenery `init` i `app` łączą się z bazą (`bolt+s://neo4j:7687`). Docker udostępnia w sieci projektu wewnętrzny serwer DNS (ang. *Domain Name System*), który rozwiązuje nazwy serwisów na adresy IP (ang. *Internet Protocol*) kontenerów. Schemat `bolt+s` wymaga, by nazwa w adresie zgadzała się z nazwą w certyfikacie. Druga nazwa, `localhost`, służy do otwierania konsoli Neo4j w przeglądarce oraz do łączenia się narzędzi programistycznych z przekierowanym portem 7687.
 - nginx: wyłącznie `localhost` – adres, pod którym przeglądarka otwiera aplikację kliencką.
 - API: `app` – nazwa serwisu, pod którą nginx przekazuje żądania do API (`https://app:8000`), oraz `localhost`, używana przy bezpośrednim dostępie do API z hosta i przez serwer deweloperski Vite.
 - PostgreSQL: `postgres` i `localhost`, analogicznie do Neo4j.
 
 Nazwy plików `public.crt` i `private.key` są domyślnymi nazwami oczekiwanymi przez politykę SSL (ang. *Secure Sockets Layer*) Neo4j w katalogu wskazanym przez `base_directory` [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/security/ssl-framework/]. Ponieważ polityki `bolt` i `https` wskazują ten sam katalog, oba połączenia Neo4j korzystają z tej samej pary kluczy.
 
-Osobne pary kluczy wynikają z zasady najmniejszych uprawnień. Każdy kontener montuje wyłącznie katalog z własną parą oraz publiczny certyfikat `ca.pem`, więc przejęcie jednego z nich nie pozwala podszyć się pod żaden inny serwis. Ma to szczególne znaczenie dla nginx. Jest to jedyny serwis, z którym łączy się przeglądarka, a więc najbardziej narażony na wykorzystanie podatności serwera [CYTOWANIE]. W pierwszej wersji projektu nginx korzystał z pary kluczy Neo4j, a kontener Neo4j montował cały katalog `certificates`, łącznie z kluczami API i PostgreSQL. Przejęcie dowolnego z tych serwisów pozwalało więc podszyć się pod co najmniej jeden inny.
+Osobne pary kluczy wynikają z zasady najmniejszych uprawnień. Każdy kontener montuje wyłącznie katalog z własną parą oraz publiczny certyfikat `ca.pem`, więc przejęcie jednego z nich nie pozwala podszyć się pod żaden inny serwis. Ma to szczególne znaczenie dla nginx. Jest to jedyny serwis, z którym łączy się przeglądarka, a więc najbardziej narażony na wykorzystanie podatności serwera.
 
 Skrypt nadaje kluczom prywatnym prawa `644`, czyli prawo odczytu dla wszystkich użytkowników. Jest to konieczne, ponieważ procesy w kontenerach działają z innym identyfikatorem użytkownika (UID, ang. *User Identifier*) niż właściciel plików na hoście (np. API działa jako użytkownik `api` o UID 10001, opisany w 5.1.5), a katalogi z certyfikatami są montowane w trybie tylko do odczytu.
 
@@ -52,7 +52,7 @@ W trakcie prac nad systemem wystawiany był port 7474 - HTTP. Wdrożono jednak c
 
 Port TCP (ang. *Transmission Control Protocol*) 7687 to domyślny port połączenia Bolt. Jest on wykorzystywany przez Cypher Shell, pokazaną wyżej konsolę Neo4j oraz przez oficjalne sterowniki Neo4j. Z racji tego, że API będzie wykorzystywało sterownik Neo4j do komunikacji z bazą, port 7687 jest konieczny.
 
-Żeby połączenie między bazą a API było odporne na podsłuch, wprowadzono szyfrowanie poprzez TLS/SSL. W związku z tym, że SSL jest włączony z Bolt, URI (ang. *Uniform Resource Identifier*) zmienia się z `bolt` na `bolt+s`. Certyfikaty opisano w 5.1.1, a wady alternatywnego schematu `bolt+ssc` w 5.1.4.
+Żeby połączenie między bazą a API było odporne na podsłuch, wprowadzono szyfrowanie poprzez TLS/SSL. W związku z tym, że SSL jest włączony z Bolt, URI (ang. *Uniform Resource Identifier*) zmienia się z `bolt` na `bolt+s`.
 
 Pozostałe porty domyślnie włączone na instancjach Neo4j, takie jak "Cluster routing connector" czy "Remote debugging" uznano za niepotrzebne. W związku z tym, że nie są one potrzebne, to nie powinny być wystawiane.
 
@@ -68,7 +68,7 @@ Neo4j nie ma możliwości uruchomienia skryptu inicjalizacyjnego po uruchomieniu
 
 Serwis korzysta z obrazu API (5.1.5), ponieważ zawiera on już sterownik Neo4j dla Pythona. Uruchamia się dopiero wtedy, gdy serwis `neo4j` osiągnie stan „zdrowy” (ang. *healthy*), sprawdzany opisanym wcześniej testem stanu.
 
-Zmienne przekazane do kontenera to adres bazy danych (`bolt+s://neo4j:7687`), dane do logowania administratora bazy oraz nazwa i hasło konta z ograniczonymi uprawnieniami, którym API będzie łączyło się z bazą. Dane administratora są potrzebne do zdefiniowania schematu, w tym ograniczeń, oraz do zaimportowania danych z plików CSV.
+Zmienne przekazane do kontenera to adres bazy danych (`bolt+s://neo4j:7687`), dane do logowania administratora bazy oraz nazwa i hasło konta z ograniczonymi uprawnieniami, którym API będzie łączyło się z bazą. Dane administratora są potrzebne do zdefiniowania schematu, w tym ograniczeń, oraz do zaimportowania danych z plików CSV (ang. *Comma-Separated Values*).
 
 Montowane są katalog `queries` z instrukcjami Cypher, skrypt `init_db.py` oraz certyfikat `ca.pem`. Wszystkie są zamontowane w trybie `ro` (ang. *read only*), ponieważ serwis `init` nie ma powodu, by je modyfikować. Kontener ma ponadto nałożone te same ograniczenia co serwis `app` (`read_only`, `cap_drop: ALL`, `no-new-privileges`, 5.1.5).
 
@@ -111,6 +111,8 @@ DENY LOAD ON ALL DATA TO app_rw;
 GRANT ROLE app_rw TO $user;
 ```
 
+*Utworzenie konta API o ograniczonych uprawnieniach (`security.cypher`)*
+
 Nazwa i hasło konta są przekazywane jako parametry zapytania `$user` i `$pw`. Sterownik przesyła je do serwera oddzielnie od treści zapytania, więc nie są interpretowane jako kod i nie wymagają żadnego przetwarzania.
 
 Pierwsza wersja serwisu `init` korzystała z narzędzia cypher-shell, dostępnego w obrazie Neo4j. Nazwa i hasło konta API były przekazywane opcją `--param`:
@@ -120,6 +122,8 @@ cypher-shell -d system -f /queries/security.cypher \
     --param "user => '$NEO4J_APP_USER'" \
     --param "pw => '$NEO4J_APP_PASSWORD'"
 ```
+
+*Pierwotne wywołanie `security.cypher` za pomocą narzędzia `cypher-shell`*
 
 Wartość opcji `--param` jest wyrażeniem Cypher. Zgodnie z dokumentacją, wartością parametru może być dowolne wyrażenie Cypher, obliczane jednorazowo po stronie serwera [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/cypher-shell/]. Umożliwia to przekazywanie wartości dowolnego typu, np. dat, ale oznacza też, że wartość zmiennej środowiskowej, wstawiona przez powłokę bash do treści wyrażenia, staje się fragmentem kodu Cypher. Objęcie wartości apostrofami tworzy z niej literał tekstowy, jednak tylko dopóki sama wartość nie zawiera apostrofu. Inicjalizacja była więc podatna na wstrzyknięcie kodu Cypher (ang. *Cypher injection*), a wartości zawierające znaki o specjalnym znaczeniu, takie jak `'` czy `\`, powodowały błąd inicjalizacji lub ciche zapisanie innego hasła niż podane w `.env`.
 
@@ -143,7 +147,7 @@ Serwis `app` jest budowany z pliku `Dockerfile` w katalogu głównym repozytoriu
 
 Obraz tworzy użytkownika systemowego `api` o UID 10001, bez katalogu domowego, i z jego uprawnieniami uruchamia aplikację. Przejęcie procesu aplikacji nie daje więc atakującemu uprawnień użytkownika `root`. Aplikację uruchamia serwer uvicorn na porcie 8000, pod adresem `0.0.0.0`, dzięki czemu jest ona osiągalna z innych kontenerów, np. z serwera nginx.
 
-Opcje `--ssl-certfile` i `--ssl-keyfile` sprawiają, że uvicorn serwuje API wyłącznie po HTTPS [CYTOWANIE: https://www.uvicorn.org/settings/#https]. Certyfikat i klucz pochodzą z katalogu `certificates/app/` (5.1.1), montowanego w Docker Compose jako `/certs` w trybie tylko do odczytu. Klucz nie jest kopiowany do obrazu, więc nie trafia do żadnej z jego warstw.
+Opcje `--ssl-certfile` i `--ssl-keyfile` sprawiają, że uvicorn serwuje API wyłącznie po HTTPS. Certyfikat i klucz pochodzą z katalogu `certificates/app/` (5.1.1), montowanego w Docker Compose jako `/certs` w trybie tylko do odczytu. Klucz nie jest kopiowany do obrazu, więc nie trafia do żadnej z jego warstw.
 
 Bez tego ruch między serwerem nginx a API odbywałby się zwykłym HTTP. Szyfrowanie TLS kończyłoby się na nginx, a token JWT, dane logowania i odpowiedzi API przechodziłyby przez sieć Dockera jawnym tekstem. Choć sieć ta jest izolowana od hosta, każdy kontener w niej podłączony mógłby taki ruch podsłuchać lub podszyć się pod API.
 
@@ -165,7 +169,7 @@ Składnia `${ZMIENNA:?komunikat}` sprawia, że Docker Compose odmawia uruchomien
 
 Wolumeny montują certyfikat CA (`/ca.pem`) oraz certyfikat i klucz API (`/certs`), oba w trybie tylko do odczytu.
 
-Pozostałe opcje ograniczają możliwości kontenera na wypadek przejęcia aplikacji [CYTOWANIE: https://docs.docker.com/reference/compose-file/services/]:
+Pozostałe opcje ograniczają możliwości kontenera na wypadek przejęcia aplikacji:
 - `read_only: true` – system plików kontenera jest tylko do odczytu, więc atakujący nie może podmienić kodu aplikacji ani zapisać własnych plików wykonywalnych.
 - `tmpfs: /tmp` – jedyny zapisywalny katalog, przechowywany w pamięci RAM (ang. *Random Access Memory*) i znikający po zatrzymaniu kontenera. Jest potrzebny bibliotekom, które zapisują pliki tymczasowe.
 - `cap_drop: ALL` – odbiera procesowi wszystkie uprawnienia jądra Linux (ang. *capabilities*), np. możliwość zmiany właściciela plików czy obsługi surowych gniazd sieciowych. Aplikacja nasłuchuje na porcie 8000, powyżej 1024, więc żadne z nich nie jest jej potrzebne.
@@ -180,9 +184,9 @@ Serwis `frontend` jest punktem wejścia do systemu dla użytkownika. Działając
 
 Serwis jest budowany z pliku `Dockerfile` znajdującego się w katalogu `frontend/`.
 
-Wykorzystano budowanie wieloetapowe (ang. *multi-stage build*) [CYTOWANIE: https://docs.docker.com/build/building/multi-stage/]. Etap `build` z obrazem Node.js buduje aplikację kliencką, a do końcowego obrazu `nginx:1.27-alpine` trafiają wyłącznie gotowe pliki statyczne z katalogu `dist`. Środowisko Node.js, npm i `node_modules` nie znajdują się więc w działającym kontenerze, co zmniejsza jego rozmiar i powierzchnię ataku. Kolejność instrukcji, podobnie jak w 5.1.5, pozwala ponownie wykorzystać warstwę z zależnościami przy zmianie samego kodu.
+Wykorzystano budowanie wieloetapowe (ang. *multi-stage build*). Etap `build` z obrazem Node.js buduje aplikację kliencką, a do końcowego obrazu `nginx:1.27-alpine` trafiają wyłącznie gotowe pliki statyczne z katalogu `dist`. Środowisko Node.js, npm i `node_modules` nie znajdują się więc w działającym kontenerze, co zmniejsza jego rozmiar i powierzchnię ataku. Kolejność instrukcji, podobnie jak w 5.1.5, pozwala ponownie wykorzystać warstwę z zależnościami przy zmianie samego kodu.
 
-Argument `NPM_REGISTRY` pozwala wskazać inny rejestr pakietów npm, np. w sieci z ograniczonym dostępem do publicznego rejestru. Zmienna `VITE_API_URL` jest wstawiana przez Vite do kodu na etapie budowania [CYTOWANIE: https://vite.dev/guide/env-and-mode] i celowo pozostaje pusta, dzięki czemu aplikacja wysyła żądania pod ścieżki względne z prefiksem `/api`, czyli do tego samego serwera nginx.
+Argument `NPM_REGISTRY` pozwala wskazać inny rejestr pakietów npm, np. w sieci z ograniczonym dostępem do publicznego rejestru. Zmienna `VITE_API_URL` jest wstawiana przez Vite do kodu na etapie budowania i celowo pozostaje pusta, dzięki czemu aplikacja wysyła żądania pod ścieżki względne z prefiksem `/api`, czyli do tego samego serwera nginx.
 
 Konfiguracja serwera nginx znajduje się w pliku `frontend/nginx.conf` i jest kopiowana do obrazu jako `/etc/nginx/conf.d/default.conf`. Poniżej opisano jej najważniejsze elementy.
 
@@ -197,11 +201,11 @@ Certyfikat i klucz to własna para nginx (`certificates/nginx/`, 5.1.1), zawiera
 ![[Pasted image 20261115022652.png]]
 *Aplikacja kliencka pod adresem https://localhost:5173 z informacją o poprawnym certyfikacie*
 
-Pierwszy blok `location` obejmuje ścieżki API. Wszystkie punkty końcowe API są udostępniane pod wspólnym prefiksem `/api`, a nginx wybiera blok o najdłuższym pasującym prefiksie [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_core_module.html#location], więc każde żądanie zaczynające się od `/api/` trafia do proxy, a każde inne do aplikacji klienckiej. Ponieważ `proxy_pass` nie zawiera ścieżki, adres jest przekazywany do API bez zmian, łącznie z prefiksem.
+Pierwszy blok `location` obejmuje ścieżki API. Wszystkie punkty końcowe API są udostępniane pod wspólnym prefiksem `/api`, a nginx wybiera blok o najdłuższym pasującym prefiksie, więc każde żądanie zaczynające się od `/api/` trafia do proxy, a każde inne do aplikacji klienckiej. Ponieważ `proxy_pass` nie zawiera ścieżki, adres jest przekazywany do API bez zmian, łącznie z prefiksem.
 
 Samo `https` w `proxy_pass` włącza szyfrowanie, ale nginx domyślnie nie weryfikuje certyfikatu serwera docelowego [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify]. Byłaby to sytuacja analogiczna do `bolt+ssc` z 5.1.4: połączenie szyfrowane, ale bez pewności, z kim. Dlatego `proxy_ssl_verify` włącza weryfikację, `proxy_ssl_trusted_certificate` wskazuje lokalne CA, a `proxy_ssl_name` i `proxy_ssl_server_name` określają i przekazują w SNI (ang. *Server Name Indication*) nazwę `app` sprawdzaną w certyfikacie API. Połączenie ograniczono do TLS 1.3, ponieważ obie strony są pod kontrolą projektu. Nagłówki `proxy_set_header` przekazują do API dane oryginalnego żądania (host, adres IP klienta, protokół), które inaczej zostałyby utracone na proxy.
 
-Drugi blok obsługuje aplikację jednostronicową (SPA), w której routing odbywa się w przeglądarce. Adresy widoków, np. `/student/plan`, nie odpowiadają plikom na serwerze, więc `try_files` zwraca w takim przypadku `index.html` [CYTOWANIE: https://router.vuejs.org/guide/essentials/history-mode.html]. Bez tego odświeżenie strony kończyłoby się błędem 404.
+Drugi blok obsługuje SPA, w której routing odbywa się w przeglądarce. Adresy widoków, np. `/student/plan`, nie odpowiadają plikom na serwerze, więc `try_files` zwraca w takim przypadku `index.html`. Bez tego odświeżenie strony kończyłoby się błędem 404.
 
 Wyjątkiem są pliki zbudowanej aplikacji w katalogu `/assets/`, których nazwy zawierają skrót zawartości, np. `CyclesView-D5yd3d5K.js`. Brakujący plik kończy się tu błędem 404, a nie zwróceniem dokumentu HTML (ang. *HyperText Markup Language*) `index.html`, którego przeglądarka i tak nie przyjęłaby jako modułu JavaScript. Ponieważ zawartość pliku o danej nazwie nigdy się nie zmienia, przeglądarka może go przechowywać bezterminowo (`immutable`). Sam `index.html`, wskazujący aktualne nazwy plików, nie jest natomiast buforowany (`no-cache`), dzięki czemu po wdrożeniu nowej wersji przeglądarka od razu ją pobiera.
 
@@ -256,6 +260,8 @@ We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`
 └── requirements.txt
 ```
 
+*Struktura katalogów i głównych plików repozytorium*
+
 Klient Vue jest w całości zawarty w katalogu `frontend/`, wraz z plikiem `Dockerfile` budującym jego obraz i konfiguracją serwera nginx (`nginx.conf`), który go serwuje.
 
 W katalogu `app/` znajduje się backend, w tym warstwa API (szczegółową strukturę przedstawiono w 5.5.1). W podkatalogu `schemas/` zdefiniowano modele Pydantic, opisujące oczekiwany kształt żądań i odpowiedzi serwera, niezależne od bazy danych. W podkatalogu `graph_backend/` znajduje się backend grafowy, czyli cały kod zależny od Neo4j. Plik `database.py` tworzy w nim połączenie z bazą za pomocą sterownika, punkty końcowe znajdują się w `routers/`, pogrupowane według ról użytkowników, uwierzytelnianie i autoryzacja w `auth/`, wspólna obsługa błędów w `errors.py`, a zapytania do bazy danych w pozostałych modułach.
@@ -270,7 +276,7 @@ Dane dostępowe (hasła do bazy danych i klucz podpisujący tokeny) przechowywan
 
 5.3 Inicjalizacja i schemat bazy danych
 
-W katalogu `import/` znajdują się dane w formacie CSV (ang. *Comma-Separated Values*), importowane przy inicjalizacji bazy danych – `nodes/` zawiera węzły, a `edges/` krawędzie. Na każdy typ węzła i na każdy typ krawędzi przypada osobny plik. Wyjątkiem jest etykieta `User` – dane logowania (adres e-mail i skrót hasła) są kolumnami w plikach studentów, prowadzących i administratorów, a etykieta nadawana jest przy imporcie tym osobom, które mają podany adres e-mail.
+W katalogu `import/` znajdują się dane w formacie CSV, importowane przy inicjalizacji bazy danych – `nodes/` zawiera węzły, a `edges/` krawędzie. Na każdy typ węzła i na każdy typ krawędzi przypada osobny plik. Wyjątkiem jest etykieta `User` – dane logowania (adres e-mail i skrót hasła) są kolumnami w plikach studentów, prowadzących i administratorów, a etykieta nadawana jest przy imporcie tym osobom, które mają podany adres e-mail.
 
 Skrypt `init_db.py` (5.1.4) wykonuje kolejno instrukcje z katalogu `queries/`: `schema.cypher` narzuca kształt węzłów i krawędzi oraz pozostałe ograniczenia, `nodes.cypher` i `edges.cypher` wczytują pliki CSV z węzłami i krawędziami, a `security.cypher` tworzy konto bazodanowe, którym łączy się API (4.4.3).
 
@@ -278,7 +284,7 @@ Definicja typu grafu w `schema.cypher` jest zapisana w wersji Cypher 25 (`CYPHER
 
 5.3.1 Schemat bazy danych
 
-Plik `schema.cypher` jest ładowany do bazy danych jako pierwszy, skryptem `init_db.py` opisanym w 5.1.4. Definiuje on typ grafu (ang. *graph type*), czyli opis dopuszczalnego kształtu węzłów i krawędzi. Typ grafu pozwala określić typy danych właściwości, wymagać ich istnienia oraz narzucić inne ograniczenia, takie jak klucze i unikalność. Funkcja ta jest dostępna wyłącznie w wersji Enterprise Neo4j, co było jednym z powodów wyboru obrazu `neo4j:2026.07.1-enterprise` (5.1.3).
+Plik `schema.cypher` jest ładowany do bazy danych jako pierwszy, skryptem `init_db.py` opisanym w 5.1.4. Definiuje on typ grafu, czyli opis dopuszczalnego kształtu węzłów i krawędzi. Typ grafu pozwala określić typy danych właściwości, wymagać ich istnienia oraz narzucić inne ograniczenia, takie jak klucze i unikalność. Funkcja ta jest dostępna wyłącznie w wersji Enterprise Neo4j, co było jednym z powodów wyboru obrazu `neo4j:2026.07.1-enterprise` (5.1.3).
 
 Dla każdego przewidzianego typu węzła powstało w tym pliku odpowiadające mu ograniczenie. Jako przykład posłuży definicja węzła grupy (`Group`):
 
@@ -294,9 +300,9 @@ Dla każdego przewidzianego typu węzła powstało w tym pliku odpowiadające mu
 	}) REQUIRE g.id IS KEY,
 ```
 
-Zgodnie z projektem systemu węzeł grupy przechowuje identyfikator, dzień tygodnia, numer grupy, parzystość tygodni, w których odbywają się zajęcia, pojemność grupy oraz godziny rozpoczęcia i zakończenia zajęć.
+*Definicja węzła `Group` w typie grafu (`schema.cypher`)*
 
-Godziny mają typ `LOCAL TIME`, czyli czas bez przesunięcia strefy czasowej (4.3.3). Początkowo używano typu `ZONED TIME`, ze stałym przesunięciem. Zajęcia zapisane jako 13:15+01:00 wypadały po zmianie czasu na letni o 14:15 czasu polskiego. Dane początkowe zawierały przy tym godziny z oboma przesunięciami (+01:00 i +02:00). Cypher porównuje czasy ze strefą jako chwile, więc sortowanie grup według godziny rozpoczęcia dawało błędną kolejność: 13:15+02:00 trafiało przed 12:30+01:00. Ten sam typ mają godziny tur zapisów, dla których błąd był poważniejszy, ponieważ przesuwał moment otwarcia zapisów (5.5.10).
+Zgodnie z projektem systemu węzeł grupy przechowuje identyfikator, dzień tygodnia, numer grupy, parzystość tygodni, w których odbywają się zajęcia, pojemność grupy oraz godziny rozpoczęcia i zakończenia zajęć. Godziny mają typ `LOCAL TIME`, czyli czas bez przesunięcia strefy czasowej (4.3.3).
 
 Jako typ identyfikatora (`id`) przyjęto `STRING` zamiast `INTEGER`, ponieważ Neo4j nie obsługuje autoinkrementacji. Identyfikatory liczbowe wymagałyby osobnego, globalnego mechanizmu ich nadawania, z którego korzystałyby wszystkie zapytania tworzące nowe węzły. Alternatywą byłoby wyszukanie w grafie największego istniejącego identyfikatora i zwiększenie go o 1, lecz takie rozwiązanie jest podatne na wyścigi – dwie równoległe transakcje mogą odczytać tę samą wartość i nadać ten sam identyfikator. O wbudowaną autoinkrementację użytkownicy Neo4j proszą co najmniej od 2013 roku [CYTOWANIE: https://gist.github.com/tekiegirl/8012859]. Ten sposób wykorzystano jedynie w punkcie końcowym `GET /admin/people/next-idx`, który podpowiada administratorowi kolejny numer osoby (`idx`). Jest to wyłącznie podpowiedź: jeśli dwóch administratorów otrzyma ten sam numer, drugą próbę utworzenia osoby odrzuci ograniczenie `idx IS KEY`, a API zwróci kod 409.
 
@@ -304,13 +310,15 @@ Do tego celu nie nadaje się również wewnętrzny identyfikator elementu, zwrac
 
 Problemy te rozwiązuje zastąpienie identyfikatorów liczbowych identyfikatorami UUID (ang. *Universally Unique Identifier*). Wygenerowanie UUID nie wymaga przechowywania stanu ani znajomości identyfikatorów istniejących już w bazie. Cypher udostępnia do tego funkcję `randomUUID()`, która według dokumentacji zwraca „128-bitową wartość z silnymi gwarancjami unikalności” (ang. *a 128-bit value with strong guarantees of uniqueness*) [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/functions/scalar/]. W tym projekcie UUID jest identyfikatorem prawie wszystkich typów węzłów. Nowe identyfikatory generuje API funkcją `uuid4()` z biblioteki standardowej Pythona, a dane początkowe mają je zapisane w plikach CSV. Podobne stanowisko prezentują użytkownicy forum społeczności Neo4j, odradzając liczbową autoinkrementację, ponieważ silnik bazy danych powinien przedkładać wydajność i stabilność nad wygodę [CYTOWANIE: https://community.neo4j.com/t/how-to-auto-increment-to-get-unique-value-for-a-new-nodes-field/12815/7].
 
-Właściwości `weekday`, `number` i `capacity` są liczbami całkowitymi. Dzień tygodnia naturalniej byłoby zapisać jako typ wyliczeniowy (ang. *enum*), dostępny w większości współczesnych języków programowania i w relacyjnych bazach danych, np. PostgreSQL [CYTOWANIE: https://www.postgresql.org/docs/current/datatype-enum.html]. Neo4j nie obsługuje jednak typów wyliczeniowych i nie pozwala ograniczyć zbioru dopuszczalnych wartości właściwości, dlatego poprawność dnia tygodnia sprawdza warstwa aplikacji – model żądania `GroupCreateRequest` przyjmuje wyłącznie wartości od 1 do 7. Zastąpienie liczby siedmioma węzłami dni tygodnia wymagałoby dodatkowego przejścia po grafie przy każdym odczycie grupy, a baza i tak nie wymusiłaby istnienia krawędzi (4.3.7), dlatego z niego zrezygnowano. Przyjęto, że 1 oznacza poniedziałek, a 7 – niedzielę, zgodnie z normą ISO (ang. *International Organization for Standardization*) 8601 [CYTOWANIE: ISO 8601-1:2019] oraz z numeracją składowej `dayOfWeek` w typach czasowych Neo4j [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/values-and-types/temporal/].
+Właściwości `weekday`, `number` i `capacity` są liczbami całkowitymi. Dzień tygodnia naturalniej byłoby zapisać jako typ wyliczeniowy (ang. *enum*), dostępny w większości współczesnych języków programowania i w relacyjnych bazach danych, np. PostgreSQL. Neo4j nie obsługuje jednak typów wyliczeniowych i nie pozwala ograniczyć zbioru dopuszczalnych wartości właściwości, dlatego poprawność dnia tygodnia sprawdza warstwa aplikacji – model żądania `GroupCreateRequest` przyjmuje wyłącznie wartości od 1 do 7. Zastąpienie liczby siedmioma węzłami dni tygodnia wymagałoby dodatkowego przejścia po grafie przy każdym odczycie grupy, a baza i tak nie wymusiłaby istnienia krawędzi (4.3.7), dlatego z niego zrezygnowano. Przyjęto, że 1 oznacza poniedziałek, a 7 – niedzielę, zgodnie z normą ISO (ang. *International Organization for Standardization*) 8601 [CYTOWANIE: ISO 8601-1:2019] oraz z numeracją składowej `dayOfWeek` w typach czasowych Neo4j [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/values-and-types/temporal/].
 
 Inaczej potraktowano sale, w których odbywają się zajęcia – są one osobnymi węzłami (`Room`), połączonymi z grupą krawędzią `IN_ROOM`:
 
 ```cypher
 	(g)-[:IN_ROOM => {}]->(r),
 ```
+
+*Definicja krawędzi `IN_ROOM` w typie grafu (`schema.cypher`)*
 
 Sala, w przeciwieństwie do dnia tygodnia, jest samodzielnym bytem: ma własne właściwości (budynek i numer sali), w jednej sali odbywa się wiele grup, a zbiór sal zmienia się w czasie – powstają nowe budynki, a istniejące sale są wyłączane z użytku. Gdyby budynek i numer sali były właściwościami grupy, zmiana danych sali wymagałaby aktualizacji wszystkich odbywających się w niej grup, a literówka w nazwie budynku tworzyłaby w praktyce nową salę. Jako osobny węzeł sala jest zapisana w jednym miejscu, a ograniczenie unikalności pary budynek–numer sali (`REQUIRE (r.building, r.room_num) IS UNIQUE`) chroni przed duplikatami.
 
@@ -330,6 +338,8 @@ Poza kształtem samego węzła `Group` typ grafu określa również, jakie kraw�
 	(t)-[:TEACHES => {}]->(g)
 ```
 
+*Definicje krawędzi powiązanych z węzłem `Group` (`schema.cypher`)*
+
 Graph type, poza typem danych, określa również, które właściwości są wymagane. Sama deklaracja `nazwa :: TYP` jedynie wymusza typ, jeśli właściwość występuje. Jej istnienie wymusza dopiero modyfikator `NOT NULL`. Wpis `REQUIRE g.id IS KEY` sprawia, że identyfikator grupy musi istnieć i dodatkowo musi być unikatowy.
 
 Ograniczenie typu `KEY` jest równoważne połączeniu ograniczenia unikalności (`IS UNIQUE`) z ograniczeniem istnienia (`IS NOT NULL`) na tym samym zbiorze właściwości [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/schema/constraints/]:
@@ -338,6 +348,8 @@ Ograniczenie typu `KEY` jest równoważne połączeniu ograniczenia unikalności
 CREATE CONSTRAINT group_id_exists FOR (g:Group) REQUIRE g.id IS NOT NULL;
 CREATE CONSTRAINT group_id_unique FOR (g:Group) REQUIRE g.id IS UNIQUE;
 ```
+
+*Ograniczenia `IS NOT NULL` i `IS UNIQUE` równoważne ograniczeniu `IS KEY`*
 
 `Group` jest węzłem przechowującym najwięcej informacji. Pozostałe węzły służące do definiowania domeny uczelnianej są skonstruowane w bardzo podobny sposób – typy danych określone w projekcie systemu są tłumaczone na typy danych dostępne w silniku Neo4j, a dodatkowe ograniczenia są nakładane analogicznie. Następnie, jeśli między węzłami mają istnieć krawędzie, są one również definiowane.
 
@@ -349,10 +361,14 @@ Surowy komunikat błędu zwracany przez Neo4j (wersja 2026.07.1 Enterprise) przy
 CYPHER 25 ALTER CURRENT GRAPH TYPE SET { (si:SubjectInstance => {}) }
 ```
 
+*Próba zdefiniowania węzła `SubjectInstance` bez właściwości*
+
 ```shell
 22NC2: data exception - node element type has no effect. The node element type `SubjectInstance` must contain one or more implied labels, or at least one property type.
   42001: syntax error or access rule violation - invalid syntax
 ```
+
+*Komunikat błędu `22NC2` zwracany przez Neo4j*
 
 Pierwszym obejściem, jakie się nasuwa, jest nadanie węzłowi sztucznego identyfikatora, np. `id :: STRING` z ograniczeniem `IS KEY`. Taka właściwość nie byłaby jednak do niczego wykorzystywana – węzeł i tak jest zawsze odnajdywany poprzez krawędzie łączące go z przedmiotem i cyklem akademickim – a wprowadzałaby do modelu informację, której projekt nie przewiduje. Węzeł, którego jedyną rolą jest łączenie innych węzłów krawędziami, jest w pełni poprawnym elementem modelu grafowego, a wymuszenie istnienia w nim właściwości lub implikowanej etykiety nie wnosi do schematu żadnej informacji.
 
@@ -363,6 +379,8 @@ Z tego powodu etykieta `SubjectInstance` została pominięta w definicjach węz�
 	(:SubjectInstance)-[:OFFERED_IN => {}]->(ac),
 	(:SubjectInstance)-[:HAS_TYPE => {}]->(gt),
 ```
+
+*Definicje krawędzi wychodzących z węzła `SubjectInstance` (`schema.cypher`)*
 
 Pozostałe węzły i krawędzie opisujące model uczelni nie napotkały podobnego problemu, ponieważ każdy z nich miał uzasadnione właściwości. Jeszcze inny problem pojawił się jednak w modelowaniu ludzi korzystających z platformy.
 
@@ -390,6 +408,8 @@ Jak wspomniano wcześniej, wykorzystano etykiety implikowane i wieloetykietowoś
 	}),
 ```
 
+*Definicje etykiet ról i konta implikujących etykietę `Person` (`schema.cypher`)*
+
 Jak widać, w etykietach `Teacher`, `Student`, `User` i `Inactive` są przechowywane jedynie właściwości ekskluzywne dla tej roli. `Admin` nie niesie ze sobą żadnych dodatkowych informacji, zatem jedynie implikuje `Person`. Jest to dozwolony zabieg.
 
 Problem pojawia się dopiero w samej definicji etykiety `Person`. Wygodne i oczywiste byłoby zdefiniowanie jej jako na przykład:
@@ -404,6 +424,8 @@ Problem pojawia się dopiero w samej definicji etykiety `Person`. Wygodne i oczy
  }) REQUIRE p.idx IS KEY,
 ```
 
+*Próba zdefiniowania etykiety `Person` bezpośrednio w typie grafu*
+
 Okazuje się, że próba zdefiniowania etykiet w ten sposób powoduje błąd 22NC4 [CYTOWANIE: https://neo4j.com/docs/status-codes/current/errors/gql-errors/22NC4/], dokładnie: 
 
 ```shell
@@ -411,6 +433,8 @@ Okazuje się, że próba zdefiniowania etykiet w ten sposób powoduje błąd 22N
   2, column 20 (offset: 60))                                                       "    (t:Teacher => :Person {"                                                                                                                
                       ^                                                              42001: syntax error or access rule violation - invalid syntax
 ```
+
+*Komunikat błędu `22NC4` zwracany przez Neo4j*
 
 Jeśli w poleceniu graph type etykieta jest w ogóle zdefiniowana, to staje się ona identyfikująca. Jeśli jest ona identyfikująca, to jednocześnie nie może być implikowana, co zupełnie psuje mechanizm zaplanowany wcześniej.
 
@@ -429,6 +453,8 @@ Sposobem na ominięcie tego mechanizmu proponowanym przez Neo4j w opisie tego b�
 	CONSTRAINT person_photo FOR (pe:Person) REQUIRE pe.photo IS :: STRING,
 
 ```
+
+*Ograniczenia właściwości etykiety `Person` (`schema.cypher`)*
 
 To samo ograniczenie uniemożliwia wyrażenie zależności etykiety `Inactive` od `User`. Dezaktywować można wyłącznie konto, więc `Inactive` powinna implikować `User`. Etykieta `User` ma jednak własną definicję w typie grafu, a więc jest identyfikująca. Definicja `(i:Inactive => :User {...})` kończy się tym samym błędem: „The label(s) `User` are defined as both identifying and implied”. Odrzucane jest również niezależne ograniczenie wymagające od węzła `Inactive` właściwości konta, ponieważ etykieta `Inactive` jest zdefiniowana w typie grafu („Independent constraints cannot be defined on label `Inactive`”).
 
@@ -451,6 +477,8 @@ SET g.weekday = toInteger(row.weekday),
     g.end_time = localtime(row.end_time);
 ```
 
+*Import węzłów `Group` z pliku CSV (`nodes.cypher`)*
+
 Zaczyna się od instrukcji `LOAD CSV WITH HEADERS FROM "file:///nodes/groups.csv" AS row`. Odczytuje ona plik wiersz po wierszu, a każdy wiersz udostępnia jako zmienną `row`. Zmienna ta jest mapą, w której kluczami są nazwy kolumn z nagłówka, a wartościami – zawartość odpowiadających im komórek w postaci tekstu. Pozostała część zapytania wykonywana jest osobno dla każdego wiersza.
 
 Zawartość `groups.csv` zaczyna się od:
@@ -463,13 +491,15 @@ f1421862-5912-57ee-a1d6-cb357169c3fc,1,1,ALL,120,15:15:00,16:55:00
 3e1d2221-1124-533d-8e5b-cd97e997453d,4,1,ALL,16,17:05:00,19:40:00
 ```
 
+*Fragment pliku wejściowego `import/nodes/groups.csv`*
+
 Plik zawiera więc wszystkie nazwane kolumny konieczne do utworzenia grupy zajęciowej.
 
 Instrukcja `MERGE (g:Group {id: row.id})` szuka węzła z etykietą `Group`, którego właściwość `id` jest równa wartości kolumny `id` w bieżącym wierszu. Jeśli taki węzeł już istnieje, zostaje przypisany do zmiennej `g`, a jeśli nie, instrukcja go tworzy i dopiero wtedy przypisuje.
 
 Następnie blok instrukcji `SET` ustawia pozostałe właściwości węzła na wartości z pliku. Dzięki temu, jeśli dane w plikach .csv ulegną zmianie, węzły zostaną zaktualizowane przy ponownej inicjalizacji. Zawartość pliku jest odczytywana jako tekst, zatem zapisanie wartości jako czasu lub liczby całkowitej wymaga wywołania wbudowanych funkcji, takich jak `localtime()` bądź `toInteger()`.
 
-Na koniec instrukcja zamyka się średnikiem, który oddziela ją od kolejnej instrukcji w pliku. Skrypt `init_db.py` wykonuje wszystkie instrukcje z plików `nodes.cypher` i `edges.cypher` w jednej jawnej transakcji (5.1.4). Błąd w dowolnej z nich wycofuje również zmiany wprowadzone przez instrukcje wcześniejsze, więc import wykonuje się w całości albo wcale. Użycie `MERGE` zamiast `CREATE` pozwala z kolei powtarzać import przy każdym uruchomieniu środowiska bez tworzenia duplikatów.
+Na koniec instrukcja zamyka się średnikiem, który oddziela ją od kolejnej instrukcji w pliku. Skrypt `init_db.py` wykonuje wszystkie instrukcje z plików `nodes.cypher` i `edges.cypher` w jednej jawnej transakcji (5.1.4). Błąd w dowolnej z nich wycofuje również zmiany wprowadzone przez instrukcje wcześniejsze, więc import wykonuje się w całości albo wcale. Użycie `MERGE` zamiast `CREATE` pozwala z kolei powtarzać import przy każdym uruchomieniu środowiska bez tworzenia duplikatów; sprawdzenie istnienia węzła korzysta z indeksu klucza, a krawędzi – z listy krawędzi znalezionego już węzła, więc nie wydłuża istotnie importu (7.8.4).
 
 Pojedyncze zapytanie można by uzyskać również przez usunięcie średników. Nie jest to jednak sposób dobry. Wszystkie polecenia stałyby się wtedy jednym zapytaniem, w którym kolejne `LOAD CSV` wykonuje się osobno dla każdego wiersza poprzedniego pliku – dla 3 kierunków i 11 planów studiów zapytanie przetwarza 33 wiersze zamiast 14. Ponowne użycie nazwy `row` nie powoduje przy tym jawnego błędu, ale tworzy zachowanie nieoczekiwane. Zmienna nadal wskazuje na wiersz pierwszego pliku. W efekcie poniższe zapytanie próbuje utworzyć plan studiów z identyfikatorem kierunku i bez roku naboru:
 
@@ -483,11 +513,15 @@ MERGE (c:Curriculum {id: row.id})
 SET c.intake_year = row.intake_year;
 ```
 
+*Błędne połączenie dwóch instrukcji `LOAD CSV` ze wspólną zmienną `row`*
+
 Zatrzymuje je dopiero ograniczenie typu grafu, wymagające istnienia właściwości `intake_year`:
 
 ```
 22N77: data exception - property presence verification failed. NODE (563) with label 'Curriculum' must have the following properties: `intake_year`.
 ```
+
+*Komunikat błędu `22N77` wywołany brakiem właściwości `intake_year`*
 
 Bez zdefiniowanego typu grafu zapytanie zakończyłoby się powodzeniem i zapisało w bazie błędne węzły. Rozwiązaniem mogłoby być nazywanie każdej zmiennej odpowiadającej plikowi .csv w inny sposób, czyli jeden `row` importujący grupę nazywałby się `g_row`, dla cyklu akademickiego `ac_row` i tak dalej, zachowując unikatowość dla każdego pliku. Chociaż to działa, to jest bardzo niewygodne i nieeleganckie. 
 
@@ -506,6 +540,8 @@ CALL (row, st) {
 };
 ```
 
+*Import węzłów `Student` z warunkowym nadawaniem etykiety `User` (`nodes.cypher`)*
+
 Początek instrukcji jest podobny, jak wcześniej - do zmiennej `row` są po kolei ładowane wszystkie wiersze z nagłówkami określającymi klucze w mapie. 
 
 ```csv
@@ -514,6 +550,8 @@ idx,name,surname,phone,photo,joined,email,passwd_hash
 285904,Filip,Wieczorek,610000007,285904.jpg,2025-10-01T00:00:00+02:00,,
 283501,Aleksandra,Jabłońska,605126225,,2024-10-01T00:00:00+02:00,283501@student.pwr.edu.pl,$2HIDDEN
 ```
+
+*Fragment pliku wejściowego `import/nodes/students.csv`*
 
 W przykładowym fragmencie pliku widać, że nie każdy student ma zdjęcie, a przede wszystkim nie każdy student ma adres e-mail i skrót hasła. Bez danych do logowania nie da się utworzyć etykiety `User`. 
 
@@ -533,6 +571,8 @@ curriculum_id,term_id
 69fa951f-504c-5034-ad7c-e301998a6017,11bf9d83-0f5a-56b2-b99b-3f706379192e
 ```
 
+*Fragment pliku wejściowego `import/edges/curriculum_terms.csv`*
+
 Krawędź jest tworzona poprzez instrukcję Cypher, w której szukane są węzły odpowiedniego typu o danym id, a następnie jest tworzona wybrana krawędź między nimi, po kolei dla każdego wiersza pliku .csv:
 
 ```cypher
@@ -542,6 +582,8 @@ MATCH (ct:CurriculumTerm {id: row.term_id})
 MERGE (c)-[:HAS_TERM]->(ct);
 ```
 
+*Import krawędzi `HAS_TERM` (`edges.cypher`)*
+
 Jedną z krawędzi, które wymagały dodatkowej obsługi, jest `REGISTERED_IN`, która dodatkowo przechowuje właściwość `registered_at`, odczytywaną z dokumentu. Drugą taką specjalną zależnością okazało się połączenie przedmiotu, instancji przedmiotu i cyklu akademickiego. Ponieważ `SubjectInstance` nie ma trwałego identyfikatora, jest importowane jako "krok" pomiędzy przedmiotem a cyklem akademickim. 
 
 ```cypher
@@ -550,6 +592,20 @@ MATCH (:Subject {code: row.subject_code})<-[:INSTANCE_OF]-(si:SubjectInstance)-[
 MATCH (gt:GroupType {id: row.group_type_id})
 MERGE (si)-[:HAS_TYPE]->(gt);
 ```
+
+*Import krawędzi `HAS_TYPE` z wyszukaniem węzła `SubjectInstance` (`edges.cypher`)*
+
+Osobnego traktowania wymagało też wyszukiwanie studentów i prowadzących. Klucz `idx` jest zdefiniowany dla etykiety `Person` (5.3.1), a nie dla `Student` czy `Teacher`. W zapytaniach API planista korzysta z indeksu `Person(idx)` także przy dopasowaniu `(:Student {idx: ...})`, jednak podczas importu planuje zapytanie na statystykach pustej bazy i wybiera przegląd wszystkich węzłów etykiety. Koszt utworzenia każdej krawędzi rósł więc z liczbą studentów, a czas importu kwadratowo z rozmiarem danych (7.8.4). Rozwiązaniem jest jawne wskazanie indeksu:
+
+```cypher
+LOAD CSV WITH HEADERS FROM "file:///edges/student_registered.csv" AS row
+MATCH (st:Person:Student {idx: row.student_idx}) USING INDEX st:Person(idx)
+MATCH (g:Group {id: row.group_id})
+MERGE (st)-[r:REGISTERED_IN]->(g)
+...
+```
+
+*Wyszukanie studenta z jawnym użyciem indeksu `Person(idx)` (`edges.cypher`)*
 
 5.3.4 Udany import
 Po zakończeniu działania serwisu `init`, bazę danych można obejrzeć chociażby poprzez konsolę Neo4j wystawioną po HTTPS. Z poziomu konta administracyjnego `neo4j` wygląda to następująco:
@@ -602,6 +658,8 @@ RETURN
   u:Student AS student
 ```
 
+*Zapytanie Cypher dla punktu końcowego `POST /login`*
+
 Na tym zapytaniu dobrze widać zaletę wieloetykietowości. Role są po prostu etykietami tego samego węzła. Wyrażenia `u:Admin`, `u:Teacher` itd. zwracają wartość logiczną, więc jednym odczytem węzła uzyskiwany jest komplet informacji o uprawnieniach. Podobnie działa blokada konta - dezaktywowany użytkownik dostaje etykietę `Inactive`.
 
 5.4.3 Katalog przedmiotów - GET /subjects
@@ -647,6 +705,8 @@ RETURN
 ORDER BY su.name
 ```
 
+*Zapytania Cypher dla punktu końcowego `GET /subjects`*
+
 Warunek `$name IS NULL OR ...` sprawia, że to samo zapytanie obsługuje zarówno wyszukiwanie z filtrem, jak i bez niego. Podzapytanie `COLLECT` przechodzi ścieżką od przedmiotu, przez semestr programu i program studiów, aż do wydziału.
 
 Komórki siatki powstają w wyrażeniu listowym `[cycle_id IN $cycle_ids | { ... }]`, w kolejności zgodnej z kolumnami. Każde pole komórki to osobne pytanie o istnienie ścieżki w grafie: `EXISTS { ... }` sprawdza, czy taka ścieżka istnieje, a `COUNT { ... }` liczy jej wystąpienia. Przedmiot jest oferowany w cyklu, jeśli należy do semestru programu studiów realizowanego w tym cyklu. Zapisy są otwarte, jeśli bieżący moment mieści się w okresie zapisów (`Registration`) obejmujących którąkolwiek grupę przedmiotu z tego cyklu. Zapisy nie mają własnych dat, więc ich okres trwa od początku pierwszej do końca ostatniej tury. Godziny tur są czasem lokalnym, dlatego do porównania z bieżącym momentem łączy się je z datą tury w strefie czasowej uczelni (`Europe/Warsaw`). Wzorzec zawierający przecinek opisuje dwie ścieżki, które muszą być spełnione jednocześnie i mają wspólny węzeł `si`.
@@ -678,6 +738,8 @@ RETURN
 ORDER BY gt.g_type, g.number
 ```
 
+*Zapytanie Cypher dla punktu końcowego `GET /me/registrations/{registration_id}/groups`*
+
 Sala i prowadzący są dołączane przez `OPTIONAL MATCH`, ponieważ nowo utworzona grupa może ich jeszcze nie mieć - wtedy odpowiednie pola mają wartość `null`, a grupa nadal jest zwracana. Liczbę zajętych miejsc wyznacza się dynamicznie jako liczbę krawędzi `REGISTERED_IN` wchodzących do grupy, co eliminuje ryzyko utraty spójności między oddzielnym licznikiem a faktycznym stanem zapisów.
 
 5.4.5 Dodanie studenta - POST /admin/students
@@ -703,7 +765,7 @@ W pliku `app/__init__.py` jest tworzony obiekt `app`, instancja klasy `FastAPI`.
 
 Do konstruktora `FastAPI` w pliku `app/__init__.py` przekazywane są tytuł, funkcja `lifespan` oraz ścieżki do automatycznie generowanej dokumentacji.
 
-Funkcja `lifespan` obejmuje cały czas działania aplikacji [CYTOWANIE: https://fastapi.tiangolo.com/advanced/events/#lifespan]. FastAPI wymaga, by była ona asynchronicznym menedżerem kontekstu, a staje się nim poprzez dekorator `@asynccontextmanager`. Kod przed `yield` wykonuje się raz, przy uruchomieniu, a kod po `yield` też raz, przy zamknięciu. Pomiędzy nimi funkcja jest wstrzymana na słowie `yield`, aplikacja przez ten czas obsługuje żądania. Obie wywoływane funkcje są asynchroniczne, dlatego poprzedza je `await`. Wywołanie funkcji asynchronicznej zwraca jedynie obiekt korutyny (ang. *coroutine*), jej kod wykonuje się dopiero po użyciu `await`. [CYTOWANIE: https://docs.python.org/3/library/asyncio-task.html]
+Funkcja `lifespan` obejmuje cały czas działania aplikacji [CYTOWANIE: https://fastapi.tiangolo.com/advanced/events/#lifespan]. FastAPI wymaga, by była ona asynchronicznym menedżerem kontekstu, a staje się nim poprzez dekorator `@asynccontextmanager`. Kod przed `yield` wykonuje się raz, przy uruchomieniu, a kod po `yield` też raz, przy zamknięciu. Pomiędzy nimi funkcja jest wstrzymana na słowie `yield`, aplikacja przez ten czas obsługuje żądania. Obie wywoływane funkcje są asynchroniczne, dlatego poprzedza je `await`. Wywołanie funkcji asynchronicznej zwraca jedynie obiekt korutyny (ang. *coroutine*), jej kod wykonuje się dopiero po użyciu `await`.
 
 ![[Pasted image 20261117184011.png]]
 
@@ -727,7 +789,7 @@ Konstruktor sterownika przyjmuje URI bazy danych oraz login i hasło użytkownik
 
 Moduł udostępnia też funkcje `verify_connectivity()` i `close_driver()`, wywoływane w `lifespan` (5.5.2), oraz zależność `get_session()`, przez którą punkty końcowe otrzymują sesję bazy danych.
 
-Funkcja `get_session()` otwiera sesję w bloku `async with`, czyli przez asynchroniczny menedżer kontekstu (ang. *context manager*). Przy wejściu do bloku wywoływana jest metoda `__aenter__()`, która otwiera sesję, a przy wyjściu – `__aexit__()`, która ją zamyka, również wtedy, gdy w bloku wystąpi wyjątek [CYTOWANIE: https://docs.python.org/3/reference/datamodel.html#async-context-managers]. Wewnątrz bloku funkcja zatrzymuje się na `yield` i przekazuje sesję. Resztą zarządza FastAPI: wstrzykuje sesję do punktu końcowego jako zależność, a po jego zakończeniu wznawia funkcję, która wychodzi z bloku `async with` i zamyka sesję [CYTOWANIE: https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/].
+Funkcja `get_session()` otwiera sesję w bloku `async with`, czyli przez asynchroniczny menedżer kontekstu (ang. *context manager*). Przy wejściu do bloku wywoływana jest metoda `__aenter__()`, która otwiera sesję, a przy wyjściu – `__aexit__()`, która ją zamyka, również wtedy, gdy w bloku wystąpi wyjątek. Wewnątrz bloku funkcja zatrzymuje się na `yield` i przekazuje sesję. Resztą zarządza FastAPI: wstrzykuje sesję do punktu końcowego jako zależność, a po jego zakończeniu wznawia funkcję, która wychodzi z bloku `async with` i zamyka sesję [CYTOWANIE: https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/].
 
 Sesja jest tworzona raz na żądanie. Zgodnie z dokumentacją sterownika, tworzenie sesji jest lekką operacją, ale sesje nie są bezpieczne przy współbieżnym użyciu [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/async_api.html#asyncsessions-asynctransactions]. Każde żądanie otrzymuje zatem własną sesję, natomiast współdzielona pozostaje pojedyncza instancja sterownika. To on utrzymuje pulę połączeń, z której sesje pobierają połączenie przy pierwszym zapytaniu i do której je oddają przy zamknięciu.
 
@@ -741,15 +803,15 @@ Kształt żądań i odpowiedzi zdefiniowano w katalogu `schemas/` w postaci mode
 
 Walidacja działa po obu stronach punktu końcowego. Żądanie niezgodne z modelem jest odrzucane z kodem 422, zanim funkcja punktu końcowego zostanie wywołana, więc błędne dane nie docierają do bazy danych. Odpowiedź niezgodna z modelem podanym w `response_model` kończy się kodem 500 (5.5.2), ponieważ sygnalizuje błąd po stronie serwera.
 
-Definiowanie modelu Pydantic polega na stworzeniu klasy dziedziczącej po `BaseModel` i określeniu, jakie pola i jakiego typu ma zawierać. Typ `Optional[X]`, równoważny `X | None`, oznacza, że pole może przyjąć wartość `null` [CYTOWANIE: https://docs.python.org/3/library/typing.html#typing.Optional].
+Definiowanie modelu Pydantic polega na stworzeniu klasy dziedziczącej po `BaseModel` i określeniu, jakie pola i jakiego typu ma zawierać. Typ `Optional[X]`, równoważny `X | None`, oznacza, że pole może przyjąć wartość `null`.
 
 Od Pydantic v2 `Optional` nie oznacza jednak, że pole można pominąć. O tym decyduje wyłącznie wartość domyślna: pole `Optional` bez niej jest wymagane, a żądanie, które go nie zawiera, zostaje odrzucone z kodem 422 [CYTOWANIE: https://docs.pydantic.dev/latest/migration/#required-optional-and-nullable-fields]. Dlatego wszystkie pola opcjonalne w projekcie mają jawnie ustawione `= None`, np. `ects: Optional[int] = None` w modelu `SubjectUpsertRequest`.
 
-Ograniczenia wartości pola można określić funkcją `Field()`, działającą podobnie do funkcji `field()` dla klas danych (ang. *dataclasses*) [CYTOWANIE: https://pydantic.dev/docs/validation/latest/concepts/fields/]. Mimo zapisu po prawej stronie znaku `=`, wartość domyślną określa się w niej dopiero za pomocą argumentów `default` lub `default_factory`.
+Ograniczenia wartości pola można określić funkcją `Field()`, działającą podobnie do funkcji `field()` dla klas danych (ang. *dataclasses*). Mimo zapisu po prawej stronie znaku `=`, wartość domyślną określa się w niej dopiero za pomocą argumentów `default` lub `default_factory`.
 
 W modelu `GroupCreateRequest` pole `weekday: int = Field(ge=1, le=7)` dopuszcza jako dzień tygodnia wyłącznie liczby całkowite od 1 do 7, a typ `Literal["P", "NP", "ALL"]` ogranicza pole `pnp` do trzech wartości.
 
-Bardziej złożoną walidację zapewniają własne walidatory [CYTOWANIE: https://pydantic.dev/docs/validation/latest/concepts/validators/]. Metoda oznaczona dekoratorami `@field_validator()` i `@classmethod` jest wywoływana dla pól podanych w argumentach dekoratora. Domyślnie metoda uruchamia się po standardowej walidacji typu, więc otrzymuje wartość już przekonwertowaną na typ danych języka Python. 
+Bardziej złożoną walidację zapewniają własne walidatory. Metoda oznaczona dekoratorami `@field_validator()` i `@classmethod` jest wywoływana dla pól podanych w argumentach dekoratora. Domyślnie metoda uruchamia się po standardowej walidacji typu, więc otrzymuje wartość już przekonwertowaną na typ danych języka Python. 
 
 W projekcie własny walidator sprawdza, czy liczba jest oceną ze skali 2.0, 2.5, …, 5.0. Nie można było użyć `Literal[2.0, 2.5, …]`, ponieważ `Literal` z założenia nie przyjmuje liczb zmiennoprzecinkowych [CYTOWANIE: https://peps.python.org/pep-0586/#illegal-parameters-for-literal-at-type-check-time]. Sama funkcja `check_grade()` znajduje się w osobnym pliku `grades.py`, ponieważ korzystają z niej dwa modele: `OpinionCreateRequest` (ocena prowadzącego w opinii) i `SetGroupGradeRequest` (ocena wystawiana studentowi).
 
@@ -777,7 +839,7 @@ result = await session.run(
 
 *Zapytanie z `POST /admin/faculties` wykonane bezpośrednio metodą `run()` sterownika*
 
-Zapisy `$id`, `$name` i `$full_name` to parametry zapytania [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/syntax/parameters/]. Sterownik wysyła do bazy treść zapytania i parametry osobno, a ich podstawienie odbywa się dopiero po stronie bazy, bez wstawiania wartości w tekst kwerendy. Dzięki temu dane od użytkownika nigdy nie stają się częścią kodu zapytania, co chroni przed wstrzykiwaniem kodu Cypher (ang. *Cypher injection*). Tekst zapytania pozostaje przy tym stały, więc baza może ponownie wykorzystać raz przygotowany plan jego wykonania. Dane od użytkownika trafiają do zapytań w projekcie wyłącznie w ten sposób.
+Zapisy `$id`, `$name` i `$full_name` to parametry zapytania [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/syntax/parameters/]. Sterownik wysyła do bazy treść zapytania i parametry osobno, a ich podstawienie odbywa się dopiero po stronie bazy, bez wstawiania wartości w tekst kwerendy. Dzięki temu dane od użytkownika nigdy nie stają się częścią kodu zapytania, co chroni przed wstrzykiwaniem kodu Cypher. Tekst zapytania pozostaje przy tym stały, więc baza może ponownie wykorzystać raz przygotowany plan jego wykonania. Dane od użytkownika trafiają do zapytań w projekcie wyłącznie w ten sposób.
 
 Python 3.14 wprowadził szablony tekstowe (ang. *template strings*, t-stringi), które pozwalają zapisać zapytanie podobnie do f-stringa, a mimo to przekazać wartości osobno. Biblioteka psycopg, służąca do łączenia z bazą PostgreSQL, już je obsługuje [CYTOWANIE: https://www.psycopg.org/psycopg3/docs/basic/tstrings.html], natomiast sterownik Neo4j w wykorzystanej wersji 6.2.0 jeszcze tej składni nie wspiera. W obu przypadkach mechanizm separacji parametrów zapewnia taki sam poziom bezpieczeństwa, a różnica dotyczy jedynie zwięzłości zapisu.
 
@@ -792,7 +854,7 @@ Pozostałe funkcje współdzielone wynikają z logiki dziedziny:
 
 Uwierzytelnianie zrealizowano w pliku `graph_backend/auth/deps.py`. Zawiera on funkcje obsługi haseł i tokenów, z których korzystają punkt końcowy `POST /login` (5.4.2) oraz tworzenie kont w module administratora, a także zależność `get_caller()`, przez którą wszystkie pozostałe punkty końcowe ustalają, kto wysłał żądanie. Założenia tego mechanizmu, w tym powody wyboru tokenów JWT, opisano w 4.4.1.
 
-Hasła są obsługiwane przez bibliotekę bcrypt w wersji 5.0.0 [CYTOWANIE: https://pypi.org/project/bcrypt/].
+Hasła są obsługiwane przez bibliotekę bcrypt w wersji 5.0.0.
 
 Funkcja `hash_password()` wywołuje `bcrypt.hashpw()`, która przyjmuje jako argumenty surowe hasło i sól, a `verify_password()` sprawdza hasło funkcją `bcrypt.checkpw()`. Funkcja `gensalt()` przy każdym wywołaniu losuje nową sól i ustala współczynnik kosztu (ang. *salt rounds*), domyślnie 12, co oznacza 2^12 rund rozwinięcia klucza. Wynikiem `hashpw()` jest napis w postaci:
 
@@ -827,8 +889,6 @@ class AssignUserRequest(BaseModel):
 ```
 
 *Walidacja długości hasła przy zakładaniu konta (`schemas/auth.py`)*
-
-**Wydanie tokenu**
 
 Punkt końcowy `POST /login` pobiera węzeł użytkownika zapytaniem z 5.4.2, a następnie sprawdza kolejne warunki z 4.4.1.
 
@@ -884,7 +944,7 @@ def create_token(caller: Caller) -> str:
 
 *Tworzenie tokenu*
 
-Token jest tworzony biblioteką PyJWT [CYTOWANIE: https://pyjwt.readthedocs.io/]. Zawiera pięć roszczeń (ang. *claims*). Trzy z nich są zdefiniowane w standardzie: `sub` (ang. *subject*) wskazuje, kogo dotyczy token, w tym wypadku jest to adres e-mail, `iat` (ang. *issued at*) określa moment wydania, a `exp` (ang. *expiration time*) moment wygaśnięcia [CYTOWANIE: RFC 7519, sekcja 4.1]. PyJWT sam zamienia obiekt `datetime` na wymaganą przez standard liczbę sekund od 1 stycznia 1970 r. Moment wydania jest zapisany z dokładnością do ułamka sekundy. Służy on do unieważniania tokenów, opisanego w dalszej części sekcji. Pozostałe dwa, `idx` i `roles`, to roszczenia prywatne, specyficzne dla tej aplikacji. Token jest ważny przez 12 godzin, po czym użytkownik musi zalogować się ponownie.
+Token jest tworzony biblioteką PyJWT. Zawiera pięć roszczeń (ang. *claims*). Trzy z nich są zdefiniowane w standardzie: `sub` (ang. *subject*) wskazuje, kogo dotyczy token, w tym wypadku jest to adres e-mail, `iat` (ang. *issued at*) określa moment wydania, a `exp` (ang. *expiration time*) moment wygaśnięcia [CYTOWANIE: RFC 7519, sekcja 4.1]. PyJWT sam zamienia obiekt `datetime` na wymaganą przez standard liczbę sekund od 1 stycznia 1970 r. Moment wydania jest zapisany z dokładnością do ułamka sekundy. Służy on do unieważniania tokenów, opisanego w dalszej części sekcji. Pozostałe dwa, `idx` i `roles`, to roszczenia prywatne, specyficzne dla tej aplikacji. Token jest ważny przez 12 godzin, po czym użytkownik musi zalogować się ponownie.
 
 Token jest podpisywany algorytmem HS256, czyli kodem HMAC (ang. *Hash-based Message Authentication Code*) z funkcją skrótu SHA-256 (ang. *Secure Hash Algorithm*) [CYTOWANIE: RFC 7518, sekcja 3.2]. Jest to algorytm symetryczny - ten sam klucz służy do podpisania tokenu i do sprawdzenia podpisu. Wystarcza to, ponieważ token wydaje i weryfikuje wyłącznie to samo API. Klucz pochodzi ze zmiennej środowiskowej `JWT_SECRET` (5.1.5) i jest odczytywany przez `os.environ["JWT_SECRET"]` już przy imporcie modułu.
 
@@ -895,8 +955,6 @@ Token składa się z trzech części oddzielonych kropkami: nagłówka, treści 
 *Token JWT zdekodowany przy pomocy https://www.jwt.io/*
 
 Podpis chroni wyłącznie integralność treści tokenu, bez jej szyfrowania. Próba zmiany treści, na przykład dopisania roli `Admin`, unieważnia podpis, a nowego podpisu nie da się wyliczyć bez znajomości klucza.
-
-**Weryfikacja tokenu**
 
 Każdy punkt końcowy poza `POST /login` wymaga tokenu. Jest on sprawdzany przez zależność `get_caller()`.
 
@@ -926,13 +984,11 @@ async def get_caller(
 
 *Zależność weryfikująca token*
 
-`HTTPBearer` to klasa FastAPI, która odczytuje nagłówek `Authorization` i oddziela schemat `Bearer` od samego tokenu [CYTOWANIE: https://fastapi.tiangolo.com/reference/security/#fastapi.security.HTTPBearer]. Jeśli nagłówka brakuje lub ma on inny schemat niż `Bearer`, `HTTPBearer` sam przerywa obsługę żądania i zwraca błąd 401 `Not authenticated`, a `get_caller()` ani funkcja punktu końcowego nie zostają wywołane. Dodatkowo `HTTPBearer` rejestruje schemat zabezpieczeń w dokumentacji OpenAPI, dzięki czemu w `/api/docs` pojawia się przycisk *Authorize*, którym można wkleić token i wywoływać chronione punkty końcowe bezpośrednio z przeglądarki.
+`HTTPBearer` to klasa FastAPI, która odczytuje nagłówek `Authorization` i oddziela schemat `Bearer` od samego tokenu. Jeśli nagłówka brakuje lub ma on inny schemat niż `Bearer`, `HTTPBearer` sam przerywa obsługę żądania i zwraca błąd 401 `Not authenticated`, a `get_caller()` ani funkcja punktu końcowego nie zostają wywołane. Dodatkowo `HTTPBearer` rejestruje schemat zabezpieczeń w dokumentacji OpenAPI, dzięki czemu w `/api/docs` pojawia się przycisk *Authorize*, którym można wkleić token i wywoływać chronione punkty końcowe bezpośrednio z przeglądarki.
 
 `jwt.decode()` sprawdza podpis tokenu i jego datę ważności. Wygaśnięty lub zmodyfikowany token zwróci błąd. Domyślnie PyJWT sprawdza datę ważności tylko wtedy, gdy pole `exp` znajduje się w tokenie – token bez niego byłby ważny bezterminowo. Dlatego opcja `require` wymusza obecność pól `sub`, `iat` i `exp`, a token bez któregoś z nich jest odrzucany wyjątkiem `MissingRequiredClaimError` [CYTOWANIE: https://pyjwt.readthedocs.io/en/stable/api.html#jwt.decode]. Serwer decyduje o dozwolonych algorytmach podpisu, a klient w tokenie jedynie informuje który z tych algorytmów wykorzystuje. Chroni to przed znanymi atakami, w których atakujący zmienia algorytm w nagłówku, np. na `none`, czyli token bez podpisu [CYTOWANIE: RFC 8725, sekcja 2.1].
 
 Poprawnie podpisany token jest dodatkowo sprawdzany: `roles` musi być niepustą listą znanych ról. Każdy z tych przypadków kończy się tą samą odpowiedzią 401 `Invalid token`, więc klient nie dowiaduje się, dlaczego token został odrzucony. Osobną odpowiedź, 401 `Token revoked`, otrzymuje token unieważniony. Klient wie wtedy, że wystarczy ponowne zalogowanie.
-
-**Unieważnianie tokenów**
 
 Token zawiera role z chwili logowania i bez dodatkowego mechanizmu pozostawałby ważny do wygaśnięcia również po zmianie uprawnień osoby (4.4.1). API przechowuje więc w pamięci moment ostatniego unieważnienia tokenów każdej osoby:
 
@@ -971,7 +1027,7 @@ Wynikiem `get_caller()` jest obiekt klasy danych `Caller` z adresem e-mail, iden
 5.5.7 Autoryzacja
 Autoryzacja przypisuje funkcje aplikacji do ról, które może otrzymać użytkownik. Opiera się na pokazanym wcześniej mechanizmie `Depends()`, dzięki któremu FastAPI wywołuje funkcję sprawdzającą uprawnienia, zanim uruchomi funkcję punktu końcowego.
 
-Do kontroli dostępu opartej na rolach (RBAC) wykorzystywana jest fabryka zależności `require(*roles)`, której wynik przekazuje się do `Depends()` w argumentach funkcji punktu końcowego.
+Do RBAC wykorzystywana jest fabryka zależności `require(*roles)`, której wynik przekazuje się do `Depends()` w argumentach funkcji punktu końcowego.
 
 ```python
 def require(*roles: Role):
@@ -1157,7 +1213,7 @@ Jeśli grupa nie należy do żadnej rejestracji z turą studenta albo tura nie t
 
 Punkty końcowe tworzące zasoby zwracają kod 201. Standard HTTP zaleca, by odpowiedź 201 wskazywała utworzony zasób nagłówkiem `Location` [CYTOWANIE: RFC 9110, sekcje 15.3.2 i 10.2.2]. Ustawia go funkcja pomocnicza `_location()`, korzystająca z metody `url_path_for()`.
 
-`url_path_for()` buduje adres z nazwy funkcji punktu końcowego i jej parametrów [CYTOWANIE: https://www.starlette.io/routing/#reverse-url-lookups]. Nagłówek ustawiają tylko punkty końcowe, których zasób ma własny `GET` (prowadzący, student, grupa, przedmiot) – pozostałe, np. wydziały, są dostępne wyłącznie jako listy.
+`url_path_for()` buduje adres z nazwy funkcji punktu końcowego i jej parametrów. Nagłówek ustawiają tylko punkty końcowe, których zasób ma własny `GET` (prowadzący, student, grupa, przedmiot) – pozostałe, np. wydziały, są dostępne wyłącznie jako listy.
 
 Przedmiot jest identyfikowany kodem nadawanym przez uczelnię, więc kod jest w ścieżce, a tworzenie i aktualizacja to jedno żądanie `PUT`. Kod statusu zależy wtedy od wyniku kwerendy i jest ustawiany w treści funkcji. Pierwsze żądanie tworzy przedmiot i zwraca kod 201 z nagłówkiem `Location`. To samo żądanie powtórzone zwraca 200, ponieważ przedmiot już istnieje i zostaje jedynie zaktualizowany. Żądanie `PUT` jest więc idempotentne.
 
@@ -1165,9 +1221,7 @@ Przedmiot jest identyfikowany kodem nadawanym przez uczelnię, więc kod jest w 
 
 Poniżej opisano po jednym punkcie końcowym z każdego modułu z 4.5.1. Moduł `public` zawiera wyłącznie logowanie, opisane w 5.5.6. Wybrano przede wszystkim te funkcje, które zapowiedziano w analizie wymagań (3.2, 3.5), a które nie pojawiły się jeszcze w poprzednich podrozdziałach.
 
-**`Student` – wystawienie opinii (`POST /opinions`)**
-
-Jest to trzeci z procesów opisanych w 3.5. Opinię może wystawić student zapisany do grupy, o prowadzącym tej grupy, i tylko raz dla danej pary grupa–prowadzący (4.3.5).
+W module studenta wystawienie opinii (`POST /opinions`) jest trzecim z procesów opisanych w 3.5. Opinię może wystawić student zapisany do grupy, o prowadzącym tej grupy, i tylko raz dla danej pary grupa–prowadzący (4.3.5).
 
 ```python
 @router.post("/opinions", response_model=OpinionCreateResponse, status_code=201)
@@ -1213,9 +1267,7 @@ Kwerenda sprawdzająca odpowiada na trzy pytania naraz. Każdy kolejny wzorzec j
 
 *Odpowiedzi `POST /opinions` dla studenta 279413 i wykładu z Biometrii*
 
-**Katalog – odczyt opinii (`GET /opinions`)**
-
-Opinie są widoczne w katalogu przy grupie i przy prowadzącym, bez informacji o autorze (3.4). Punkt końcowy przyjmuje dwa opcjonalne parametry zapytania, `teacher_idx` i `group_id`, z których przynajmniej jeden musi być podany – inaczej zwraca 422.
+W module katalogu odczyt opinii realizuje punkt końcowy `GET /opinions`. Opinie są widoczne przy grupie i przy prowadzącym, bez informacji o autorze (3.4). Punkt końcowy przyjmuje dwa opcjonalne parametry zapytania, `teacher_idx` i `group_id`, z których przynajmniej jeden musi być podany – inaczej zwraca 422.
 
 Zapytanie zaczyna się od węzła wskazanego w żądaniu. Jeśli podano prowadzącego, pierwsza klauzula ma postać:
 
@@ -1224,11 +1276,15 @@ MATCH (t:Teacher {idx: $teacher_idx})<-[:ABOUT_TEACHER]-(o:Opinion)-[:ABOUT]->(g
 WHERE $group_id IS NULL OR g.id = $group_id
 ```
 
+*Klauzula początkowa kwerendy opinii dla zapytania po prowadzącym (`routers/catalogue.py`)*
+
 a jeśli tylko grupę:
 
 ```cypher
 MATCH (g:Group {id: $group_id})<-[:ABOUT]-(o:Opinion)-[:ABOUT_TEACHER]->(t:Teacher)
 ```
+
+*Klauzula początkowa kwerendy opinii dla zapytania po grupie (`routers/catalogue.py`)*
 
 Funkcja punktu końcowego wybiera jedną z nich i dołącza do niej wspólną dalszą część:
 
@@ -1245,13 +1301,11 @@ ORDER BY o.submit DESC
 
 *Wspólna część kwerendy zwracającej opinie (`routers/catalogue.py`)*
 
-Pierwsza wersja obsługiwała oba parametry jednym warunkiem `WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx) AND ($group_id IS NULL OR g.id = $group_id)`. Neo4j przechowuje jeden plan dla danej treści zapytania, więc plan musiał działać także przy pustym parametrze i nie mógł zacząć się od wyszukania prowadzącego w indeksie. Zapytanie przeglądało więc wszystkie opinie w bazie i dopiero potem je filtrowało, co ujawniła diagnostyka zapytań w 7.8.3. Rozdzielenie zapytania sprawia, że zaczyna się ono od wyszukania jednego węzła w indeksie klucza (`NodeUniqueIndexSeek`), a jego koszt zależy tylko od liczby opinii o danym prowadzącym lub grupie.
+Pierwsza wersja obsługiwała oba parametry jednym warunkiem `WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx) AND ($group_id IS NULL OR g.id = $group_id)`. Neo4j przechowuje jeden plan dla danej treści zapytania, więc plan musiał działać także przy pustym parametrze i nie mógł zacząć się od wyszukania prowadzącego w indeksie. Zapytanie przeglądało więc wszystkie opinie w bazie i dopiero potem je filtrowało, co ujawniła diagnostyka zapytań w 7.8.3. Rozdzielenie zapytania sprawia, że zaczyna się ono od wyszukania jednego węzła w indeksie klucza (`NodeUniqueIndexSeek`), a jego koszt zależy tylko od liczby opinii o danym prowadzącym lub grupie. Z tego samego powodu rozdzielono odpowiednik zapytania w backendzie relacyjnym: po przejściu na polecenie przygotowane z planem ogólnym PostgreSQL również przeglądał całą tabelę opinii.
 
 Zapytanie pomija krawędź `WRITES`, dzięki czemu dane autora nie są odczytywane z bazy i nie trafiają do odpowiedzi. Sama krawędź pozostaje jednak w grafie, aby wykrywać powtórzone opinie, dlatego opinie są pseudonimowe (4.3.5). Z tego samego względu kwerenda zwraca wyłącznie datę wystawienia opinii. W małej grupie dokładny czas wystawienia pozwalałby prowadzącemu typować autora na podstawie listy zapisanych studentów. Średnia ocen z opinii (`avg_grade`) jest liczona w Pythonie.
 
-**Prowadzący – lista studentów w grupie (`GET /groups/{group_id}/students`)**
-
-Jest to drugi krok procesu wystawiania oceny (3.5): prowadzący widzi studentów zapisanych do grupy razem z ich dotychczasowymi ocenami. Sprawdzenie uprawnień jest identyczne jak przy wystawianiu oceny (5.5.7) – prowadzący musi prowadzić grupę, administrator pomija sprawdzenie. Ocena jest odczytywana z krawędzi `REGISTERED_IN`, na której jest przechowywana (4.3.3):
+W module prowadzącego lista studentów w grupie (`GET /groups/{group_id}/students`) stanowi drugi krok procesu wystawiania oceny (3.5): prowadzący widzi studentów zapisanych do grupy razem z ich dotychczasowymi ocenami. Sprawdzenie uprawnień jest identyczne jak przy wystawianiu oceny (5.5.7) – prowadzący musi prowadzić grupę, administrator pomija sprawdzenie. Ocena jest odczytywana z krawędzi `REGISTERED_IN`, na której jest przechowywana (4.3.3):
 
 ```cypher
 MATCH (g:Group {id: $group_id})
@@ -1267,9 +1321,7 @@ ORDER BY st.surname, st.name
 
 Studenci bez oceny mają w polu `grade` wartość `null`, zgodnie z tym, że właściwość ta nie jest wymagana w schemacie (5.3.1).
 
-**Administrator – dezaktywacja i usunięcie konta (`PATCH` i `DELETE /admin/users/{idx}`)**
-
-Zgodnie z wymaganiami (3.1, 3.2) odebranie dostępu nie może usuwać danych osoby. Dezaktywacja (`PATCH` z treścią `{"active": false}`) dodaje etykietę `Inactive` z momentem dezaktywacji, a ponowna aktywacja ją usuwa:
+W module administratora dezaktywację i usunięcie konta realizują punkty końcowe `PATCH` i `DELETE /admin/users/{idx}`. Zgodnie z wymaganiami (3.1, 3.2) odebranie dostępu nie może usuwać danych osoby. Dezaktywacja (`PATCH` z treścią `{"active": false}`) dodaje etykietę `Inactive` z momentem dezaktywacji, a ponowna aktywacja ją usuwa:
 
 ```cypher
 // dezaktywacja
@@ -1283,6 +1335,8 @@ REMOVE u:Inactive, u.deactivated_at
 RETURN u.idx AS idx
 ```
 
+*Zapytania dezaktywacji i aktywacji konta (`routers/admin.py`)*
+
 Usunięcie konta (`DELETE`) zdejmuje z węzła etykiety `User` i `Inactive` oraz dane logowania. Węzeł `Person` z rolami i wszystkimi krawędziami – zapisami, ocenami, opiniami – zostaje w grafie:
 
 ```cypher
@@ -1290,6 +1344,8 @@ MATCH (u:User {idx: $idx})
 REMOVE u:User:Inactive, u.email, u.passwd_hash, u.deactivated_at
 RETURN u.idx AS idx
 ```
+
+*Zapytanie usunięcia konta z zachowaniem węzła `Person` (`routers/admin.py`)*
 
 Przed wykonaniem tej kwerendy funkcja sprawdza, czy administrator nie usuwa własnego konta, i w takim przypadku zwraca 409. Zapobiega to sytuacji, w której jedyny administrator przypadkowo odcina sobie dostęp do systemu.
 
@@ -1306,8 +1362,6 @@ W projekcie zastosowano dwa mechanizmy:
 2. Przed sprawdzeniem warunków kwerenda zakłada blokadę zapisu (ang. *write lock*) na węzłach, których warunki dotyczą.
 
 Neo4j zakłada blokadę zapisu na węźle przy pierwszej modyfikacji i trzyma ją do końca transakcji, a inne transakcje próbujące zmodyfikować ten sam węzeł czekają [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/locks-deadlocks/]. Cypher nie ma osobnej instrukcji blokującej węzeł, dlatego blokadę wymusza się zapisem, który niczego nie zmienia, np. `SET g.capacity = g.capacity` [CYTOWANIE: https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/].
-
-**Zapis do grupy**
 
 ```cypher
 MATCH (st:Student {idx: $student_idx})-[:ASSIGNED]->(rt:RegistrationTurn)<-[:HAS_TURN]-(:Registration)-[:OPENS]->(g:Group {id: $group_id})
@@ -1355,25 +1409,23 @@ Działanie blokad sprawdzono testem współbieżności opisanym w 7.3. Wykazał 
 
 Ten sam wzorzec zastosowano przy zapisie dziekańskim (`POST /admin/groups/students`), który pomija sprawdzenie tury, a parametrem `ignore_capacity` pozwala pominąć również limit miejsc (3.2). W odróżnieniu od zapisu studenta, ponowny zapis do tej samej grupy zwraca tu 409, ponieważ jest to metoda `POST`.
 
-**Usunięcie roli**
-
 Każda osoba musi mieć przynajmniej jedną rolę, więc odebranie ostatniej roli kończy się kodem 409. Bez blokady dwa jednoczesne żądania odebrania dwóch różnych ról osobie, która ma ich dokładnie dwie, mogłyby oba przejść sprawdzenie i zostawić osobę bez roli. Dlatego usunięcie roli wykonuje się w jawnej transakcji (5.5.3), w której najpierw blokowany jest węzeł osoby:
 
 ```python
 _LOCK_PERSON = "MATCH (p:Person {idx: $idx}) SET p.idx = p.idx RETURN p.idx AS idx"
 ```
 
+*Zapytanie zakładające blokadę zapisu na węźle `Person` (`routers/admin.py`)*
+
 Kwerenda usuwająca rolę ponownie sprawdza liczbę ról już po założeniu blokady. Do ich odczytu wykorzystano funkcję `labels(p)`, ponieważ predykat etykiety (np. `p:Admin`) po oczekiwaniu na blokadę może jeszcze zwracać etykietę usuniętą chwilę wcześniej przez równoległą transakcję. Działanie blokady potwierdził test współbieżności (7.3, scenariusz D).
 
 Po odebraniu roli API unieważnia tokeny osoby (5.5.6), ponieważ wcześniej wydany token nadal zawiera odebraną rolę. Skutek braku unieważnienia zależał od roli. Kwerendy studenta i prowadzącego zaczynają się od węzła z etykietą roli, np. `(t:Teacher {idx: $teacher_idx})-[:TEACHES]->`, więc po odebraniu etykiety nie dopasowywały niczego i żądanie kończyło się kodem 403. Punkty końcowe administratora sprawdzają natomiast tylko rolę zapisaną w tokenie. Bez unieważniania osoba pozbawiona roli administratora mogłaby więc nadal korzystać z jego punktów końcowych, aż do wygaśnięcia tokenu (7.2.3).
-
-**Pozostałe miejsca**
 
 Blokadę zapisu stosuje się również przy wystawianiu opinii (blokada studenta przed ponownym sprawdzeniem duplikatu, 5.5.9), tworzeniu typu grupy (blokada przedmiotu, by instancja przedmiotu i typ grupy nie powstały dwukrotnie) oraz przypisywaniu studentów do tur (blokada rejestracji, by student nie trafił do dwóch tur tej samej rejestracji).
 
 5.6 Klient
 
-Aplikacja kliencka jest aplikacją jednostronicową (4.1) napisaną we frameworku Vue 3 [CYTOWANIE: https://vuejs.org/guide/introduction.html], z routerem Vue Router i magazynem stanu Pinia [CYTOWANIE: https://pinia.vuejs.org/introduction.html]. Całą komunikację z bazą danych realizuje przez API (5.5), ograniczając swoją rolę do prezentacji danych i zbierania parametrów żądań.
+Aplikacja kliencka jest aplikacją jednostronicową (4.1) napisaną we frameworku Vue 3, z routerem Vue Router i magazynem stanu Pinia. Całą komunikację z bazą danych realizuje przez API (5.5), ograniczając swoją rolę do prezentacji danych i zbierania parametrów żądań.
 
 Komunikację z API obsługuje jeden moduł `api/client.js`. Funkcja `apiRequest()` dokleja do ścieżki prefiks `/api`, dołącza nagłówek `Authorization` z tokenem i zamienia odpowiedź na obiekt JavaScript. Odpowiedzi z kodem błędu zamienia na wyjątek z komunikatem z pola `detail`, a błędy walidacji (422) – na listę par „pole: komunikat”, które widoki wyświetlają użytkownikowi. Pozostałe funkcje modułu odpowiadają pojedynczym punktom końcowym i są pogrupowane tak jak moduły API (4.5.1), np. `student.register(groupId)` wysyła `PUT /me/registered-groups/{group_id}`.
 
@@ -1418,6 +1470,6 @@ router.beforeEach((to) => {
 ```
 *Strażnik nawigacji (`router/index.js`)*
 
-Strażnik nawigacji [CYTOWANIE: https://router.vuejs.org/guide/advanced/navigation-guards.html] realizuje trzy przekierowania. Niezalogowany użytkownik trafia na stronę logowania, a adres, na który próbował wejść, jest zapamiętywany w parametrze `redirect`. Zalogowany użytkownik nie może wrócić na stronę logowania. Wejście do widoku niedozwolonego dla ról użytkownika przenosi go na jego widok domyślny – studenta na plan zajęć studenta, prowadzącego na plan zajęć prowadzącego, a pozostałych na pierwszą dostępną zakładkę. Czwarte przekierowanie wykonuje moduł `api/client.js`: odpowiedź 401 na żądanie z tokenem oznacza, że token wygasł, więc klient usuwa go i przenosi użytkownika na stronę logowania.
+Strażnik nawigacji realizuje trzy przekierowania. Niezalogowany użytkownik trafia na stronę logowania, a adres, na który próbował wejść, jest zapamiętywany w parametrze `redirect`. Zalogowany użytkownik nie może wrócić na stronę logowania. Wejście do widoku niedozwolonego dla ról użytkownika przenosi go na jego widok domyślny – studenta na plan zajęć studenta, prowadzącego na plan zajęć prowadzącego, a pozostałych na pierwszą dostępną zakładkę. Czwarte przekierowanie wykonuje moduł `api/client.js`: odpowiedź 401 na żądanie z tokenem oznacza, że token wygasł, więc klient usuwa go i przenosi użytkownika na stronę logowania.
 
 Wszystkie te mechanizmy służą wygodzie użytkownika oraz potwierdzeniu, że wszystkie potrzebne punkty końcowe działają poprawnie.

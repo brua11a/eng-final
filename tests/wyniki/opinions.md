@@ -24,7 +24,7 @@
 | --- | --- | --- | --- |
 | liczba opinii o grupie | 4 | 4 | tak |
 | identyfikatory autorów w odpowiedzi | brak | brak | tak |
-| moment wystawienia | sama data | 2026-11-24 | tak |
+| moment wystawienia | sama data | 2026-11-25 | tak |
 
 Pola opinii w odpowiedzi: `content`, `course_code`, `course_name`, `cycle`, `g_type`, `grade`, `group_id`, `id`, `submit`, `teacher`, `teacher_idx`.
 

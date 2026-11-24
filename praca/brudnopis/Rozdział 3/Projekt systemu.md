@@ -1,6 +1,6 @@
 4.1 Architektura systemu
 
-System składa się z trzech warstw: klienta webowego, interfejsu programistycznego aplikacji (API) oraz bazy danych. Bazą danych platformy jest Neo4j. Na potrzeby porównania z modelem relacyjnym (rozdział 6) wybrane punkty końcowe zaimplementowano dodatkowo z wykorzystaniem bazy PostgreSQL. Wszystkie warstwy uruchamiane są w osobnych kontenerach, a schemat i dane początkowe bazy wczytuje jednorazowy proces inicjalizacji.
+System składa się z trzech warstw: klienta webowego, API oraz bazy danych. Bazą danych platformy jest Neo4j. Na potrzeby porównania z modelem relacyjnym (rozdział 6) wybrane punkty końcowe zaimplementowano dodatkowo z wykorzystaniem bazy PostgreSQL. Wszystkie warstwy uruchamiane są w osobnych kontenerach, a schemat i dane początkowe bazy wczytuje jednorazowy proces inicjalizacji.
 
 ```mermaid
 flowchart LR
@@ -148,7 +148,7 @@ Sala, opisana etykietą `Room`, jest liściem grafu – łączy się wyłącznie
 
 Krawędź `REGISTERED_IN` pomiędzy studentem a grupą przechowuje moment zapisu (`registered_at`, data i czas ze strefą) oraz ocenę (`grade`), wystawianą później przez prowadzącego (3.2). Do czasu wystawienia ocena jest pusta. Ocena mogłaby być osobną krawędzią, ale prowadziłaby dokładnie tą samą drogą co `REGISTERED_IN`, a zapis na grupę i tak jest warunkiem wystawienia oceny. Dlatego zrezygnowano z osobnej krawędzi. Ocenę końcową z przedmiotu wyznacza się przy odczycie na podstawie ocen z grup i wag form zajęć, dzięki czemu zawsze odpowiada bieżącym ocenom cząstkowym. Średnia ważona obejmuje wyłącznie oceny pozytywne: ocena niższa niż 3.0 z którejkolwiek grupy oznacza ocenę 2.0 z przedmiotu (3.2).
 
-Ograniczeniem takiego rozwiązania jest brak historii: poprawienie oceny nadpisuje poprzednią wartość. Gdyby historia ocen była potrzebna, ocenę należałoby zamienić w osobny węzeł, podobnie jak opinię (4.3.5). Na potrzeby prototypu wystarcza jednak ostatnia wystawiona ocena. Poprawa przedmiotu w kolejnym cyklu tworzy nową krawędź do innej grupy, więc nadpisanie dotyczy jedynie zmiany oceny w obrębie tej samej grupy. W grafie zamiana krawędzi na węzeł jest przy tym tanią refaktoryzacją, którą wskazano jako kierunek dalszego rozwoju.
+Ograniczeniem takiego rozwiązania jest brak historii: poprawienie oceny nadpisuje poprzednią wartość. Gdyby historia ocen była potrzebna, ocenę należałoby zamienić w osobny węzeł, podobnie jak opinię (4.3.5). Na potrzeby prototypu wystarcza jednak ostatnia wystawiona ocena. Poprawa przedmiotu w kolejnym cyklu tworzy nową krawędź do innej grupy, więc nadpisanie dotyczy jedynie zmiany oceny w obrębie tej samej grupy. W grafie zamiana krawędzi na węzeł jest przy tym tanią refaktoryzacją.
 
 | Etykieta / krawędź | Właściwość | Typ | Wymagana | Ograniczenia | Opis |
 |---|---|---|---|---|---|
@@ -250,7 +250,7 @@ Każda krawędź ma kierunek nadany zgodnie ze znaczeniem relacji (np. od studen
 | `ABOUT_TEACHER`  | `Opinion`         | `Teacher`          | prowadzący, którego dotyczy opinia | N:1          |                                              |
 *Typy krawędzi i ich kardynalność wynikająca z domeny*
 
-Wedle konwencji, nazwy krawędzi powinny wyrażać czynności [CYTOWANIE]. Widać jednak, że ta konwencja nie skaluje się dobrze do tak dużej liczby krawędzi, ponieważ gdyby po prostu używać prostych czasowników, takich jak "`IS`" czy "`IN`", to bardzo szybko pojawiałyby się one w kilku miejscach w sposób niezamierzony. Jednocześnie, bardziej jednoznaczne nazwy, typu "`ABOUT_TEACHER`" źle brzmią, gdy rozważy się całe "zdanie" tworzone czytając węzły wraz z krawędziami, na przykład: "`(Opinion)-[ABOUT_TEACHER]->(Teacher)`" brzmi niepotrzebnie rozwlekle (ang. *verbose*). O wiele lepiej brzmi "`(Opinion)-[ABOUT]->(Teacher)`" lub "`(Opinion)-[IS_ABOUT]->(Teacher)`", jednocześnie po samej nazwie krawędzi trudno się domyślić jakich węzłów ona dotyczy.
+Wedle konwencji, nazwy krawędzi powinny wyrażać czynności [CYTOWANIE: https://neo4j.com/docs/getting-started/data-modeling/guide-data-modeling/]. Widać jednak, że ta konwencja nie skaluje się dobrze do tak dużej liczby krawędzi, ponieważ gdyby po prostu używać prostych czasowników, takich jak "`IS`" czy "`IN`", to bardzo szybko pojawiałyby się one w kilku miejscach w sposób niezamierzony. Jednocześnie, bardziej jednoznaczne nazwy, typu "`ABOUT_TEACHER`" źle brzmią, gdy rozważy się całe "zdanie" tworzone czytając węzły wraz z krawędziami, na przykład: "`(Opinion)-[ABOUT_TEACHER]->(Teacher)`" brzmi niepotrzebnie rozwlekle (ang. *verbose*). O wiele lepiej brzmi "`(Opinion)-[ABOUT]->(Teacher)`" lub "`(Opinion)-[IS_ABOUT]->(Teacher)`", jednocześnie po samej nazwie krawędzi trudno się domyślić jakich węzłów ona dotyczy.
 
 Wniosek z tego taki, że dla dużych, ustrukturyzowanych baz grafowych, rozwlekłe, długie i jednoznaczne nazwy ułatwiają pisanie kwerend i zrozumienie infrastruktury. Jest to jedynie konwencja nazewnictwa i uwaga na przyszłość. Przepisania kwerend od nowa w celu dostosowania do tej obserwacji nie uznano za konieczne.
 
@@ -289,7 +289,7 @@ Ceną bezstanowości jest to, że token zawiera role z chwili logowania i pozost
 
 Z tego powodu API samo unieważnia tokeny, bez odczytu z bazy danych. Token zawiera moment wydania, a API przechowuje w pamięci moment ostatniej zmiany uprawnień każdej osoby: odebrania roli, dezaktywacji lub usunięcia konta. Tokeny wydane przed tym momentem są odrzucane, więc osoba musi zalogować się ponownie i otrzymuje token z aktualnymi rolami. Lista unieważnień znika przy ponownym uruchomieniu API. Dlatego odrzucane są również wszystkie tokeny wydane przed startem procesu, a restart wylogowuje wszystkich użytkowników. Rozwiązanie zakłada działanie jednego procesu API, co w prototypie jest spełnione.
 
-Alternatywą byłoby przechowywanie w tokenie jedynie identyfikatora osoby i adresu e-mail oraz sprawdzanie ról i aktywności konta na początku każdej kwerendy. Odczyt etykiety z węzła jest tani [CYTOWANIE], jednak dodawałby zapytanie do każdego żądania, a więc stały narzut do pomiarów porównujących oba backendy.
+Alternatywą byłoby przechowywanie w tokenie jedynie identyfikatora osoby i adresu e-mail oraz sprawdzanie ról i aktywności konta na początku każdej kwerendy. Odczyt etykiety z węzła jest tani (7.8.2), jednak dodawałby zapytanie do każdego żądania, a więc stały narzut do pomiarów porównujących oba backendy.
 
 W rzeczywistym wdrożeniu uczelnianym naturalne byłoby oddanie logowania uczelnianemu systemowi pojedynczego logowania (SSO, ang. *Single Sign-On*), co jednak wykracza poza zakres prototypu.
 
@@ -297,11 +297,11 @@ W rzeczywistym wdrożeniu uczelnianym naturalne byłoby oddanie logowania uczeln
 
 4.4.2 Autoryzacja
 
-Model uprawnień z podrozdziału 3.4 łączy role użytkownika z jego powiązaniami z innymi elementami uczelni. Odpowiadają temu dwa etapy autoryzacji. Pierwszy z nich to kontrola dostępu oparta na rolach (RBAC) [CYTOWANIE]. Każdy punkt końcowy ma z góry określone role, które mogą go wywołać, np. wystawianie ocen jest dostępne dla prowadzących i administratorów, a zapis na grupę - dla studentów. Użytkownik bez wymaganej roli otrzymuje odmowę, zanim żądanie dotrze do bazy danych.
+Model uprawnień z podrozdziału 3.4 łączy role użytkownika z jego powiązaniami z innymi elementami uczelni. Odpowiadają temu dwa etapy autoryzacji. Pierwszy z nich to RBAC. Każdy punkt końcowy ma z góry określone role, które mogą go wywołać, np. wystawianie ocen jest dostępne dla prowadzących i administratorów, a zapis na grupę - dla studentów. Użytkownik bez wymaganej roli otrzymuje odmowę, zanim żądanie dotrze do bazy danych.
 
 Gdyby polegać jedynie na RBAC, to nie istniałby mechanizm zabraniający prowadzącemu ocenić cudzego studenta w cudzej grupie zajęciowej. Tak samo student mógłby zapisać się do grupy zajęciowej w cudzej turze zapisowej. Sam RBAC nie broni przed takimi scenariuszami, ponieważ, wedle ustalonej konwencji, student woła punkty końcowe studenckie, a nauczyciel punkty końcowe nauczycielskie - z poziomu roli problemu nie ma.
 
-Dodatkowy mechanizm blokujący tego typu sytuacje nazywa się kontrolą dostępu opartą na relacjach (ReBAC) [CYTOWANIE]. Uprawnienie wynika tu dodatkowo z powiązania między użytkownikiem a zasobem w strukturze danych. 
+Dodatkowy mechanizm blokujący tego typu sytuacje to ReBAC. Uprawnienie wynika tu dodatkowo z powiązania między użytkownikiem a zasobem w strukturze danych. 
 
 Drugi etap autoryzacji polega więc na sprawdzeniu w bazie, czy odpowiednia ścieżka w grafie istnieje, np. czy od prowadzącego do grupy prowadzi krawędź `TEACHES` albo czy student jest połączony z grupą krawędzią `REGISTERED_IN`. Ponownie, w tej platformie krawędzie uprawniające do dostępu są tymi samymi krawędziami, które opisują domenę - nie trzeba utrzymywać osobnych list uprawnień, które mogłyby utracić spójność z danymi. Gdyby przypadkiem dodać prowadzącego do grupy, po czym usunąć powstałą krawędź `TEACHES`, wraz z nią znikłaby możliwość oceniania studentów w tej grupie przez tego nauczyciela.
 
@@ -321,7 +321,7 @@ Administrator, zgodnie z macierzą uprawnień (3.4), może wykonywać operacje p
 
 4.4.3 Konto bazodanowe
 
-Kontrola dostępu po stronie API nie chroni przed błędami w samym API ani przed sytuacją, w której ktoś przejmie dane dostępowe, którymi API łączy się z bazą. Dlatego zgodnie z zasadą najmniejszych uprawnień (3.3) [CYTOWANIE] API łączy się z bazą za pomocą osobnego konta utworzonego podczas inicjalizacji, z uprawnieniami ograniczonymi do odczytu i zapisu danych.
+Kontrola dostępu po stronie API nie chroni przed błędami w samym API ani przed sytuacją, w której ktoś przejmie dane dostępowe, którymi API łączy się z bazą. Dlatego zgodnie z zasadą najmniejszych uprawnień (3.3) API łączy się z bazą za pomocą osobnego konta utworzonego podczas inicjalizacji, z uprawnieniami ograniczonymi do odczytu i zapisu danych.
 
 Konto to pozwala tworzyć, modyfikować i usuwać węzły, krawędzie oraz ich właściwości, bez prawa do zmiany typu grafu, ograniczeń i indeksów, zarządzania użytkownikami i rolami bazy czy administracji serwerem.
 
@@ -337,7 +337,7 @@ flowchart LR
     R -- nie --> E403a[403]
     R -- tak --> G{Wymagana ścieżka<br/>w grafie istnieje?<br/>np. TEACHES, REGISTERED_IN}
     G -- nie --> E403b[403 / 404]
-    G -- tak --> DB[(Neo4j<br/>konto API: tylko odczyt<br/>i zapis danych)]
+    G -- tak --> DB[(Neo4j<br/>odczyt<br/>i zapis danych)]
     subgraph API
         T
         R
@@ -348,7 +348,7 @@ flowchart LR
 
 4.5 Interfejs API
 
-Klient komunikuje się z backendem przez interfejs REST [CYTOWANIE], wymieniając dane w formacie JSON (ang. *JavaScript Object Notation*) przez protokół HTTP (ang. *Hypertext Transfer Protocol*). Podział interfejsu na moduły oraz sposób zgłaszania odmów wynikają z macierzy uprawnień opisanej w podrozdziale 3.4.
+Klient komunikuje się z backendem przez interfejs REST, wymieniając dane w formacie JSON (ang. *JavaScript Object Notation*) przez protokół HTTP (ang. *Hypertext Transfer Protocol*). Podział interfejsu na moduły oraz sposób zgłaszania odmów wynikają z macierzy uprawnień opisanej w podrozdziale 3.4.
 
 4.5.1 Podział na moduły
 
@@ -363,7 +363,7 @@ Punkty końcowe podzielono na moduły odpowiadające tabelom macierzy uprawnień
 | admin | `Admin` | tworzenie i modyfikacja danych: osób, kont, ról, oferty dydaktycznej, sal, cykli i zapisów; zapis studenta do grupy z pominięciem tur |
 *Moduły interfejsu API*
 
-Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: wymaga zalogowania, ponieważ zawiera dane osobowe prowadzących i opinie. Opinie zwracane są w nim bez informacji o autorze (3.4) i z samą datą wystawienia. Dokładny czas wystawienia w połączeniu z listą studentów grupy pozwalałby prowadzącemu typować autora opinii w małych grupach.
+Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: wymaga zalogowania, ponieważ zawiera dane osobowe prowadzących i opinie. Opinie zwracane są w nim bez informacji o autorze (3.4) i z samą datą wystawienia.
 
 4.5.2 Konwencje
 
@@ -382,6 +382,6 @@ Wynik operacji przekazuje kod odpowiedzi HTTP [CYTOWANIE: RFC 9110, sekcja 15]. 
 | 500 | nieoczekiwany błąd serwera lub bazy danych                                    |
 *Kody HTTP zwracane przez API*
 
-Taka konwencja pozwala klientowi rozpoznać rodzaj błędu na podstawie samego kodu statusu, a komunikat z pola `detail` wykorzystywać wyłącznie do wyświetlenia użytkownikowi.
+Taka konwencja pozwala klientowi rozpoznać rodzaj błędu na podstawie samego kodu statusu, a komunikat z pola `detail` traktować jedynie kosmetycznie, do wyświetlenia użytkownikowi.
 
 Metoda HTTP określa rodzaj operacji. Punkty końcowe, które jedynie odczytują dane, korzystają z metody `GET` i nie mają treści żądania: identyfikator konkretnego zasobu jest częścią ścieżki (np. `GET /groups/{group_id}`), a opcjonalne filtry są przekazywane jako parametry zapytania (np. `GET /subjects?name=sieci`). Nowe zasoby są tworzone metodą `POST`, ustawienie zasobu o znanym identyfikatorze (np. oceny lub miejsca studenta w grupie) metodą `PUT`, częściowa zmiana metodą `PATCH`, a usunięcie metodą `DELETE`. Dzięki temu już sama metoda mówi, czy żądanie może zmienić stan systemu i czy można je bezpiecznie powtórzyć - `GET`, `PUT` i `DELETE` są idempotentne [CYTOWANIE: RFC 9110, sekcja 9.2.2].

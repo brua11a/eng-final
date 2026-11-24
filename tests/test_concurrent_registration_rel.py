@@ -73,10 +73,14 @@ async def setup():
         }
         await c.execute("INSERT INTO registration VALUES (%s, 'TEST', 'TEST', %s, %s)",
                         (reg, ref["cycle"], ref["faculty"]))
-        # Turn in progress: wall-clock time in the university's zone, +-20 minutes.
+        # Turn in progress: wall-clock time in the university's zone, +-20 minutes, clipped to the
+        # current day (near midnight the window would otherwise wrap around and start after it ends).
         await c.execute("""
             INSERT INTO registration_turn (id, turn_number, date, start_time, end_time, registration_id)
-            SELECT %s, 1, local::date, (local - interval '20 minutes')::time, (local + interval '20 minutes')::time, %s
+            SELECT %s, 1, local::date,
+                   CASE WHEN local::time < '00:20' THEN '00:00'::time ELSE (local - interval '20 minutes')::time END,
+                   CASE WHEN local::time > '23:39' THEN '23:59:59'::time ELSE (local + interval '20 minutes')::time END,
+                   %s
             FROM (SELECT now() AT TIME ZONE 'Europe/Warsaw' AS local) t""", (turn, reg))
         for gid, gtype, capacity, number in groups.values():
             await c.execute("""

@@ -62,8 +62,12 @@ async def setup():
         await s.run("""
             CREATE (reg:Registration {id: $reg, name: 'TEST', reg_type: 'TEST'})
             CREATE (reg)-[:HAS_TURN]->(:RegistrationTurn {id: $turn, turn_number: 1, date: date({timezone: 'Europe/Warsaw'}),
-                start_time: localtime({timezone: 'Europe/Warsaw'}) - duration('PT20M'),
-                end_time: localtime({timezone: 'Europe/Warsaw'}) + duration('PT20M')})
+                // +-20 minutes, clipped to the current day: near midnight the window would otherwise
+                // wrap around and start after it ends.
+                start_time: CASE WHEN localtime({timezone: 'Europe/Warsaw'}) < localtime('00:20')
+                    THEN localtime('00:00') ELSE localtime({timezone: 'Europe/Warsaw'}) - duration('PT20M') END,
+                end_time: CASE WHEN localtime({timezone: 'Europe/Warsaw'}) > localtime('23:39')
+                    THEN localtime('23:59:59') ELSE localtime({timezone: 'Europe/Warsaw'}) + duration('PT20M') END})
             WITH reg
             UNWIND $groups AS gr
             MATCH (gt:GroupType {id: gr.type})

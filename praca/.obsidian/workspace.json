@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "brudnopis/Rozdział 6/Testy.md",
+                "file": "brudnopis/Rozdział 4/Implementacja.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Testy"
+              "title": "Implementacja"
             }
           }
         ],
@@ -70,7 +70,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "31",
+                "query": "\"początkowo ",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -94,7 +94,8 @@
               "title": "Bookmarks"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "horizontal",
@@ -206,40 +207,40 @@
   },
   "active": "279f61757d48367e",
   "lastOpenFiles": [
+    "brudnopis/Rozdział 6/sedxKpoNF",
+    "brudnopis/Rozdział 4/sedsVEabp",
+    "brudnopis/Rozdział 4/sedhgcV4y",
+    "brudnopis/Rozdział 4/sedAUuEXh",
+    "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.175014745d8f",
+    "brudnopis/Rozdział 6/Testy.md.tmp.7052.121648fda98b",
+    "brudnopis/Rozdział 6/Testy.md.tmp.7052.145c71c35e6a",
+    "brudnopis/Rozdział 3/Projekt systemu.md",
+    "brudnopis/Rozdział 4/Implementacja.md",
+    "brudnopis/Strona tytułowa/Strona tytułowa.md",
+    "brudnopis/Wstęp/Wstęp.md",
+    "brudnopis/Rozdział 6/Testy.md",
+    "gotowe/rys07/import.png",
+    "gotowe/rys07/skala_praca.png",
+    "gotowe/rys07/skala_czas.png",
+    "gotowe/rys07/narzut_10000.png",
+    "gotowe/rys06/fig01.png",
     "Pasted image 20261116175429.png",
     "brudnopis/Rozdział 6/media_rozdzial6/warstwy_10000.png",
     "brudnopis/Rozdział 6/media_rozdzial6/import.png",
     "brudnopis/Rozdział 6/media_rozdzial6/rozmiar.png",
     "brudnopis/Rozdział 6/media_rozdzial6/skala_praca.png",
-    "brudnopis/Rozdział 6/media_rozdzial6/skala_czas.png",
-    "brudnopis/Rozdział 6/media_rozdzial6/narzut_10000.png",
-    "brudnopis/Rozdział 6/Testy.md",
     "brudnopis/Spis treści/Spis treści.md",
-    "brudnopis/Rozdział 4/media_rozdzial4/Pasted image 20261116175608.png",
     "brudnopis/Rozdział 5/Porównanie z modelem relacyjnym.md",
     "brudnopis/Rozdział 6/Testy.md.tmp.7052.a9882c6be3ec",
     "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.6eaad1c32508",
     "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.083e0d9993b2",
     "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.1cb9455c0932",
-    "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.0b6903f1abe9",
-    "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.f395ac022358",
-    "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.460b747de2f3",
-    "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.b7f0df265497",
-    "brudnopis/Rozdział 4/Implementacja.md.tmp.7052.3380873e2db1",
-    "brudnopis/Rozdział 3/Projekt systemu.md.tmp.7052.761361847c73",
-    "brudnopis/Wstęp/Wstęp.md",
-    "brudnopis/Rozdział 5/media_rozdzial5/PostgreSQL@localhost - usos - public.png",
-    "brudnopis/Rozdział 5/media_rozdzial5/PostgreSQL@localhost - usos - public 1.png",
-    "brudnopis/Rozdział 4/Implementacja.md",
-    "gotowe/rys05/fig11.png",
     "brudnopis/Streszczenie/Streszczenie.md",
     "brudnopis/Spis skrótów/Spis skrótów.md",
-    "brudnopis/Rozdział 3/Projekt systemu.md",
     "brudnopis/Rozdział 2/Analiza wymagań.md",
     "brudnopis/Rodział 1/Podstawy teoretyczne.md",
     "brudnopis/Podsumowanie i wnioski/Podsumowanie i wnioski.md",
     "brudnopis/Literatura/Literatura.md",
-    "brudnopis/Strona tytułowa/Strona tytułowa.md",
     "brudnopis/Dodatki/Dodatki.md",
     "brudnopis/Rozdział 2/Untitled.md"
   ]

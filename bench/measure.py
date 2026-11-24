@@ -35,6 +35,8 @@ import time
 from contextvars import ContextVar
 
 import jwt
+import psycopg
+from psycopg.rows import dict_row
 
 import app.graph_backend.query as gq
 import app.relation_backend.query as rq
@@ -45,6 +47,10 @@ from app.relation_backend.database import pool
 ARGS = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
 RUNS = ARGS.get("runs", 50)
 WARMUP = ARGS.get("warmup", 10)
+# Wspólna rozgrzewka przed wszystkimi pomiarami: Neo4j działa w JVM, której kompilator JIT optymalizuje
+# kod dopiero po setkach wykonań. Bez niej warstwy mierzone na początku (asgi, driver) wypadały
+# wolniej niż mierzone później z hosta warstwy HTTPS, choć te zawierają więcej pracy.
+GLOBAL_WARMUP = ARGS.get("global_warmup", 200)
 LOGIN_RUNS = ARGS.get("login_runs", 10)
 PASSWORD = "student123"
 
@@ -215,24 +221,54 @@ async def profile_graph(q: dict) -> dict:
 
 
 
+# Zapytania API trafiają do PostgreSQL jako polecenia przygotowane: psycopg przygotowuje zapytanie
+# po 5 wykonaniach na danym połączeniu, a PostgreSQL po kolejnych 5 może przejść na plan ogólny
+# (plan_cache_mode = auto). Plan ogólny bywa inny niż plan dla konkretnych parametrów - dla katalogu
+# przedmiotów przy 10 000 studentów plan dla parametrów przekracza próg kompilacji JIT
+# (jit_above_cost), a plan ogólny nie. Dlatego EXPLAIN ANALYZE dotyczy polecenia przygotowanego
+# (PREPARE ... / EXPLAIN EXECUTE) na osobnym połączeniu: rozgrzewka w main() wykonuje je kilka razy,
+# więc mierzony jest plan, którego używa API. Połączenie nie pochodzi z puli i ma wyłączone
+# automatyczne przygotowywanie psycopg: psycopg przy wycofaniu transakcji, w której przygotowywał
+# własne polecenia, wysyła DEALLOCATE ALL, co usunęłoby też polecenia przygotowane tutaj.
+_eng_conn = None
+_prepared: dict[str, tuple[str, list[str]]] = {}
+
+
+async def _explain_rel(q: dict, options: str) -> dict:
+    global _eng_conn
+    if _eng_conn is None:
+        _eng_conn = await psycopg.AsyncConnection.connect(pool.conninfo, **pool.kwargs, prepare_threshold=None)
+    if q["query"] not in _prepared:
+        names: list[str] = []
+
+        def placeholder(m):
+            if m.group(1) not in names:
+                names.append(m.group(1))
+            return f"${names.index(m.group(1)) + 1}"
+
+        text = re.sub(r"%\((\w+)\)s", placeholder, q["query"]).replace("%%", "%")
+        stmt = f"bench_{len(_prepared)}"
+        async with _eng_conn.transaction():
+            await _eng_conn.execute(f"PREPARE {stmt} AS {text}", prepare=False)
+        _prepared[q["query"]] = (stmt, names)
+    stmt, names = _prepared[q["query"]]
+    args = ", ".join(f"%({n})s" for n in names)
+    async with _eng_conn.transaction(force_rollback=True):
+        cur = psycopg.AsyncClientCursor(_eng_conn, row_factory=dict_row)  # parametry EXECUTE jako literały
+        await cur.execute(f"EXPLAIN ({options}, FORMAT JSON) EXECUTE {stmt}" + (f"({args})" if names else ""),
+                          q["params"])
+        return (await cur.fetchone())["QUERY PLAN"][0]
+
+
 async def engine_rel(q: dict) -> dict:
     """Czas wykonania bez pomiaru czasu poszczególnych węzłów planu (TIMING OFF), który przy dużych
     wynikach zawyża czas o kilkadziesiąt procent."""
-    async with pool.connection() as conn:
-        async with conn.transaction(force_rollback=True):
-            cur = await conn.execute("EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) " + q["query"], q["params"],
-                                     prepare=False)
-            plan = (await cur.fetchone())["QUERY PLAN"][0]
-    return {"engine_ms": plan["Execution Time"]}
+    plan = await _explain_rel(q, "ANALYZE, TIMING OFF")
+    return {"engine_ms": plan["Execution Time"], "jit": "JIT" in plan}
 
 
 async def profile_rel(q: dict) -> dict:
-    async with pool.connection() as conn:
-        async with conn.transaction(force_rollback=True):
-            cur = await conn.execute(
-                "EXPLAIN (ANALYZE, BUFFERS, MEMORY, SERIALIZE, FORMAT JSON) " + q["query"], q["params"],
-                prepare=False)
-            plan = (await cur.fetchone())["QUERY PLAN"][0]
+    plan = await _explain_rel(q, "ANALYZE, BUFFERS, MEMORY, SERIALIZE")
     nodes = list(walk(plan["Plan"], "Plans"))
     root = plan["Plan"]
     est_err = max((max(n["Actual Rows"], 1) / max(n["Plan Rows"], 1) if n["Actual Rows"] >= n["Plan Rows"]
@@ -250,6 +286,7 @@ async def profile_rel(q: dict) -> dict:
         "cache_misses": reads,
         "memory_bytes": mem_kb * 1024 + plan["Planning"].get("Memory Used", 0) * 1024,
         "estimate_error": est_err,
+        "jit": "JIT" in plan,
         "serialized_bytes": plan.get("Serialization", {}).get("Output Volume", 0) * 1024,
         "operators": [n["Node Type"] + (f" ({n['Join Type']})" if n.get("Join Type") and n["Node Type"] in
                                         ("Hash Join", "Nested Loop", "Merge Join") else "") for n in nodes],
@@ -281,6 +318,11 @@ async def main() -> None:
     async with fastapi_app.router.lifespan_context(fastapi_app):
         p = await pick()
         eps = endpoints(p)
+        for ep in eps:
+            for backend in ("neo4j", "postgres"):
+                for _ in range(5 if ep["name"] == "POST /login" else GLOBAL_WARMUP):
+                    await asgi(ep["method"], PREFIX[backend] + ep["path"], ep["token"], ep["body"])
+        print(f"rozgrzewka: {GLOBAL_WARMUP} wywołań na punkt końcowy", file=sys.stderr)
         samples, queries = [], []
         for ep in eps:
             n = LOGIN_RUNS if ep["name"] == "POST /login" else RUNS
@@ -316,6 +358,8 @@ async def main() -> None:
                     queries.append({"endpoint": ep["name"], "backend": backend, "query_no": i, "query": q["query"],
                                     "response_bytes": size, **shape(q["query"], backend), **d})
                 print(f"{ep['name']} {backend}: {len(rec)} zapytań", file=sys.stderr)
+    if _eng_conn is not None:
+        await _eng_conn.close()
     await driver.close()
     json.dump({"params": p, "endpoints": [{k: e[k] for k in ("name", "method", "path", "token", "body")} for e in eps],
                "samples": samples, "queries": queries}, sys.stdout, ensure_ascii=False, default=str)

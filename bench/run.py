@@ -103,15 +103,24 @@ def dotenv() -> dict:
     return {k.strip(): v.strip() for k, v in pairs}
 
 
-def storage(cmd: list[str], env: dict) -> dict:
-    # Po imporcie dane są w dzienniku transakcji; punkt kontrolny (konto administratora bazy) zapisuje je
-    # do plików magazynu, dopiero wtedy ich rozmiar odpowiada danym.
+def checkpoint(cmd: list[str], env: dict) -> None:
+    """Punkt kontrolny w obu bazach (konta administratorów baz).
+
+    Po imporcie dane są w dzienniku transakcji. Wykonany przed pomiarami punkt kontrolny zapisuje je
+    do plików magazynu od razu, zamiast w tle w trakcie pomiarów: bez tego przy 10 000 studentów
+    zapisy na dysk spowalniały zatwierdzanie transakcji (fsync) w obu bazach w pierwszych mierzonych
+    warstwach. Przed odczytem rozmiaru baz zapewnia, że rozmiar plików odpowiada danym."""
     e = dotenv()
     sh(*cmd, "exec", "-T", "-e", f"ADMIN_USER={e['NEO4J_USER']}", "-e", f"ADMIN_PASSWORD={e['NEO4J_PASSWORD']}",
        "app", "python", "-c",
        "import os\nfrom neo4j import GraphDatabase\n"
        "with GraphDatabase.driver(os.environ['NEO4J_URI'], auth=(os.environ['ADMIN_USER'], os.environ['ADMIN_PASSWORD'])) as d:\n"
        "    d.execute_query('CALL db.checkpoint()')", env=env)
+    sh(*cmd, "exec", "-T", "-u", "postgres", "postgres", "psql", "-d", "usos", "-c", "CHECKPOINT", env=env)
+
+
+def storage(cmd: list[str], env: dict) -> dict:
+    checkpoint(cmd, env)
     neo = sh(*cmd, "exec", "-T", "neo4j", "du", "-sb", "/data/databases/neo4j", "/data/transactions/neo4j", env=env)
     sizes = [int(line.split()[0]) for line in neo.splitlines()]
     pg = sh(*cmd, "exec", "-T", "-u", "postgres", "postgres", "psql", "-d", "usos", "-tAc",
@@ -155,9 +164,10 @@ def bench_scale(scale: str, runs: int, warmup: int) -> None:
     init = json.loads(sh("docker", "inspect", sh(*cmd, "ps", "-a", "-q", "init", env=env).strip()))[0]["State"]
     print(f"[{scale}] gotowe po {ready:.0f} s", file=sys.stderr)
     try:
+        checkpoint(cmd, env)
         time.sleep(5)
         raw = sh(*cmd, "exec", "-T", "app", "python", "-",
-                 json.dumps({"runs": runs, "warmup": warmup, "login_runs": max(5, runs // 5)}),
+                 json.dumps({"runs": runs, "warmup": warmup, "login_runs": max(5, runs // 5), "global_warmup": 200}),
                  env=env, input=(ROOT / "bench" / "measure.py").read_text())
         m = json.loads(raw)
         for ep in m["endpoints"]:
@@ -179,7 +189,7 @@ def bench_scale(scale: str, runs: int, warmup: int) -> None:
         {**base, "endpoint": s["endpoint"], "backend": s["backend"], "layer": s["layer"], "run": i, "ms": round(v, 4)}
         for s in m["samples"] for i, v in enumerate(s["ms"])])
     metric_keys = ["rows", "engine_ms", "planning_ms", "work", "cache_hits", "cache_misses", "memory_bytes",
-                   "estimate_error", "available_after_ms", "consumed_after_ms", "serialized_bytes", "response_bytes",
+                   "estimate_error", "jit", "available_after_ms", "consumed_after_ms", "serialized_bytes", "response_bytes",
                    "chars", "relationship_patterns", "match_clauses", "joins", "selects"]
     replace_rows("queries.csv", scale, [
         {**base, "endpoint": q["endpoint"], "backend": q["backend"], "query_no": q["query_no"],

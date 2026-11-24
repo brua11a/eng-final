@@ -4,8 +4,8 @@ Konto bazy danych: `app` (konto API).
 
 | Reguła | Wynik | Kod GQL | Komunikat | Zgodny |
 | --- | --- | --- | --- | --- |
-| typ właściwości: dzień tygodnia jako tekst | odrzucono | 22N78 | Node(566) with label Group required the property weekday to be of type INTEGER, but was of type STRING. | tak |
-| wymagana właściwość: grupa bez limitu miejsc | odrzucono | 22N77 | Node(567) with label Group must have the property capacity | tak |
+| typ właściwości: dzień tygodnia jako tekst | odrzucono | 22N78 | Node(565) with label Group required the property weekday to be of type INTEGER, but was of type STRING. | tak |
+| wymagana właściwość: grupa bez limitu miejsc | odrzucono | 22N77 | Node(566) with label Group must have the property capacity | tak |
 | typ właściwości: godzina zajęć jako tekst | odrzucono | 22N78 | Node(568) with label Group required the property start_time to be of type LOCAL TIME, but was of type STRING. | tak |
 | klucz: grupa z istniejącym identyfikatorem | odrzucono | 22N79 | Node(326) already exists with label Group and property id = '131f00c2-a504-550e-8117-167bd6218535' | tak |
 | unikalność złożona: sala (budynek, numer) | odrzucono | 22N79 | Node(191) already exists with label Room and properties building = 'C-14', room_num = '112' | tak |
@@ -16,8 +16,8 @@ Konto bazy danych: `app` (konto API).
 | wymagana właściwość: Inactive bez momentu dezaktywacji | odrzucono | 22N77 | Node(572) with label Inactive must have the property deactivated_at | tak |
 | typ węzła na końcu krawędzi: TEACHES od studenta | odrzucono | 22NB4 | Relationship(6919783026478022982) with type TEACHES requires its start Node(13) to have label Teacher | tak |
 | typ węzła na końcu krawędzi: IN_ROOM do przedmiotu | odrzucono | 22NB4 | Relationship(1155191996118204742) with type IN_ROOM requires its end Node(56) to have label Room | tak |
-| wymagana właściwość krawędzi: zapis bez momentu zapisu | odrzucono | 22N77 | Relationship(6917542221780615494) with type REGISTERED_IN must have the property registered_at | tak |
-| typ właściwości krawędzi: ocena jako tekst | odrzucono | 22N78 | Relationship(6917542221780615494) with type REGISTERED_IN required the property grade to be of type FLOAT, but was of type STRING. | tak |
+| wymagana właściwość krawędzi: zapis bez momentu zapisu | odrzucono | 22N77 | Relationship(6919794021594300742) with type REGISTERED_IN must have the property registered_at | tak |
+| typ właściwości krawędzi: ocena jako tekst | odrzucono | 22N78 | Relationship(6919794021594300742) with type REGISTERED_IN required the property grade to be of type FLOAT, but was of type STRING. | tak |
 
 ## B. Reguły pilnowane przez API (baza przyjmuje dane)
 

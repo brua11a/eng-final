@@ -74,7 +74,11 @@ ORDER BY su.name COLLATE "C"
 
 # Counterpart of graph_backend/routers/catalogue.py::_OPINIONS_BY_TEACHER/_OPINIONS_BY_GROUP + _OPINIONS_RETURN.
 # Opinions are anonymous: opinion.student_idx is never read.
-OPINIONS = """
+# Two variants instead of one `%(x)s IS NULL OR ...` condition: psycopg prepares a query after five
+# executions and PostgreSQL may then switch to a generic plan, made without the parameter values.
+# Such a plan cannot know which filter is set, so for `IS NULL OR` on both columns it scanned the
+# whole opinion table; with the filter column fixed it uses the index on that column (7.8.3).
+_OPINIONS_SELECT = """
 SELECT
   o.id,
   o.grade::float8 AS grade,
@@ -95,8 +99,14 @@ JOIN person tp ON tp.idx = o.teacher_idx
 JOIN group_type gt ON gt.id = g.group_type_id
 JOIN subject su ON su.code = gt.subject_code
 JOIN academic_cycle ac ON ac.id = gt.cycle_id
-WHERE (%(teacher_idx)s::text IS NULL OR o.teacher_idx = %(teacher_idx)s)
+"""
+OPINIONS_BY_TEACHER = _OPINIONS_SELECT + """
+WHERE o.teacher_idx = %(teacher_idx)s
   AND (%(group_id)s::text IS NULL OR o.group_id = %(group_id)s)
+ORDER BY o.submit DESC
+"""
+OPINIONS_BY_GROUP = _OPINIONS_SELECT + """
+WHERE o.group_id = %(group_id)s
 ORDER BY o.submit DESC
 """
 
@@ -127,7 +137,10 @@ async def list_opinions(
 ) -> OpinionListResponse:
     if not teacher_idx and not group_id:
         raise invalid("teacher_idx or group_id is required")
-    rows = await run(conn, OPINIONS, teacher_idx=teacher_idx, group_id=group_id)
+    if teacher_idx:
+        rows = await run(conn, OPINIONS_BY_TEACHER, teacher_idx=teacher_idx, group_id=group_id)
+    else:
+        rows = await run(conn, OPINIONS_BY_GROUP, group_id=group_id)
     opinions = [OpinionItem(**row) for row in rows]
     avg = sum(o.grade for o in opinions) / len(opinions) if opinions else None
     return OpinionListResponse(opinions=opinions, avg_grade=avg)
