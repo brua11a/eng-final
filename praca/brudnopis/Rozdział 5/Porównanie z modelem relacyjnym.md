@@ -2,7 +2,7 @@
 
 Aby porównać model grafowy z relacyjnym, wybrane punkty końcowe API zaimplementowano równolegle z wykorzystaniem relacyjnej bazy danych. Obie wersje działają w jednym procesie API pod prefiksami `/api` (Neo4j) i `/api/rel` (PostgreSQL). Mają identyczne ścieżki, modele Pydantic oraz mechanizmy uwierzytelniania i autoryzacji, więc różnią się jedynie warstwą bazy danych.
 
-Jako bazę relacyjną wykorzystano PostgreSQL 18.1 (oficjalny obraz `postgres:18.1`), uruchamiany razem z Neo4j 2026.07.1 Enterprise w ramach tego samego pliku `docker-compose.yml`. Konfiguracja obu baz jest analogiczna: szyfrowanie TLS z weryfikacją certyfikatu, osobne konto aplikacji o ograniczonych uprawnieniach oraz automatyczny import danych przy pierwszym uruchomieniu (6.3). Pozostawiono domyślne parametry wydajnościowe bez nakładania limitów zasobów na kontenery. Parametry sprzętowe środowiska testowego podano w 7.1.
+Jako bazę relacyjną wykorzystano PostgreSQL 18.1 (oficjalny obraz `postgres:18.1`), uruchamiany razem z Neo4j 2026.07.1 Enterprise w ramach tego samego pliku `docker-compose.yml`. Konfiguracja obu baz jest analogiczna: szyfrowanie TLS z weryfikacją certyfikatu, osobne konto aplikacji o ograniczonych uprawnieniach oraz automatyczny import danych przy pierwszym uruchomieniu (6.3).
 
 W obu wariantach wykorzystano asynchroniczne sterowniki dla języka Python 3.14:
 - Neo4j: `neo4j` 6.2.0 (protokół Bolt),
@@ -12,7 +12,9 @@ W obu wariantach wykorzystano asynchroniczne sterowniki dla języka Python 3.14:
 
 ![[PostgreSQL@localhost - usos - public 1.png]]
 
-Ze względu na dużą liczbę tabel diagram wygenerowany przez narzędzie DBeaver jest nieczytelny.
+*Diagram schematu relacyjnego*
+
+Ze względu na dużą liczbę tabel diagram wygenerowany przez narzędzie DBeaver jest mało czytelny i ma charakter głównie poglądowy.
 
 6.2.1 Przekształcenie grafu w tabele
 
@@ -31,7 +33,7 @@ Ponieważ w modelu relacyjnym jeden wiersz nie może mieć wielu etykiet, dane w
 
 Taki klucz obcy pełni funkcję analogiczną do etykiety implikowanej – wiersz roli nie powstanie bez wpisu w `person`, co w Neo4j wymagało obejścia błędu 22NC4 za pomocą instrukcji `CONSTRAINT` (5.3.1). W tabeli `inactive` klucz obcy odnosi się bezpośrednio do `app_user`, dzięki czemu baza sama pilnuje, by dezaktywacja dotyczyła wyłącznie istniejącego konta (w grafie ograniczenie to wymusza API, 5.3.1). Opcja `ON DELETE CASCADE` zapewnia ponadto automatyczne skasowanie wpisu w `inactive` przy usunięciu konta.
 
-Rozbicie ról na osobne tabele wymusza jednak stosowanie złączeń. Przykładowo zapytanie logowania (por. 5.4.2) musi sprawdzić dezaktywację oraz każdą rolę osobnym `LEFT JOIN`:
+Rozbicie ról na osobne tabele wymusza jednak stosowanie złączeń. Przykładowo zapytanie logowania (5.4.2) musi sprawdzić dezaktywację oraz każdą rolę osobnym `LEFT JOIN`:
 
 ```sql
 SELECT

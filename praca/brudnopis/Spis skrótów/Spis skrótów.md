@@ -1,5 +1,6 @@
 
 - **3NF** – ang. *Third Normal Form*
+- **ACID** – ang. *Atomicity, Consistency, Isolation, Durability*
 - **AI** – ang. *Artificial Intelligence*
 - **API** – ang. *Application Programming Interface*
 - **CA** – ang. *Certificate Authority*
@@ -9,7 +10,6 @@
 - **ECTS** – ang. *European Credit Transfer and Accumulation System*
 - **GQL** – ang. *Graph Query Language*
 - **HMAC** – ang. *Hash-based Message Authentication Code*
-- **HTML** – ang. *HyperText Markup Language*
 - **HTTP** – ang. *Hypertext Transfer Protocol*
 - **HTTPS** – ang. *Hypertext Transfer Protocol Secure*
 - **IP** – ang. *Internet Protocol*
@@ -17,6 +17,7 @@
 - **JIT** – ang. *Just-In-Time*
 - **JSON** – ang. *JavaScript Object Notation*
 - **JWT** – ang. *JSON Web Token*
+- **LMS** – ang. *Learning Management System*
 - **OGM** – ang. *Object-Graph Mapping*
 - **ORM** – ang. *Object-Relational Mapping*
 - **PID** – ang. *Process Identifier*
@@ -25,6 +26,7 @@
 - **ReBAC** – ang. *Relationship-Based Access Control*
 - **REST** – ang. *Representational State Transfer*
 - **SHA** – ang. *Secure Hash Algorithm*
+- **SIS** – ang. *Student Information System*
 - **SNI** – ang. *Server Name Indication*
 - **SPA** – ang. *Single-Page Application*
 - **SQL** – ang. *Structured Query Language*

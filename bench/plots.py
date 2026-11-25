@@ -29,17 +29,21 @@ import matplotlib.ticker  # noqa: E402
 
 RES = Path(__file__).resolve().parent / "results"
 OUT = RES / "plots"
-BACKENDS = {"neo4j": ("Neo4j", "#2a78d6"), "postgres": ("PostgreSQL", "#eb6834")}
+# Kolory rozróżnialne także w druku czarno-białym (luminancja ok. 67 vs 166) oraz dodatkowe kodowanie kształtem/kreskowaniem
+BACKENDS = {"neo4j": ("Neo4j", "#184a8c"), "postgres": ("PostgreSQL", "#f29340")}
+MARKERS = {"neo4j": "o", "postgres": "s"}
+HATCHES = {"neo4j": "", "postgres": "///"}
+HATCH_EDGES = {"neo4j": "white", "postgres": "#8f4408"}
 LAYERS = ["engine", "driver", "asgi", "https", "nginx"]
 LAYER_LABELS = {"engine": "silnik bazy", "driver": "sterownik", "asgi": "FastAPI\n(w procesie)",
                 "https": "HTTPS\ndo API", "nginx": "HTTPS\nprzez nginx"}
 # Odcinki wykresu udziałów: różnice median sąsiednich warstw. Warstwy HTTPS i nginx są połączone:
 # każdą warstwę mierzy osobna seria żądań, a narzut samego nginx (ok. 0,1-1 ms) mieści się w rozrzucie,
 # więc różnica median HTTPS - FastAPI lub nginx - HTTPS wychodzi czasem ujemna.
-PARTS = [("engine", None, "wykonanie w silniku", "#1baf7a"),
-         ("driver", "engine", "sterownik, protokół, sieć do bazy", "#eda100"),
-         ("asgi", "driver", "FastAPI: autoryzacja, walidacja, serializacja", "#e87ba4"),
-         ("nginx", "asgi", "uvicorn, TLS, nginx, sieć", "#52514e")]
+PARTS = [("engine", None, "wykonanie w silniku", "#184a8c", "", "white"),
+         ("driver", "engine", "sterownik, protokół, sieć do bazy", "#f29340", "///", "#8f4408"),
+         ("asgi", "driver", "FastAPI: autoryzacja, walidacja, serializacja", "#e6edf5", "...", "#4a6a91"),
+         ("nginx", "asgi", "uvicorn, TLS, nginx, sieć", "#767572", "\\\\\\", "#262523")]
 # Punkty końcowe pominięte na wykresie udziałów: logowanie to w ok. 99% bcrypt (FastAPI), a katalog
 # przedmiotów to w większości czas silnika - narzuty pozostałych warstw toną w rozrzucie pomiarów.
 OVERHEAD_SKIP = {"POST /login", "GET /subjects"}
@@ -54,17 +58,19 @@ for _style in ("regular", "bold", "italic", "bolditalic"):
             matplotlib.font_manager.fontManager.addfont(str(_f))
             break
 
-FS, FS_SMALL = 13, 11  # rozmiar podstawowy i etykiet pomocniczych [pt]
+FS, FS_SMALL = 11, 9.5  # rozmiar podstawowy i etykiet pomocniczych [pt] (nie większy niż 12 pt tekstu pracy)
 
 plt.rcParams.update({
     "font.family": "serif",
     "font.serif": ["TeX Gyre Termes", "Times New Roman", "Liberation Serif", "STIXGeneral", "DejaVu Serif"],
     "mathtext.fontset": "stix",
+    "pdf.fonttype": 42,
     "font.size": FS, "legend.fontsize": FS_SMALL, "xtick.labelsize": FS_SMALL, "ytick.labelsize": FS_SMALL,
     "figure.titlesize": FS + 1, "axes.edgecolor": MUTED, "axes.labelcolor": INK, "xtick.color": MUTED, "ytick.color": MUTED,
     "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "grid.color": GRID,
     "grid.linewidth": 0.6, "axes.axisbelow": True, "legend.frameon": False, "figure.dpi": 100,
     "savefig.bbox": "tight", "axes.titlesize": FS, "axes.titleweight": "bold",
+    "hatch.linewidth": 0.6,
 })
 
 
@@ -102,8 +108,9 @@ def save(fig, name: str) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT / f"{name}.png", dpi=200)
     fig.savefig(OUT / f"{name}.svg")
+    fig.savefig(OUT / f"{name}.pdf")
     plt.close(fig)
-    print("zapisano", OUT / f"{name}.png")
+    print("zapisano", OUT / f"{name}.pdf")
 
 
 def p95(v: list[float]) -> float:
@@ -170,34 +177,34 @@ def overhead_figure(sc, n, endpoints, med):
     Odcinki to różnice median, więc nie muszą się sumować dokładnie do mediany całości: ujemna różnica
     oznacza narzut mniejszy niż rozrzut pomiarów i jest zgłaszana, a nie ukrywana."""
     eps = [ep for ep in endpoints if ep not in OVERHEAD_SKIP]
-    fig, ax = plt.subplots(figsize=(10, 0.5 * 2 * len(eps) + 1.2))
+    fig, ax = plt.subplots(figsize=(7.6, 0.44 * 2 * len(eps) + 0.9))
     labels, ys, y = [], [], 0.0
     for ep in eps:
         for be, (blabel, _) in BACKENDS.items():
             total = med[(sc, ep, be, "nginx")]
             parts = [med[(sc, ep, be, layer)] - (med[(sc, ep, be, prev)] if prev else 0)
-                     for layer, prev, _, _ in PARTS]
-            for (layer, prev, _, _), part in zip(PARTS, parts):
+                     for layer, prev, _, _, _, _ in PARTS]
+            for (layer, prev, _, _, _, _), part in zip(PARTS, parts):
                 if part < 0:
                     raise SystemExit(f"{sc} {ep} {be}: ujemna różnica {layer} - {prev} = {part:.3f} ms")
             left = 0.0
-            for (layer, prev, plabel, color), part in zip(PARTS, parts):
+            for (layer, prev, plabel, color, hatch, hedge), part in zip(PARTS, parts):
                 share = 100 * part / total
-                ax.barh(y, share, left=left, color=color, edgecolor="white", linewidth=1, height=0.8,
+                ax.barh(y, share, left=left, color=color, edgecolor=hedge, hatch=hatch, linewidth=0.7, height=0.78,
                         label=plabel if not labels else None)
                 left += share
-            ax.text(101, y, f"{total:.1f} ms".replace(".", ","), va="center", fontsize=FS_SMALL, color=INK)
+            ax.text(101.5, y, f"{total:.1f} ms".replace(".", ","), va="center", fontsize=FS_SMALL, color=INK)
             labels.append(f"{ep} – {blabel}")
             ys.append(y)
             y += 1
-        y += 0.5
+        y += 0.45
+    ax.text(101.5, -0.75, "razem", va="bottom", fontsize=FS_SMALL, color=MUTED, style="italic")
     ax.set_yticks(ys, labels, fontsize=FS_SMALL)
     ax.invert_yaxis()
     ax.set_xlim(0, 100)
     ax.grid(axis="y", visible=False)
     ax.set_xlabel("udział w medianie czasu żądania przez nginx [%]")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=FS_SMALL)
-    ax.set_title(f"Z czego składa się czas żądania – {_num(n)} studentów (na prawo: czas całkowity)", loc="left")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.45, -0.14), ncol=2, fontsize=FS_SMALL, columnspacing=1.2)
     save(fig, f"narzut_{sc}")
 
 
@@ -230,14 +237,15 @@ def boxplot_figure(sc, n, endpoints, samples):
 def scaling_figure(scales, students, endpoints, med):
     cols = 4
     rows = -(-len(endpoints) // cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(11, 2.8 * rows))
+    fig, axes = plt.subplots(rows, cols, figsize=(11, 2.7 * rows))
     xs = [students[s] for s in scales]
     for ax, ep in zip(axes.flat, endpoints):
         for be, (label, color) in BACKENDS.items():
+            mk = MARKERS[be]
             ax.plot(xs, [med.get((s, ep, be, "nginx"), float("nan")) for s in scales], color=color, linewidth=2,
-                    marker="o", markersize=5, label=f"{label}: żądanie przez nginx")
+                    marker=mk, markersize=5, label=f"{label}: żądanie przez nginx")
             ax.plot(xs, [med.get((s, ep, be, "engine"), float("nan")) for s in scales], color=color, linewidth=1.5,
-                    linestyle="--", marker="o", markersize=4, markerfacecolor="white",
+                    linestyle="--", marker=mk, markersize=4.5, markerfacecolor="white",
                     label=f"{label}: silnik bazy")
         log_axes(ax, xs)
         ax.set_title(ep, loc="left")
@@ -247,8 +255,6 @@ def scaling_figure(scales, students, endpoints, med):
         ax.axis("off")
     handles, labels = axes.flat[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower right", bbox_to_anchor=(0.98, 0.08), fontsize=FS_SMALL)
-    fig.suptitle("Czas w zależności od liczby studentów (obie osie logarytmiczne)", x=0.01, ha="left",
-                 fontweight="bold")
     fig.tight_layout()
     save(fig, "skala_czas")
 
@@ -298,11 +304,11 @@ def storage_figure(scales, students):
     ax.set_title("Rozmiar danych na dysku", loc="left")
     save(fig, "rozmiar")
 
-    fig, ax = plt.subplots(figsize=(6, 3.5))
+    fig, ax = plt.subplots(figsize=(6, 3.4))
     for i, (be, (label, color)) in enumerate(BACKENDS.items()):
         vals = [st.get((s, be, "import_s"), float("nan")) for s in scales]
         ax.bar([j + (i - 0.5) * 0.38 for j in range(len(scales))], vals, width=0.36, color=color, label=label,
-               edgecolor="white", linewidth=1)
+               edgecolor=HATCH_EDGES[be], linewidth=0.8, hatch=HATCHES[be])
         for j, v in enumerate(vals):
             ax.text(j + (i - 0.5) * 0.38, v, (f"{v:.0f} s" if v >= 1 else f"{v:.1f} s").replace(".", ","), ha="center", va="bottom",
                     fontsize=FS_SMALL, color=INK)
@@ -311,7 +317,6 @@ def storage_figure(scales, students):
     ax.set_xlabel("liczba studentów")
     ax.set_ylabel("czas importu [s], skala log.")
     ax.legend()
-    ax.set_title("Import danych przy pierwszym uruchomieniu", loc="left")
     save(fig, "import")
 
 

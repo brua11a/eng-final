@@ -12,9 +12,9 @@ flowchart LR
 ```
 *Elementy systemu i komunikacja między nimi*
 
-Klient webowy jest aplikacją jednostronicową (SPA, ang. *Single-Page Application*), która komunikuje się z systemem wyłącznie przez API. Po zalogowaniu przechowuje token otrzymany od API na czas trwania sesji przeglądarki i dołącza go do każdego żądania. Interfejs jest podzielony na zakładki odpowiadające modułom API: katalog, widok studenta, prowadzącego i administratora.
+Klient webowy jest aplikacją SPA (2.3), która komunikuje się z systemem wyłącznie przez API. Po zalogowaniu przechowuje token otrzymany od API na czas trwania sesji przeglądarki i dołącza go do każdego żądania. Interfejs jest podzielony na zakładki odpowiadające modułom API: katalog, widok studenta, prowadzącego i administratora.
 
-Użytkownik widzi tylko te zakładki, na które pozwalają role zapisane w tokenie. Zgodnie z wymaganiami (3.1) nie stanowi to zabezpieczenia – o dostępie zawsze decyduje API.
+Użytkownik widzi tylko te zakładki, na które pozwalają role zapisane w tokenie. O dostępie nadal decyduje API.
 
 API przyjmuje żądanie, sprawdza poprawność danych wejściowych oraz uprawnienia użytkownika, wykonuje zapytania do bazy danych i zwraca wynik w ustalonym kształcie.
 
@@ -24,7 +24,7 @@ Baza danych przechowuje wszystkie dane systemu i sama pilnuje ich struktury wedl
 
 Model danych zostanie odwzorowany również w postaci relacyjnej, a zapytania obu wariantów porównane pod względem liczby złączeń i czasu wykonania. Dlatego kod zależny od bazy danych oddzielono od reszty API. Backend relacyjny działa w tym samym procesie pod prefiksem `/api/rel`, z tymi samymi ścieżkami i modelami co jego grafowe odpowiedniki, więc porównaniu podlega wyłącznie realizacja operacji po stronie bazy danych. Klient webowy korzysta tylko z backendu grafowego.
 
-Backendy komunikują się z bazą bezpośrednio przez sterownik, wykonując ręcznie napisane zapytania: w języku Cypher dla Neo4j i w języku SQL dla bazy relacyjnej. Zrezygnowano z warstwy mapowania obiektowo-grafowego (OGM, ang. *Object-Graph Mapping*) i obiektowo-relacyjnego (ORM, ang. *Object-Relational Mapping*). Oficjalna biblioteka Neo4j-OGM jest dostępna jedynie dla języka Java [CYTOWANIE: Neo4j-OGM], a dla języka Python istnieje rozwijana w ramach Neo4j Labs biblioteka neomodel [CYTOWANIE: neomodel]. Ponieważ warstwa mapowania generuje zapytania automatycznie, porównanie odzwierciedlałoby sposób ich generowania przez dwie różne biblioteki, utrudniając ocenę samych modeli danych. Ręcznie pisane zapytania dają ponadto pełną kontrolę nad ich treścią.
+Backendy komunikują się z bazą bezpośrednio przez sterownik, wykonując ręcznie napisane zapytania: w języku Cypher dla Neo4j i w języku SQL dla bazy relacyjnej. Zrezygnowano z warstwy OGM i ORM (2.3). Oficjalna biblioteka Neo4j-OGM jest dostępna jedynie dla języka Java [CYTOWANIE: Neo4j-OGM], a dla języka Python istnieje rozwijana w ramach Neo4j Labs biblioteka neomodel [CYTOWANIE: neomodel]. Ponieważ warstwa mapowania generuje zapytania automatycznie, porównanie odzwierciedlałoby sposób ich generowania przez dwie różne biblioteki, utrudniając ocenę samych modeli danych. Ręcznie pisane zapytania dają ponadto pełną kontrolę nad ich treścią.
 
 4.3 Model danych
 
@@ -46,7 +46,7 @@ W domenie uczelnianej zdefiniowano następujące etykiety osób: `Student` dla s
 
 Dane służące do uwierzytelniania (adres e-mail i skrót hasła) przechowywane są w etykiecie `User` - dopiero ona czyni węzeł osoby pełnoprawnym użytkownikiem, który może zalogować się w portalu i uwierzytelnić w API. Osoba bez etykiety `User` istnieje w danych (np. jako prowadzący widoczny w katalogu zajęć), ale nie ma dostępu do systemu.
 
-Wymaganie zachowania danych osób, które utraciły dostęp do systemu (3.1), spełnia etykieta `Inactive`. Pozwala ona niedestruktywnie odebrać użytkownikowi dostęp do wszystkich punktów końcowych; przechowuje ona moment dezaktywacji. Bez tej lub podobnej funkcyjnie etykiety odebranie dostępu wymagałoby usunięcia etykiety `User` wraz z danymi logowania. Charakter platformy uczelnianej nie zakłada rozbudowanego systemu blokad i kar dla użytkowników - tymczasowe odebranie dostępu wynika raczej z sytuacji takich jak zawieszenie w prawach studenta lub cofnięcie uprawnień do prowadzenia zajęć, dlatego jedna etykieta jest wystarczająca.
+Wymaganie zachowania danych osób, które utraciły dostęp do systemu (3.1), spełnia etykieta `Inactive`. Pozwala ona niedestruktywnie odebrać użytkownikowi dostęp do wszystkich punktów końcowych. Przechowuje ona moment dezaktywacji. Bez tej lub podobnej funkcyjnie etykiety odebranie dostępu wymagałoby usunięcia etykiety `User` wraz z danymi logowania. Charakter platformy uczelnianej nie zakłada rozbudowanego systemu blokad i kar dla użytkowników - tymczasowe odebranie dostępu wynika raczej z sytuacji takich jak zawieszenie w prawach studenta lub cofnięcie uprawnień do prowadzenia zajęć, dlatego jedna etykieta jest wystarczająca.
 
 Każda z etykiet osób ma zdefiniowane właściwości, z których większość jest wymagana; opcjonalne jest jedynie zdjęcie. Kluczem (wartością niepowtarzalną i zawsze obecną) każdej osoby jest `idx` - numer indeksu lub inny sekwencyjny identyfikator. Dodatkowo kluczem etykiety `User` jest adres e-mail. Ponadto kombinacja imienia, nazwiska i numeru telefonu musi być unikalna, co zapobiega przypadkowemu wprowadzeniu tej samej osoby dwukrotnie pod różnymi identyfikatorami. Etykieta `Admin` nie ma własnych właściwości.
 
@@ -76,7 +76,7 @@ Z logicznego punktu widzenia etykieta `Inactive` powinna implikować etykietę `
 
 4.3.2 Oferta dydaktyczna
 
-Żeby platforma była użyteczna, muszą się w niej znajdować nie tylko osoby, ale też szeroko pojęta struktura uczelni: wydziały, kierunki, plany studiów, przedmioty i ich realizacje w kolejnych semestrach. Strukturę tę rozbito hierarchicznie na osobne etykiety tak, aby każda informacja była zapisana w jednym miejscu (ang. *single source of truth*). Zapobiega to anomaliom aktualizacji (ang. *update anomalies*), czyli sytuacjom, w których zmiana jednej informacji wymaga poprawienia wielu jej kopii, a pominięcie którejś prowadzi do sprzecznych danych.
+Żeby platforma była użyteczna, muszą się w niej znajdować nie tylko osoby, ale też szeroko pojęta struktura uczelni: wydziały, kierunki, plany studiów, przedmioty i ich realizacje w kolejnych semestrach. Strukturę tę rozbito hierarchicznie na osobne etykiety tak, aby każda informacja była zapisana w jednym miejscu (ang. *single source of truth*), co zapobiega anomaliom aktualizacji (2.1).
 
 Na szczycie hierarchii znajduje się wydział, opisany etykietą `Faculty`. Ma on identyfikator, nazwę skróconą (np. „W4N”) oraz pełną nazwę (np. „Wydział Informatyki i Telekomunikacji”). W rzeczywistym systemie uczelnianym można by dodać kolejne właściwości, np. opis wydziału czy dane kontaktowe. Na potrzeby prototypu ważniejsze jest jednak to, jak dane łączą się ze sobą, a właściwości można dopisać później w miarę potrzeb.
 
@@ -95,7 +95,7 @@ Plan studiów opisuje kolejność semestrów, ale nie mówi, kiedy dany semestr 
 
 Do semestru planu przypisywane są przedmioty, opisane etykietą `Subject`. Przedmiot jest rozumiany jako szablon, który powtarza się w kolejnych latach: na przykład piąty semestr Cyberbezpieczeństwa w każdym kolejnym planie może zawierać Biometrię. Przedmiot jest identyfikowany unikalnym kodem z katalogu przedmiotów (np. „W04CBE-SI0005G”), ma nazwę i opcjonalną liczbę punktów ECTS. Przypisanie przedmiotu do semestru planu wyraża krawędź `INCLUDES`. Sama w sobie oznacza ona jedynie, że w danym semestrze przedmiot ma się odbyć. Szczegóły realizacji, takie jak formy zajęć, wagi ocen i grupy, opisują osobne węzły.
 
-Jeśli `Subject` jest ideą przedmiotu, to jego realizacją w konkretnym cyklu akademickim jest `SubjectInstance`, np. „Biometria w cyklu 2025/26 Z”. Instancja jest połączona z przedmiotem krawędzią `INSTANCE_OF`, a z cyklem, w którym się odbywa, krawędzią `OFFERED_IN`. Przede wszystkim jednak do instancji podpięte są formy zajęć prowadzone w danej edycji przedmiotu (krawędź `HAS_TYPE`), a przez nie grupy zajęciowe. Dla danego przedmiotu w danym cyklu istnieje co najwyżej jedna instancja, więc jeśli przedmiot znajduje się w planach kilku kierunków odbywających się w tym samym cyklu, wszyscy ich studenci korzystają z tej samej instancji i tych samych grup. `SubjectInstance` nie ma żadnych właściwości, ponieważ jest w pełni wyznaczona przez swoje krawędzie – przedmiot i cykl jednoznacznie wskazują instancję. Sposób zapisania takiego węzła w schemacie bazy opisano w rozdziale o implementacji (*todo: numer rozdziału*).
+Jeśli `Subject` jest ideą przedmiotu, to jego realizacją w konkretnym cyklu akademickim jest `SubjectInstance`, np. „Biometria w cyklu 2025/26 Z”. Instancja jest połączona z przedmiotem krawędzią `INSTANCE_OF`, a z cyklem, w którym się odbywa, krawędzią `OFFERED_IN`. Przede wszystkim jednak do instancji podpięte są formy zajęć prowadzone w danej edycji przedmiotu (krawędź `HAS_TYPE`), a przez nie grupy zajęciowe. Dla danego przedmiotu w danym cyklu istnieje co najwyżej jedna instancja, więc jeśli przedmiot znajduje się w planach kilku kierunków odbywających się w tym samym cyklu, wszyscy ich studenci korzystają z tej samej instancji i tych samych grup. `SubjectInstance` nie ma żadnych właściwości, ponieważ jest w pełni wyznaczona przez swoje krawędzie – przedmiot i cykl jednoznacznie wskazują instancję. Sposób zapisania takiego węzła w schemacie bazy opisano w rozdziale o implementacji (5.3.1).
 
 Krawędź `INCLUDES` łączy semestr planu bezpośrednio z przedmiotem. Plan studiów powstaje z wyprzedzeniem, natomiast instancja przedmiotu jest tworzona dopiero podczas przygotowywania realizacji w konkretnym cyklu, więc semestry zaplanowane na przyszłość nie miałyby jeszcze instancji, na którą mogłyby wskazywać. Odpowiadającą semestrowi instancję można zawsze wyznaczyć, ponieważ oba węzły wskazują na ten sam przedmiot (`INCLUDES` i `INSTANCE_OF`) oraz ten sam cykl (`TAUGHT_IN` i `OFFERED_IN`). Bezpośrednia krawędź od semestru planu do instancji powielałaby tę informację i wymagałaby pilnowania zgodności cykli.
 
@@ -210,7 +210,7 @@ Krawędź `WRITES` jest potrzebna do egzekwowania reguły jednej opinii na parę
 | | `submit` | data i czas ze strefą | tak | – | moment wystawienia    |
 *Właściwości etykiety `Opinion`*
 
-Opinia na początku była krawędzią od studenta do grupy, a nauczyciel wynikał pośrednio z tej krawędzi. Po rozważeniu jednak sytuacji, w której jedna grupa jest prowadzona przez kilka osób (np. wykład, na którym prezentacja jest prowadzona prawie za każdym razem przez kogoś innego), zdecydowano się zmienić `Opinion` na pełnoprawny węzeł. Oficjalna nazwa tego zabiegu to *reifikacja*.
+Opinia na początku była krawędzią od studenta do grupy, a nauczyciel wynikał pośrednio z tej krawędzi. Po rozważeniu jednak sytuacji, w której jedna grupa jest prowadzona przez kilka osób (np. wykład, na którym prezentacja jest prowadzona prawie za każdym razem przez kogoś innego), zdecydowano się na *reifikację*, zamieniając `Opinion` w pełnoprawny węzeł.
 
 Takie rozwiązanie ma też zalety przy odczycie. Do opinii można dojść od każdej z trzech stron: od studenta (jego opinie), od grupy (opinie o zajęciach) i od prowadzącego (wszystkie opinie o nim, ze wszystkich grup i cykli). Opinia jako węzeł może też w przyszłości otrzymać kolejne powiązania, np. odpowiedź prowadzącego lub zgłoszenie do moderacji.
 
@@ -220,9 +220,7 @@ Takie rozwiązanie ma też zalety przy odczycie. Do opinii można dojść od ka�
 
 4.3.6 Krawędzie i kardynalność
 
-W modelu grafowym nie są potrzebne tabele łączące ani klucze obce. Każde powiązanie między węzłami jest krawędzią, niezależnie od tego, czy w modelu relacyjnym byłoby powiązaniem jeden-do-wielu, czy wiele-do-wielu. Kardynalność nadal wynika jednak z domeny (np. grupa zajęciowa odbywa się w jednej sali, a w jednej sali odbywa się wiele grup).
-
-Każda krawędź ma kierunek nadany zgodnie ze znaczeniem relacji (np. od studenta do opinii). Kierunek nie ogranicza jednak zapytań: po krawędzi można przejść w obie strony z tym samym kosztem, więc jego dobór wpływa jedynie na czytelność modelu.
+W modelu grafowym każde powiązanie między węzłami jest krawędzią (2.1), jednak kardynalność nadal wynika z domeny (np. grupa zajęciowa odbywa się w jednej sali, a w jednej sali odbywa się wiele grup).
 
 | Krawędź        | Od              | Do               | Znaczenie                          | Kardynalność | Uwagi                                        |
 | -------------- | --------------- | ---------------- | ---------------------------------- | ------------ | -------------------------------------------- |
@@ -263,15 +261,15 @@ Bazy grafowe domyślnie nie wymuszają schematu, a w tym projekcie dane muszą m
 - klucze i ograniczenia unikalności (również złożone, np. budynek i numer sali, rok i semestr cyklu akademickiego),
 - typy węzłów na obu końcach każdego typu krawędzi (np. krawędź `TEACHES` może prowadzić tylko od prowadzącego do grupy).
 
-Typ grafu nie wymusza natomiast kardynalności krawędzi - nic w bazie nie zabrania podpięcia grupy do dwóch sal. Kardynalność pilnowana jest przez punkty końcowe API, które tworzą krawędzie. Kardynalność można by narzucić po stronie aplikacji za pomocą biblioteki neomodel [CYTOWANIE: https://deepwiki.com/neo4j-contrib/neomodel/2.4-relationships-and-cardinality], która integruje się m.in. z frameworkiem Django. Zrezygnowano z niej z powodów opisanych w 4.2 - zachowania pełnej kontroli nad treścią zapytań i miarodajności porównania z backendem relacyjnym - oraz na rzecz modularnego API w stylu REST (ang. *Representational State Transfer*) korzystającego bezpośrednio ze sterownika Neo4j [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/].
+Typ grafu nie wymusza natomiast kardynalności krawędzi - nic w bazie nie zabrania podpięcia grupy do dwóch sal. Kardynalność pilnowana jest przez punkty końcowe API, które tworzą krawędzie. Kardynalność można by narzucić po stronie aplikacji za pomocą biblioteki neomodel [CYTOWANIE: https://deepwiki.com/neo4j-contrib/neomodel/2.4-relationships-and-cardinality], która integruje się m.in. z frameworkiem Django. Zrezygnowano z niej z powodów opisanych w 4.2 – zachowania pełnej kontroli nad treścią zapytań i miarodajności porównania z backendem relacyjnym – oraz na rzecz modularnego API w stylu REST (2.3) korzystającego bezpośrednio ze sterownika Neo4j [CYTOWANIE: https://neo4j.com/docs/api/python-driver/current/].
 
 4.4 Kontrola dostępu
 
-Kontrola dostępu polega na uwierzytelnianiu i autoryzacji: najpierw ustala się, kim jest użytkownik, potem czy może wykonać daną operację. Niezależnie od tego ogranicza się uprawnienia samego API wobec bazy danych.
+Kontrola dostępu w systemie obejmuje dwa etapy – uwierzytelnianie i autoryzację (2.2) – oraz niezależne ograniczenie uprawnień samego API wobec bazy danych.
 
 4.4.1 Uwierzytelnianie
 
-Użytkownik loguje się adresem e-mail i hasłem z etykiety `User`. Zgodnie z wymaganiami (3.3) hasła są przechowywane jako skrót z solą, wyznaczony algorytmem bcrypt. Jest to funkcja celowo kosztowna obliczeniowo i z wbudowaną solą (ang. *salt*), dzięki czemu nawet wyciek bazy nie pozwala łatwo odtworzyć haseł, a dwóch użytkowników o tym samym haśle ma różne skróty. [CYTOWANIE: https://www.usenix.org/legacy/events/usenix99/provos/provos.pdf]
+Użytkownik loguje się adresem e-mail i hasłem z etykiety `User`. Zgodnie z wymaganiami (3.3) hasła są przechowywane jako skrót z solą wyznaczony algorytmem bcrypt (2.2) [CYTOWANIE: https://www.usenix.org/legacy/events/usenix99/provos/provos.pdf].
 
 Logowanie powiedzie się tylko wtedy, gdy:
 - istnieje użytkownik o podanym adresie,
@@ -281,7 +279,7 @@ Logowanie powiedzie się tylko wtedy, gdy:
 
 Błędny adres i błędne hasło dają tę samą odpowiedź (401). Komunikat jest ten sam, żeby nie zdradzać, czy konto o danym adresie istnieje. Konto nieaktywne lub bez roli jest odrzucane z kodem 403.
 
-Po poprawnym zalogowaniu API wydaje token JWT (ang. *JSON Web Token*) [CYTOWANIE: RFC 7519], podpisany kluczem znanym wyłącznie serwerowi. Token zawiera adres e-mail, identyfikator osoby (`idx`) oraz listę jej ról, a także czas wygaśnięcia. Klient dołącza go do każdego kolejnego żądania w nagłówku `Authorization`. Dzięki temu API jest bezstanowe: nie przechowuje sesji, a do ustalenia tożsamości i ról wystarczy sprawdzić podpis tokenu.
+Po poprawnym zalogowaniu API wydaje podpisany token JWT (2.2) [CYTOWANIE: RFC 7519], zawierający adres e-mail, identyfikator osoby (`idx`), listę jej ról oraz czas wygaśnięcia. Klient dołącza go do każdego kolejnego żądania w nagłówku `Authorization`, dzięki czemu API pozostaje bezstanowe.
 
 Wybrano JWT, ponieważ jednym z celów pracy jest porównanie wydajności backendu grafowego i relacyjnego. Sprawdzanie tożsamości w bazie przy każdym żądaniu dodawałoby do każdego pomiaru stały narzut, niezwiązany z właściwą operacją, który zaciemniałby różnice między backendami. Przy JWT każde żądanie wykonuje wyłącznie zapytania potrzebne do realizacji samej operacji.
 
@@ -289,21 +287,17 @@ Ceną bezstanowości jest to, że token zawiera role z chwili logowania i pozost
 
 Z tego powodu API samo unieważnia tokeny, bez odczytu z bazy danych. Token zawiera moment wydania, a API przechowuje w pamięci moment ostatniej zmiany uprawnień każdej osoby: odebrania roli, dezaktywacji lub usunięcia konta. Tokeny wydane przed tym momentem są odrzucane, więc osoba musi zalogować się ponownie i otrzymuje token z aktualnymi rolami. Lista unieważnień znika przy ponownym uruchomieniu API. Dlatego odrzucane są również wszystkie tokeny wydane przed startem procesu, a restart wylogowuje wszystkich użytkowników. Rozwiązanie zakłada działanie jednego procesu API, co w prototypie jest spełnione.
 
-Alternatywą byłoby przechowywanie w tokenie jedynie identyfikatora osoby i adresu e-mail oraz sprawdzanie ról i aktywności konta na początku każdej kwerendy. Odczyt etykiety z węzła jest tani (7.8.2), jednak dodawałby zapytanie do każdego żądania, a więc stały narzut do pomiarów porównujących oba backendy.
+Alternatywą byłoby przechowywanie w tokenie jedynie identyfikatora osoby i adresu e-mail oraz sprawdzanie ról i aktywności konta na początku każdej kwerendy. Odczyt etykiety z węzła jest tani, jednak dodawałby zapytanie do każdego żądania, a więc stały narzut do pomiarów porównujących oba backendy.
 
 W rzeczywistym wdrożeniu uczelnianym naturalne byłoby oddanie logowania uczelnianemu systemowi pojedynczego logowania (SSO, ang. *Single Sign-On*), co jednak wykracza poza zakres prototypu.
 
-*Chyba przyda sie tutaj jakis obrazek w tym akapicie*
-
 4.4.2 Autoryzacja
 
-Model uprawnień z podrozdziału 3.4 łączy role użytkownika z jego powiązaniami z innymi elementami uczelni. Odpowiadają temu dwa etapy autoryzacji. Pierwszy z nich to RBAC. Każdy punkt końcowy ma z góry określone role, które mogą go wywołać, np. wystawianie ocen jest dostępne dla prowadzących i administratorów, a zapis na grupę - dla studentów. Użytkownik bez wymaganej roli otrzymuje odmowę, zanim żądanie dotrze do bazy danych.
+Model uprawnień z podrozdziału 3.4 łączy role użytkownika z jego powiązaniami z innymi elementami uczelni, co realizują dwa etapy autoryzacji: RBAC oraz ReBAC (2.2). W pierwszym etapie (RBAC) każdy punkt końcowy ma z góry określone dozwolone role, np. wystawianie ocen jest dostępne dla prowadzących i administratorów, a zapis na grupę – dla studentów. Użytkownik bez wymaganej roli otrzymuje odmowę, zanim żądanie dotrze do bazy danych.
 
-Gdyby polegać jedynie na RBAC, to nie istniałby mechanizm zabraniający prowadzącemu ocenić cudzego studenta w cudzej grupie zajęciowej. Tak samo student mógłby zapisać się do grupy zajęciowej w cudzej turze zapisowej. Sam RBAC nie broni przed takimi scenariuszami, ponieważ, wedle ustalonej konwencji, student woła punkty końcowe studenckie, a nauczyciel punkty końcowe nauczycielskie - z poziomu roli problemu nie ma.
+Gdyby polegać jedynie na RBAC, nic nie zabraniałoby prowadzącemu ocenić cudzego studenta w cudzej grupie zajęciowej, a student mógłby zapisać się do grupy w cudzej turze zapisowej – z poziomu samej roli żądanie trafiałoby na właściwy moduł API.
 
-Dodatkowy mechanizm blokujący tego typu sytuacje to ReBAC. Uprawnienie wynika tu dodatkowo z powiązania między użytkownikiem a zasobem w strukturze danych. 
-
-Drugi etap autoryzacji polega więc na sprawdzeniu w bazie, czy odpowiednia ścieżka w grafie istnieje, np. czy od prowadzącego do grupy prowadzi krawędź `TEACHES` albo czy student jest połączony z grupą krawędzią `REGISTERED_IN`. Ponownie, w tej platformie krawędzie uprawniające do dostępu są tymi samymi krawędziami, które opisują domenę - nie trzeba utrzymywać osobnych list uprawnień, które mogłyby utracić spójność z danymi. Gdyby przypadkiem dodać prowadzącego do grupy, po czym usunąć powstałą krawędź `TEACHES`, wraz z nią znikłaby możliwość oceniania studentów w tej grupie przez tego nauczyciela.
+Dlatego w drugim etapie (ReBAC) API sprawdza w bazie, czy istnieje odpowiednia ścieżka w grafie, np. czy od prowadzącego do grupy prowadzi krawędź `TEACHES` albo czy student jest połączony z grupą krawędzią `REGISTERED_IN`. Krawędzie uprawniające są tymi samymi krawędziami, które opisują domenę – nie trzeba utrzymywać osobnych list uprawnień, które mogłyby utracić spójność z danymi. Usunięcie krawędzi `TEACHES` między prowadzącym a grupą automatycznie odbiera mu możliwość oceniania studentów w tej grupie.
 
 W operacjach na własnych danych użytkownika, takich jak plan zajęć studenta czy lista jego zapisów, identyfikator osoby pobierany jest bezpośrednio z tokenu JWT. Dzięki temu student nie może podejrzeć danych innego studenta, podmieniając identyfikator w żądaniu. Takie operacje mają w ścieżce prefiks `/me/` (np. `GET /me/enrolments`), bez identyfikatora osoby w ścieżce ani w treści (ang. *body*) żądania.
 
@@ -348,7 +342,7 @@ flowchart LR
 
 4.5 Interfejs API
 
-Klient komunikuje się z backendem przez interfejs REST, wymieniając dane w formacie JSON (ang. *JavaScript Object Notation*) przez protokół HTTP (ang. *Hypertext Transfer Protocol*). Podział interfejsu na moduły oraz sposób zgłaszania odmów wynikają z macierzy uprawnień opisanej w podrozdziale 3.4.
+Klient komunikuje się z backendem przez interfejs REST (2.3), wymieniając dane w formacie JSON przez protokół HTTP. Podział interfejsu na moduły oraz sposób zgłaszania odmów wynikają z macierzy uprawnień opisanej w podrozdziale 3.4.
 
 4.5.1 Podział na moduły
 
@@ -363,7 +357,7 @@ Punkty końcowe podzielono na moduły odpowiadające tabelom macierzy uprawnień
 | admin | `Admin` | tworzenie i modyfikacja danych: osób, kont, ról, oferty dydaktycznej, sal, cykli i zapisów; zapis studenta do grupy z pominięciem tur |
 *Moduły interfejsu API*
 
-Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: wymaga zalogowania, ponieważ zawiera dane osobowe prowadzących i opinie. Opinie zwracane są w nim bez informacji o autorze (3.4) i z samą datą wystawienia.
+Moduł katalogu nie jest publiczny, mimo że jest wspólny dla wszystkich ról: wymaga zalogowania, ponieważ zawiera dane osobowe prowadzących i opinie.
 
 4.5.2 Konwencje
 
@@ -382,6 +376,6 @@ Wynik operacji przekazuje kod odpowiedzi HTTP [CYTOWANIE: RFC 9110, sekcja 15]. 
 | 500 | nieoczekiwany błąd serwera lub bazy danych                                    |
 *Kody HTTP zwracane przez API*
 
-Taka konwencja pozwala klientowi rozpoznać rodzaj błędu na podstawie samego kodu statusu, a komunikat z pola `detail` traktować jedynie kosmetycznie, do wyświetlenia użytkownikowi.
+Taka konwencja pozwala klientowi rozpoznać rodzaj błędu na podstawie samego kodu statusu, a komunikat z pola `detail` wykorzystywać wyłącznie do wyświetlenia użytkownikowi.
 
 Metoda HTTP określa rodzaj operacji. Punkty końcowe, które jedynie odczytują dane, korzystają z metody `GET` i nie mają treści żądania: identyfikator konkretnego zasobu jest częścią ścieżki (np. `GET /groups/{group_id}`), a opcjonalne filtry są przekazywane jako parametry zapytania (np. `GET /subjects?name=sieci`). Nowe zasoby są tworzone metodą `POST`, ustawienie zasobu o znanym identyfikatorze (np. oceny lub miejsca studenta w grupie) metodą `PUT`, częściowa zmiana metodą `PATCH`, a usunięcie metodą `DELETE`. Dzięki temu już sama metoda mówi, czy żądanie może zmienić stan systemu i czy można je bezpiecznie powtórzyć - `GET`, `PUT` i `DELETE` są idempotentne [CYTOWANIE: RFC 9110, sekcja 9.2.2].

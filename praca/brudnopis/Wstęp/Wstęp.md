@@ -1,6 +1,6 @@
 1.1 Wprowadzenie
 
-Relacyjne bazy danych, oparte na tabelach, kluczach obcych i języku SQL (ang. *Structured Query Language*), przez dekady były dominującym sposobem przechowywania danych w systemach informatycznych. Alternatywę dla nich stanowią bazy grafowe, w których dane reprezentowane są jako węzły połączone krawędziami. Powiązania stanowią tam bezpośredni element modelu danych, co eliminuje konieczność łączenia tabel podczas wykonywania zapytań [CYTOWANIE: Robinson, Webber, Eifrem, Graph Databases, 2015]. Jedną z najpopularniejszych baz tego typu jest Neo4j, wykorzystująca model grafu właściwości (ang. *property graph*), w którym zarówno węzły, jak i krawędzie mogą posiadać atrybuty, a węzły dodatkowo etykiety [CYTOWANIE: Robinson et al. 2015; DB-Engines Graph DBMS]. Dane w Neo4j odpytuje się za pomocą deklaratywnego języka Cypher [CYTOWANIE: Francis et al., SIGMOD 2018].
+Relacyjne bazy danych, oparte na tabelach i języku SQL (ang. *Structured Query Language*), przez dekady były dominującym sposobem przechowywania danych w systemach informatycznych. Alternatywę dla nich stanowią bazy grafowe, w których powiązania są bezpośrednim elementem modelu danych [CYTOWANIE: Robinson, Webber, Eifrem, Graph Databases, 2015]. Jedną z najpopularniejszych baz tego typu jest Neo4j, wykorzystująca model grafu właściwości i język zapytań Cypher (2.1) [CYTOWANIE: DB-Engines Graph DBMS; Francis et al., SIGMOD 2018].
 
 Struktura uczelni jest z natury silnie powiązana: studenci należą do grup, grupy do przedmiotów, przedmioty do kierunków, a prowadzący, sale i terminy dodatkowo łączą te elementy ze sobą. W Politechnice Wrocławskiej funkcję systemu obsługującego studia, w tym rejestrację na zajęcia, pełni USOS (Uniwersytecki System Obsługi Studiów). Obok tego studenci stworzyli forum PolWro, w którym mogą wystawiać opinie na temat prowadzących grup zajęciowych.
 
@@ -31,10 +31,11 @@ Do realizacji celu zaplanowano następujące zadania:
 
 Zakres funkcji obejmuje przede wszystkim proces zapisu na zajęcia, przeglądanie katalogu oferty dydaktycznej, wystawianie opinii i ocen oraz zarządzanie strukturą uczelni przez administratora. Szczegółowe wymagania przedstawiono w rozdziale 3. Prototyp zrealizowano w postaci API w języku Python (FastAPI) i aplikacji klienckiej w Vue, uruchamianych w kontenerach Docker.
 
-Poza zakresem pracy pozostają inne funkcje systemu USOS, w szczególności obsługa stypendiów i podań. Praca nie obejmuje również skalowania ani wdrożenia produkcyjnego. 
+Poza zakresem pracy pozostają inne funkcje systemu USOS, w szczególności obsługa stypendiów i podań. Praca nie obejmuje również skalowania ani wdrożenia produkcyjnego.
 
 1.3 Układ pracy
-Napiszę jak bede wiedział jakie są rozdziały
+
+Praca składa się z ośmiu rozdziałów oraz dodatku. W rozdziale 2 omówiono podstawy teoretyczne dotyczące baz grafowych i relacyjnych, modeli kontroli dostępu oraz architektury aplikacji webowych. Rozdział 3 zawiera analizę wymagań funkcjonalnych i niefunkcjonalnych, macierz uprawnień ról oraz opis głównych przypadków użycia. W rozdziale 4 przedstawiono architekturę systemu, grafowy model danych uczelni, ograniczenia integralności oraz projekt mechanizmów bezpieczeństwa i API. Rozdział 5 opisuje szczegóły implementacji środowiska, schematu Neo4j, zapytań Cypher, warstwy API oraz aplikacji klienckiej. W rozdziale 6 zaprezentowano równoważny model relacyjny i implementację wybranych punktów końcowych w PostgreSQL. Rozdział 7 poświęcono weryfikacji działania i bezpieczeństwa systemu oraz pomiarom porównawczym obu baz danych. Pracę zamyka rozdział 8 z podsumowaniem i wnioskami; w dodatku A zamieszczono instrukcję uruchomienia prototypu.
 
 1.4 Wykorzystanie narzędzi sztucznej inteligencji
 W pracy korzystano z narzędzi sztucznej inteligencji (AI, ang. *Artificial Intelligence*) takich jak Claude Code i Antigravity. Wykorzystywano modele Claude Opus 5.5 oraz Claude Haiku 5.5 od firmy Anthropic, a także Gemini Neon 4 od firmy Google. Służyły one do generowania danych testowych, przeprowadzania i pisania testów oraz do pisania kodu aplikacji klienckiej. Wykorzystano je również do szukania w dokumentacji konkretnych cytatów, redagowania tekstu pracy inżynierskiej i formatowania dokumentu w LaTeX. 

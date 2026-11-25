@@ -1,11 +1,11 @@
 5.1 Technologie i środowisko
 Środowisko składa się z kontenerów Docker. Część z nich to gotowy obraz, część wymagała własnego Dockerfile. Całością zarządza narzędzie Docker Compose. 
 
-W celu zabezpieczenia ruchu pomiędzy kontenerami, wprowadzono szyfrowanie zgodnie z dokumentacją: https://neo4j.com/docs/operations-manual/current/security/ssl-framework/. Dotyczy ona konsoli Neo4j i połączenia Bolt wystawianego przez bazę. Szyfrowane są również połączenia przeglądarki z serwerem nginx oraz serwera nginx z API. Z racji tego, że projekt nie zakłada produkcyjnego wdrożenia, nie wdrożono pełnoprawnego urzędu certyfikacji (CA, ang. *Certificate Authority*).
+W celu zabezpieczenia ruchu pomiędzy kontenerami wprowadzono szyfrowanie TLS (2.2) zgodnie z dokumentacją: https://neo4j.com/docs/operations-manual/current/security/ssl-framework/. Dotyczy ono konsoli Neo4j i połączenia Bolt wystawianego przez bazę. Szyfrowane są również połączenia przeglądarki z serwerem nginx oraz serwera nginx z API. Z racji tego, że projekt nie zakłada produkcyjnego wdrożenia, nie wdrożono pełnoprawnego urzędu certyfikacji CA.
 
 5.1.1 Certyfikaty
 
-Szyfrowanie TLS (ang. *Transport Layer Security*) w projekcie obejmuje cztery połączenia: protokół Bolt bazy Neo4j (port 7687), konsolę Neo4j wystawioną po HTTPS (ang. *Hypertext Transfer Protocol Secure*, port 7473), serwer nginx serwujący klienta webowego (port 443 w kontenerze, 5173 na hoście) oraz API, do którego nginx przekazuje żądania (port 8000). Szyfrowane jest również połączenie API z bazą PostgreSQL, wykorzystywaną w porównaniu z modelem relacyjnym (rozdział 6). Każdy z tych serwisów ma własną parę certyfikatu i klucza prywatnego. Wszystkie certyfikaty są podpisane tym samym lokalnym urzędem certyfikacji.
+Szyfrowanie TLS w projekcie obejmuje cztery połączenia: protokół Bolt bazy Neo4j (port 7687), konsolę Neo4j wystawioną po HTTPS (port 7473), serwer nginx serwujący klienta webowego (port 443 w kontenerze, 5173 na hoście) oraz API, do którego nginx przekazuje żądania (port 8000). Szyfrowane jest również połączenie API z bazą PostgreSQL, wykorzystywaną w porównaniu z modelem relacyjnym (rozdział 6). Każdy z tych serwisów ma własną parę certyfikatu i klucza prywatnego. Wszystkie certyfikaty są podpisane tym samym lokalnym urzędem certyfikacji.
 
 Do wygenerowania certyfikatów wykorzystano narzędzie mkcert [CYTOWANIE: https://github.com/FiloSottile/mkcert]. Tworzy ono na komputerze programisty lokalny urząd certyfikacji, a polecenie `mkcert -install` dodaje jego certyfikat główny do systemowego magazynu zaufanych certyfikatów oraz do magazynów przeglądarek. Certyfikaty podpisane przez to CA są przez przeglądarkę akceptowane bez ostrzeżeń, w przeciwieństwie do certyfikatów samopodpisanych (ang. *self-signed*), które każda przeglądarka oznacza jako niezaufane. Jednocześnie, w odróżnieniu od certyfikatów samopodpisanych, możliwa jest pełna weryfikacja certyfikatu po stronie klientów, łącznie ze sprawdzeniem nazwy hosta.
 
@@ -137,7 +137,7 @@ Wartość opcji `--param` jest wyrażeniem Cypher. Zgodnie z dokumentacją, wart
 | `it's`               | tak                   | `pw => 'it's'`                         | błąd: apostrof kończy literał                       |
 | `' + datetime() + '` | tak                   | `pw => '' + datetime() + ''`           | `"2026-11-14T18:53:46.592Z"` (STRING), wykonany kod |
 
-Z poziomu samego Cypher nie da się tego obejść, ponieważ problem występuje już na etapie parsowania wyrażenia, zanim jakakolwiek funkcja mogłaby przetworzyć wartość. Z tego powodu cypher-shell zastąpiono skryptem korzystającym ze sterownika. Zmiana uprościła również weryfikację certyfikatu. Narzędzie cypher-shell, jako aplikacja Java, korzysta z własnego magazynu certyfikatów (`cacerts`) i nie pozwala wskazać pliku CA, więc wymagało dodatkowo utworzenia magazynu zaufanych certyfikatów (ang. *truststore*) narzędziem `keytool` [CYTOWANIE: Oracle JSSE Reference Guide].
+Z poziomu samego Cypher nie da się tego obejść, ponieważ problem występuje już na etapie parsowania wyrażenia, zanim jakakolwiek funkcja mogłaby przetworzyć wartość. Z tego powodu cypher-shell zastąpiono skryptem korzystającym ze sterownika. Zmiana uprościła również weryfikację certyfikatu.
 
 Skrypt jest uruchamiany przy każdym starcie środowiska, a dane bazy, w tym użytkownicy, są zachowywane w wolumenie `neo4j_data`. Dlatego musi on działać poprawnie także wtedy, gdy użytkownik już istnieje, i jednocześnie uwzględniać ewentualną zmianę hasła w `.env`. Spełnia to polecenie `CREATE OR REPLACE USER`, które tworzy użytkownika od nowa z bieżącym hasłem – `CREATE USER … IF NOT EXISTS` pominąłby zmianę hasła, a `ALTER USER … SET PASSWORD` kończy się błędem, gdy hasło się nie zmieniło.
 
@@ -147,11 +147,9 @@ Serwis `app` jest budowany z pliku `Dockerfile` w katalogu głównym repozytoriu
 
 Obraz tworzy użytkownika systemowego `api` o UID 10001, bez katalogu domowego, i z jego uprawnieniami uruchamia aplikację. Przejęcie procesu aplikacji nie daje więc atakującemu uprawnień użytkownika `root`. Aplikację uruchamia serwer uvicorn na porcie 8000, pod adresem `0.0.0.0`, dzięki czemu jest ona osiągalna z innych kontenerów, np. z serwera nginx.
 
-Opcje `--ssl-certfile` i `--ssl-keyfile` sprawiają, że uvicorn serwuje API wyłącznie po HTTPS. Certyfikat i klucz pochodzą z katalogu `certificates/app/` (5.1.1), montowanego w Docker Compose jako `/certs` w trybie tylko do odczytu. Klucz nie jest kopiowany do obrazu, więc nie trafia do żadnej z jego warstw.
+Opcje `--ssl-certfile` i `--ssl-keyfile` sprawiają, że uvicorn serwuje API wyłącznie po HTTPS. Certyfikat i klucz pochodzą z katalogu `certificates/app/` (5.1.1), montowanego w Docker Compose jako `/certs` w trybie tylko do odczytu.
 
 Bez tego ruch między serwerem nginx a API odbywałby się zwykłym HTTP. Szyfrowanie TLS kończyłoby się na nginx, a token JWT, dane logowania i odpowiedzi API przechodziłyby przez sieć Dockera jawnym tekstem. Choć sieć ta jest izolowana od hosta, każdy kontener w niej podłączony mógłby taki ruch podsłuchać lub podszyć się pod API.
-
-Konfigurację połączenia po stronie nginx, w tym weryfikację certyfikatu API, opisano w 5.1.6.
 
 Aplikacja wystawiona na porcie 8000 jest również przekierowywana na port 8000 localhost, dzięki czemu API jest dostępne dla programisty pod adresem `https://localhost:8000/api`.
 
@@ -165,7 +163,7 @@ Zmienne środowiskowe przekazują aplikacji konfigurację w postaci adresu bazy 
 
 Zmienne `PG_CONNINFO` i `PG_PASSWORD` służą backendowi relacyjnemu (6.3).
 
-Składnia `${ZMIENNA:?komunikat}` sprawia, że Docker Compose odmawia uruchomienia, jeśli zmienna nie jest ustawiona w `.env` [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/].
+Składnia `${ZMIENNA:?komunikat}` sprawia, że Docker Compose odmawia uruchomienia, jeśli zmienna nie jest ustawiona w `.env` [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/]. Zapobiega to sytuacjom, w których kontenery uruchamiają się z błędnymi zmiennymi.
 
 Wolumeny montują certyfikat CA (`/ca.pem`) oraz certyfikat i klucz API (`/certs`), oba w trybie tylko do odczytu.
 
@@ -180,55 +178,22 @@ Pozostałe opcje ograniczają możliwości kontenera na wypadek przejęcia aplik
 
 5.1.6 Serwis frontend
 
-Serwis `frontend` jest punktem wejścia do systemu dla użytkownika. Działający w nim serwer nginx serwuje aplikację kliencką Vue (5.6) i pełni rolę odwrotnego proxy dla API. Przeglądarka komunikuje się z jednym adresem (`https://localhost:5173`), więc aplikacja kliencka i API dzielą ten sam *origin* i nie jest potrzebna konfiguracja CORS (ang. *Cross-Origin Resource Sharing*).
+Serwis `frontend` jest punktem wejścia do systemu dla użytkownika: serwer nginx serwuje aplikację kliencką Vue (5.6) i pełni rolę odwrotnego proxy dla API (2.3) pod jednym adresem (`https://localhost:5173`), dzięki czemu nie jest potrzebna konfiguracja CORS. Obraz powstaje w budowaniu wieloetapowym (ang. *multi-stage build*) z pliku `frontend/Dockerfile` – etap `build` z Node.js buduje aplikację, a do końcowego obrazu `nginx:1.27-alpine` trafiają wyłącznie pliki statyczne z katalogu `dist`, co ogranicza rozmiar kontenera i powierzchnię ataku.
 
-Serwis jest budowany z pliku `Dockerfile` znajdującego się w katalogu `frontend/`.
-
-Wykorzystano budowanie wieloetapowe (ang. *multi-stage build*). Etap `build` z obrazem Node.js buduje aplikację kliencką, a do końcowego obrazu `nginx:1.27-alpine` trafiają wyłącznie gotowe pliki statyczne z katalogu `dist`. Środowisko Node.js, npm i `node_modules` nie znajdują się więc w działającym kontenerze, co zmniejsza jego rozmiar i powierzchnię ataku. Kolejność instrukcji, podobnie jak w 5.1.5, pozwala ponownie wykorzystać warstwę z zależnościami przy zmianie samego kodu.
-
-Argument `NPM_REGISTRY` pozwala wskazać inny rejestr pakietów npm, np. w sieci z ograniczonym dostępem do publicznego rejestru. Zmienna `VITE_API_URL` jest wstawiana przez Vite do kodu na etapie budowania i celowo pozostaje pusta, dzięki czemu aplikacja wysyła żądania pod ścieżki względne z prefiksem `/api`, czyli do tego samego serwera nginx.
-
-Konfiguracja serwera nginx znajduje się w pliku `frontend/nginx.conf` i jest kopiowana do obrazu jako `/etc/nginx/conf.d/default.conf`. Poniżej opisano jej najważniejsze elementy.
-
-Serwer nasłuchuje wyłącznie na porcie 443 z TLS, a blok dla portu 80 nie istnieje, więc nie ma nieszyfrowanej wersji aplikacji. Zwykłe żądanie HTTP jest odrzucane odpowiedzią `400 Bad Request`.
+Konfiguracja w pliku `frontend/nginx.conf` nasłuchuje wyłącznie na porcie 443 z TLS, przekierowanym na `127.0.0.1:5173` (powiązanie z adresem lokalnym zapobiega publikacji portu na wszystkich interfejsach z pominięciem zapory hosta [CYTOWANIE: https://docs.docker.com/engine/network/packet-filtering-firewalls/]). Brak bloku dla portu 80 sprawia, że nieszyfrowane żądania HTTP są odrzucane odpowiedzią `400 Bad Request`.
 
 ![[Pasted image 20261115022335.png]]
 
 *Odpowiedź nginx na żądanie HTTP*
 
-Certyfikat i klucz to własna para nginx (`certificates/nginx/`, 5.1.1), zawierająca wyłącznie nazwę `localhost`. Ponieważ jest podpisana lokalnym CA z mkcert, przeglądarka wyświetla stronę bez ostrzeżeń.
+Serwer korzysta z własnej pary kluczy (`certificates/nginx/`, 5.1.1) dla nazwy `localhost`, podpisanej lokalnym CA z mkcert, więc przeglądarka otwiera aplikację bez ostrzeżeń.
 
 ![[Pasted image 20261115022652.png]]
 *Aplikacja kliencka pod adresem https://localhost:5173 z informacją o poprawnym certyfikacie*
 
-Pierwszy blok `location` obejmuje ścieżki API. Wszystkie punkty końcowe API są udostępniane pod wspólnym prefiksem `/api`, a nginx wybiera blok o najdłuższym pasującym prefiksie, więc każde żądanie zaczynające się od `/api/` trafia do proxy, a każde inne do aplikacji klienckiej. Ponieważ `proxy_pass` nie zawiera ścieżki, adres jest przekazywany do API bez zmian, łącznie z prefiksem.
+Żądania z prefiksem `/api/` trafiają przez `proxy_pass` do `https://app:8000` wraz z nagłówkami oryginalnego żądania (host, adres IP klienta, protokół). Ponieważ nginx domyślnie nie weryfikuje certyfikatu serwera docelowego [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify], włączono `proxy_ssl_verify` z zaufanym lokalnym CA, ograniczono połączenie do TLS 1.3 oraz wymuszono sprawdzenie nazwy `app` przekazywanej w SNI (ang. *Server Name Indication*). Pozostałe ścieżki obsługuje blok SPA: dyrektywa `try_files` zwraca `index.html` dla tras routera w przeglądarce, natomiast brakujące pliki w `/assets/` kończą się błędem 404 i są buforowane bezterminowo (`immutable`), przy wyłączonym buforowaniu `index.html` (`no-cache`).
 
-Samo `https` w `proxy_pass` włącza szyfrowanie, ale nginx domyślnie nie weryfikuje certyfikatu serwera docelowego [CYTOWANIE: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify]. Byłaby to sytuacja analogiczna do `bolt+ssc` z 5.1.4: połączenie szyfrowane, ale bez pewności, z kim. Dlatego `proxy_ssl_verify` włącza weryfikację, `proxy_ssl_trusted_certificate` wskazuje lokalne CA, a `proxy_ssl_name` i `proxy_ssl_server_name` określają i przekazują w SNI (ang. *Server Name Indication*) nazwę `app` sprawdzaną w certyfikacie API. Połączenie ograniczono do TLS 1.3, ponieważ obie strony są pod kontrolą projektu. Nagłówki `proxy_set_header` przekazują do API dane oryginalnego żądania (host, adres IP klienta, protokół), które inaczej zostałyby utracone na proxy.
-
-Drugi blok obsługuje SPA, w której routing odbywa się w przeglądarce. Adresy widoków, np. `/student/plan`, nie odpowiadają plikom na serwerze, więc `try_files` zwraca w takim przypadku `index.html`. Bez tego odświeżenie strony kończyłoby się błędem 404.
-
-Wyjątkiem są pliki zbudowanej aplikacji w katalogu `/assets/`, których nazwy zawierają skrót zawartości, np. `CyclesView-D5yd3d5K.js`. Brakujący plik kończy się tu błędem 404, a nie zwróceniem dokumentu HTML (ang. *HyperText Markup Language*) `index.html`, którego przeglądarka i tak nie przyjęłaby jako modułu JavaScript. Ponieważ zawartość pliku o danej nazwie nigdy się nie zmienia, przeglądarka może go przechowywać bezterminowo (`immutable`). Sam `index.html`, wskazujący aktualne nazwy plików, nie jest natomiast buforowany (`no-cache`), dzięki czemu po wdrożeniu nowej wersji przeglądarka od razu ją pobiera.
-
-W `docker-compose.yml` argument `NPM_REGISTRY` korzysta ze składni `${ZMIENNA:-domyślna}`. W przeciwieństwie do składni `:?` z 5.1.5 brak zmiennej powoduje użycie domyślnego, publicznego rejestru zamiast przerwania uruchomienia [CYTOWANIE: https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/].
-
-Port 443 jest przekierowany na port 5173 hosta, domyślny port serwera deweloperskiego Vite, i tak jak w pozostałych serwisach powiązany wyłącznie z `127.0.0.1`. Bez tego Docker opublikowałby port na wszystkich interfejsach, z pominięciem zapory hosta [CYTOWANIE: https://docs.docker.com/engine/network/packet-filtering-firewalls/], a i tak certyfikat obejmuje tylko `localhost`.
-
-Montowane są wyłącznie trzy potrzebne pliki: certyfikat i klucz nginx oraz `ca.pem`. Zamontowanie całego katalogu `certificates` dałoby kontenerowi dostęp do kluczy prywatnych pozostałych serwisów, wbrew zasadzie najmniejszych uprawnień z 5.1.1.
-
-```shell
-(.venv) ➜  INZYNIERKA_FINAL git:(master) ✗ docker compose exec frontend ls /certificates
-ca.pem       private.key  public.crt
-```
-
-*Wynik `docker compose exec frontend ls /certificates`*
-
-`depends_on: app` oznacza jedynie, że kontener `app` musi być utworzony, ponieważ nginx przy starcie rozwiązuje jego nazwę. Żądania wysłane, zanim uvicorn zacznie nasłuchiwać, otrzymają `502 Bad Gateway`.
-
-Kontener ma nałożone te same ograniczenia co serwis `app` (`read_only`, `no-new-privileges`, 5.1.5). Różnice wynikają z tego, że proces główny nginx działa jako `root`, a procesy obsługujące żądania jako użytkownik `nginx`:
-- `tmpfs` – nginx wymaga zapisywalnych katalogów `/var/cache/nginx` (bufory proxy) i `/var/run` (plik z identyfikatorem procesu, PID, ang. *Process Identifier*).
-- `cap_drop: ALL` z `cap_add` – przywrócone są tylko uprawnienia niezbędne nginx [CYTOWANIE: https://man7.org/linux/man-pages/man7/capabilities.7.html]: `NET_BIND_SERVICE` (port 443), `SETUID` i `SETGID` (przełączenie na użytkownika `nginx`) oraz `CHOWN` (własność katalogów tymczasowych). Bez `CHOWN` nginx nie uruchamia się.
-
-We wdrożeniu produkcyjnym można by użyć obrazu `nginxinc/nginx-unprivileged`, działającego w całości jako zwykły użytkownik na porcie powyżej 1024, co pozwoliłoby odebrać wszystkie uprawnienia jądra.
+Zgodnie z zasadą najmniejszych uprawnień (5.1.1) kontener montuje wyłącznie trzy potrzebne pliki (`ca.pem`, certyfikat i klucz nginx), bez dostępu do kluczy pozostałych serwisów. Na kontener nałożono te same ograniczenia co na serwis `app` (`read_only`, `no-new-privileges`, 5.1.5), z katalogami `tmpfs` dla `/var/cache/nginx` i `/var/run` (plik PID, ang. *Process Identifier*) oraz `cap_drop: ALL` z przywróceniem jedynie uprawnień wymaganych przez nginx (`NET_BIND_SERVICE`, `SETUID`, `SETGID` i `CHOWN`) [CYTOWANIE: https://man7.org/linux/man-pages/man7/capabilities.7.html]. We wdrożeniu produkcyjnym można użyć obrazu `nginxinc/nginx-unprivileged`, działającego bez uprawnień jądra.
 
 5.2 Struktura repozytorium
 
@@ -628,7 +593,7 @@ Wszystkie zaimportowane węzły i krawędzie są widoczne po użyciu funkcji `db
 
 ![[visualisation(1)-cropped.svg]]
 
-*Wynik funkcji CALL db.schema.visualization()*
+*Wynik funkcji `CALL db.schema.visualization()`*
 
 5.4 Dokumentacja
 
@@ -918,7 +883,7 @@ async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)
 
 Brak użytkownika i błędne hasło obsługuje ten sam warunek, z tym samym komunikatem. Sama treść odpowiedzi nie wystarcza jednak, żeby ukryć istnienie konta. W jednej z pierwszych implementacji, gdy użytkownik nie istniał, warunek kończył się przed wywołaniem `verify_password()`, więc bcrypt się nie wykonywał.
 
-Odpowiedź dla nieistniejącego konta przychodziła przez to wyraźnie szybciej niż dla istniejącego konta z błędnym hasłem. Po samym czasie odpowiedzi dało się więc sprawdzić, czy konto o danym adresie istnieje (atak czasowy, ang. *timing attack*) [CYTOWANIE: OWASP Authentication Cheat Sheet, https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-responses]. Pomiary przed poprawką i po niej przedstawiono w 7.2.2.
+Odpowiedź dla nieistniejącego konta przychodziła przez to wyraźnie szybciej niż dla istniejącego konta z błędnym hasłem, co umożliwiało atak czasowy (2.2) i sprawdzanie istnienia kont [CYTOWANIE: OWASP Authentication Cheat Sheet, https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-responses]. Pomiary przed poprawką i po niej przedstawiono w 7.2.2.
 
 Obecnie, gdy użytkownik nie istnieje, hasło jest sprawdzane względem `DUMMY_PASSWORD_HASH`, czyli skrótu losowego hasła, wyliczanego raz przy starcie aplikacji z tym samym kosztem co prawdziwe skróty. bcrypt wykonuje się zawsze, a wynik i tak jest odrzucany warunkiem `row is None`.
 
@@ -944,17 +909,13 @@ def create_token(caller: Caller) -> str:
 
 *Tworzenie tokenu*
 
-Token jest tworzony biblioteką PyJWT. Zawiera pięć roszczeń (ang. *claims*). Trzy z nich są zdefiniowane w standardzie: `sub` (ang. *subject*) wskazuje, kogo dotyczy token, w tym wypadku jest to adres e-mail, `iat` (ang. *issued at*) określa moment wydania, a `exp` (ang. *expiration time*) moment wygaśnięcia [CYTOWANIE: RFC 7519, sekcja 4.1]. PyJWT sam zamienia obiekt `datetime` na wymaganą przez standard liczbę sekund od 1 stycznia 1970 r. Moment wydania jest zapisany z dokładnością do ułamka sekundy. Służy on do unieważniania tokenów, opisanego w dalszej części sekcji. Pozostałe dwa, `idx` i `roles`, to roszczenia prywatne, specyficzne dla tej aplikacji. Token jest ważny przez 12 godzin, po czym użytkownik musi zalogować się ponownie.
+Token JWT (2.2) jest tworzony biblioteką PyJWT i zawiera pięć roszczeń: standardowe `sub` (adres e-mail), `iat` (moment wydania z dokładnością do ułamka sekundy, wykorzystywany przy unieważnianiu tokenów) i `exp` (ważność 12 godzin) [CYTOWANIE: RFC 7519, sekcja 4.1] oraz dwa roszczenia prywatne specyficzne dla platformy: `idx` i `roles`.
 
-Token jest podpisywany algorytmem HS256, czyli kodem HMAC (ang. *Hash-based Message Authentication Code*) z funkcją skrótu SHA-256 (ang. *Secure Hash Algorithm*) [CYTOWANIE: RFC 7518, sekcja 3.2]. Jest to algorytm symetryczny - ten sam klucz służy do podpisania tokenu i do sprawdzenia podpisu. Wystarcza to, ponieważ token wydaje i weryfikuje wyłącznie to samo API. Klucz pochodzi ze zmiennej środowiskowej `JWT_SECRET` (5.1.5) i jest odczytywany przez `os.environ["JWT_SECRET"]` już przy imporcie modułu.
-
-Token składa się z trzech części oddzielonych kropkami: nagłówka, treści (ang. *payload*) i podpisu. Nagłówek i treść są zakodowane w base64url, de facto jawne.
+Podpis jest wyznaczany symetrycznym algorytmem HS256 (HMAC-SHA256) [CYTOWANIE: RFC 7518, sekcja 3.2] z użyciem klucza ze zmiennej środowiskowej `JWT_SECRET` (5.1.5) – wystarczy klucz symetryczny, ponieważ token wydaje i weryfikuje wyłącznie to samo API. Zgodnie z budową JWT (2.2) nagłówek i treść są jawne po zdekodowaniu z `base64url`, a podpis chroni wyłącznie ich integralność (np. przed dopisaniem roli `Admin`).
 
 ![[Pasted image 20261118175909.png]]
 
 *Token JWT zdekodowany przy pomocy https://www.jwt.io/*
-
-Podpis chroni wyłącznie integralność treści tokenu, bez jej szyfrowania. Próba zmiany treści, na przykład dopisania roli `Admin`, unieważnia podpis, a nowego podpisu nie da się wyliczyć bez znajomości klucza.
 
 Każdy punkt końcowy poza `POST /login` wymaga tokenu. Jest on sprawdzany przez zależność `get_caller()`.
 
@@ -986,7 +947,7 @@ async def get_caller(
 
 `HTTPBearer` to klasa FastAPI, która odczytuje nagłówek `Authorization` i oddziela schemat `Bearer` od samego tokenu. Jeśli nagłówka brakuje lub ma on inny schemat niż `Bearer`, `HTTPBearer` sam przerywa obsługę żądania i zwraca błąd 401 `Not authenticated`, a `get_caller()` ani funkcja punktu końcowego nie zostają wywołane. Dodatkowo `HTTPBearer` rejestruje schemat zabezpieczeń w dokumentacji OpenAPI, dzięki czemu w `/api/docs` pojawia się przycisk *Authorize*, którym można wkleić token i wywoływać chronione punkty końcowe bezpośrednio z przeglądarki.
 
-`jwt.decode()` sprawdza podpis tokenu i jego datę ważności. Wygaśnięty lub zmodyfikowany token zwróci błąd. Domyślnie PyJWT sprawdza datę ważności tylko wtedy, gdy pole `exp` znajduje się w tokenie – token bez niego byłby ważny bezterminowo. Dlatego opcja `require` wymusza obecność pól `sub`, `iat` i `exp`, a token bez któregoś z nich jest odrzucany wyjątkiem `MissingRequiredClaimError` [CYTOWANIE: https://pyjwt.readthedocs.io/en/stable/api.html#jwt.decode]. Serwer decyduje o dozwolonych algorytmach podpisu, a klient w tokenie jedynie informuje który z tych algorytmów wykorzystuje. Chroni to przed znanymi atakami, w których atakujący zmienia algorytm w nagłówku, np. na `none`, czyli token bez podpisu [CYTOWANIE: RFC 8725, sekcja 2.1].
+`jwt.decode()` sprawdza podpis tokenu i jego datę ważności. Wygaśnięty lub zmodyfikowany token zwróci błąd. Domyślnie PyJWT sprawdza datę ważności tylko wtedy, gdy pole `exp` znajduje się w tokenie – token bez niego byłby ważny bezterminowo. Dlatego opcja `require` wymusza obecność pól `sub`, `iat` i `exp`, a token bez któregoś z nich jest odrzucany wyjątkiem `MissingRequiredClaimError` [CYTOWANIE: https://pyjwt.readthedocs.io/en/stable/api.html#jwt.decode]. Argument `algorithms=[_algorithm]` wymusza po stronie serwera jeden dozwolony algorytm weryfikacji podpisu, co chroni przed atakami podmiany algorytmu w nagłówku tokenu (2.2) [CYTOWANIE: RFC 8725, sekcja 2.1].
 
 Poprawnie podpisany token jest dodatkowo sprawdzany: `roles` musi być niepustą listą znanych ról. Każdy z tych przypadków kończy się tą samą odpowiedzią 401 `Invalid token`, więc klient nie dowiaduje się, dlaczego token został odrzucony. Osobną odpowiedź, 401 `Token revoked`, otrzymuje token unieważniony. Klient wie wtedy, że wystarczy ponowne zalogowanie.
 
@@ -1056,9 +1017,7 @@ Zależności dla poszczególnych zestawów ról są tworzone raz, na początku m
 
 *Zależności sprawdzające role*
 
-Jak wspominano wcześniej, RBAC służy jedynie do wstępnej kontroli dostępu. Jeśli są planowane szczegółowe dostępy, wykorzystywany jest ReBAC. O ile RBAC był wykonywany w zależnościach funkcji, ReBAC jest egzekwowany już w jej definicji. Z racji tego, że baza danych służy zarówno do reprezentacji domeny, jak i do kontroli dostępu, można wykorzystać krawędzie i węzły zdefiniowane bezpośrednio w bazie danych, by sprawdzić, jakie kwerendy są dozwolone, a jakie nie.
-
-W większości przypadków ReBAC polega na sprawdzeniu, czy ścieżka między wyznaczonymi węzłami istnieje. Jeśli istnieje, jest wykonywane docelowe zapytanie, a jeśli nie, to zwracany jest błąd 403 Forbidden. W praktyce ReBAC to po prostu wykonanie dodatkowej kwerendy walidacyjnej przed wykonaniem kwerendy docelowej i podjęcie decyzji o dostępie na podstawie wyniku tej pierwszej.
+O ile RBAC jest realizowany w zależnościach FastAPI, o tyle szczegółową kontrolę dostępu ReBAC (2.2, 4.4.2) egzekwują funkcje punktów końcowych. W praktyce polega to na wykonaniu dodatkowej kwerendy sprawdzającej istnienie wymaganej ścieżki w grafie przed wykonaniem kwerendy docelowej i zwróceniu kodu 403 przy braku dopasowania.
 
 ```python
 _CAN_USE_REGISTRATION = """
@@ -1355,7 +1314,7 @@ Działanie obu operacji, w tym unieważniania tokenów, sprawdzono testem opisan
 
 5.5.10 Współbieżność
 
-Zgodnie z wymaganiami (3.3, 4.3.4) jednoczesne żądania wielu użytkowników nie mogą doprowadzić do niespójnych danych, w szczególności do przepełnienia grupy w trakcie zapisów. Neo4j działa na poziomie izolacji *read committed* (5.5.3): transakcja widzi tylko zatwierdzone zmiany innych transakcji, ale dwie transakcje mogą jednocześnie odczytać ten sam stan. Typowy błąd, w którym najpierw sprawdza się warunek, a potem zapisuje (ang. *check-then-act*), wygląda wtedy tak: dwie transakcje równocześnie liczą zapisanych studentów, obie widzą 2 z 3 miejsc i obie tworzą krawędź – w grupie jest 4 studentów.
+Zgodnie z wymaganiami (3.3, 4.3.4) jednoczesne żądania wielu użytkowników nie mogą doprowadzić do niespójnych danych, w szczególności do przepełnienia grupy w trakcie zapisów. Ponieważ Neo4j działa na poziomie izolacji *read committed* (2.1, 5.5.3), typowy wyścig *check-then-act* przebiega następująco: dwie transakcje równocześnie liczą zapisanych studentów, obie widzą 2 z 3 miejsc i obie tworzą krawędź, przez co w grupie znajdują się 4 osoby.
 
 W projekcie zastosowano dwa mechanizmy:
 1. Sprawdzenie warunków i zapis wykonuje jedna kwerenda, a więc jedna transakcja.
@@ -1397,7 +1356,7 @@ RETURN status
 
 Pierwszy `MATCH` jest jednocześnie sprawdzeniem ReBAC: jeśli student nie ma trwającej tury w rejestracji otwierającej grupę, kwerenda nie zwraca wiersza (403, 5.5.8).
 
-Godziny tury są czasem lokalnym (4.3.4). Przed porównaniem z bieżącym momentem łączy się je z datą tury w strefie `Europe/Warsaw`, więc przesunięcie strefy jest wyznaczane dla konkretnej daty, z uwzględnieniem czasu letniego. Początkowo godziny tur miały stałe przesunięcie +01:00, dopisywane przez API do godzin podanych przez administratora. Tura ustawiona na 8:00 w okresie czasu letniego rozpoczynała się wtedy w rzeczywistości o 9:00 czasu polskiego. Studentowi aplikacja kliencka wyświetlała godzinę 8:00, a przycisk zapisu odblokowywał się godzinę później. Następnie zakładane są dwie blokady:
+Godziny tury są czasem lokalnym (4.3.4). Przed porównaniem z bieżącym momentem łączy się je z datą tury w strefie `Europe/Warsaw`, więc przesunięcie strefy jest wyznaczane dla konkretnej daty, z uwzględnieniem czasu letniego. Następnie zakładane są dwie blokady:
 - `SET st.idx = st.idx` – na studencie: jego jednoczesne żądania zapisu do różnych grup czekają na siebie, więc warunek „jedna grupa danego typu” widzi zapis zatwierdzony chwilę wcześniej,
 - `SET g.capacity = g.capacity` – na grupie: jednoczesne zapisy do niej wykonują się po kolei, więc liczba zajętych miejsc jest zawsze aktualna.
 
