@@ -1,0 +1,583 @@
+# Import Neo4j: plan instrukcji krawędzi REGISTERED_IN - 10000 studentów
+# init_db.py importuje węzły i krawędzie w jednej transakcji: przy planowaniu krawędzi węzły
+# nie są jeszcze zatwierdzone, więc planista widzi statystyki pustej bazy (Estimated Rows = 0).
+# Plany A-C w transakcji importu (węzły zaimportowane, niezatwierdzone), plan D po zatwierdzeniu.
+
+pełna instrukcja (wariant C):
+LOAD CSV WITH HEADERS FROM "file:///edges/student_registered.csv" AS row
+MATCH (st:Person:Student {idx: row.student_idx}) USING INDEX st:Person(idx)
+MATCH (g:Group {id: row.group_id})
+MERGE (st)-[r:REGISTERED_IN]->(g)
+SET r.registered_at = datetime(row.registered_at)
+// Optional grade column; an empty or missing value leaves a grade set later through the API.
+FOREACH (_ IN CASE WHEN coalesce(row.grade, "") <> "" THEN [1] ELSE [] END |
+  SET r.grade = toFloat(row.grade)
+)
+
+====================================================================================================
+# A) w transakcji importu - pierwotna: MATCH (st:Student {idx: ...})
+MATCH (st:Student {idx: row.student_idx})
+
+0 rows
+ready to start consuming query after 769 ms, results consumed after another 0 ms
+Created 923 nodes, set 8307 properties, added 2769 labels
+0 rows
+ready to start consuming query after 110 ms, results consumed after another 0 ms
+Created 1 node, set 6 properties, added 3 labels
+0 rows
+ready to start consuming query after 791 ms, results consumed after another 0 ms
+Created 10000 nodes, set 80000 properties, added 30000 labels
+0 rows
+ready to start consuming query after 66 ms, results consumed after another 1 ms
+Created 12 nodes, set 24 properties, added 12 labels
+0 rows
+ready to start consuming query after 42 ms, results consumed after another 0 ms
+Created 48 nodes, set 96 properties, added 48 labels
+0 rows
+ready to start consuming query after 49 ms, results consumed after another 0 ms
+Created 4 nodes, set 12 properties, added 4 labels
+0 rows
+ready to start consuming query after 59 ms, results consumed after another 0 ms
+Created 336 nodes, set 1008 properties, added 336 labels
+0 rows
+ready to start consuming query after 38 ms, results consumed after another 0 ms
+Created 336 nodes, set 672 properties, added 336 labels
+0 rows
+ready to start consuming query after 39 ms, results consumed after another 0 ms
+Created 8 nodes, set 40 properties, added 8 labels
+0 rows
+ready to start consuming query after 33 ms, results consumed after another 0 ms
+Created 160 nodes, set 480 properties, added 160 labels
+0 rows
+ready to start consuming query after 49 ms, results consumed after another 0 ms
+Created 1344 nodes, set 4032 properties, added 1344 labels
+0 rows
+ready to start consuming query after 127 ms, results consumed after another 1 ms
+Created 9216 nodes, set 64512 properties, added 9216 labels
+0 rows
+ready to start consuming query after 31 ms, results consumed after another 0 ms
+Created 4 nodes, set 12 properties, added 4 labels
+0 rows
+ready to start consuming query after 41 ms, results consumed after another 0 ms
+Created 101 nodes, set 505 properties, added 101 labels
+0 rows
+ready to start consuming query after 87 ms, results consumed after another 0 ms
+Created 3804 nodes, set 15216 properties, added 3804 labels
++--------------------+
+| węzły w transakcji |
++--------------------+
+| 26297              |
++--------------------+
+
+1 row
+ready to start consuming query after 54 ms, results consumed after another 21 ms
++-------------------------------------------------------------------+
+| Plan      | Statement    | Version | Planner | Runtime     | Time |
++-------------------------------------------------------------------+
+| "EXPLAIN" | "WRITE_ONLY" | "25"    | "COST"  | "PIPELINED" | 183  |
++-------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 128
+
++---------------------------------+----+--------------------------------------------------+----------------+---------------------+
+| Operator                        | Id | Details                                          | Estimated Rows | Pipeline            |
++---------------------------------+----+--------------------------------------------------+----------------+---------------------+
+| +ProduceResults                 |  0 |                                                  |              0 |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +EmptyResult                    |  1 |                                                  |              0 |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +Foreach                        |  2 | _ IN CASE                                        |              0 |                     |
+| |                               |    |   WHEN NOT coalesce(row.grade, "") = "" THEN [1] |                |                     |
+| |                               |    |   ELSE []                                        |                |                     |
+| |                               |    | END,                                             |                |                     |
+| |                               |    | SET r.grade = toFloat(row.grade)                 |                |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +SetProperty                    |  3 | r.registered_at = datetime(row.registered_at)    |              0 |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +Apply                          |  4 |                                                  |              0 |                     |
+| |\                              +----+--------------------------------------------------+----------------+                     |
+| | +MergeInto                    |  5 | MERGE (st)-[r:REGISTERED_IN]->(g)                |              0 |                     |
+| | |                             +----+--------------------------------------------------+----------------+                     |
+| | +Argument                     |  6 | st, g                                            |              0 | Fused in Pipeline 5 |
+| |                               +----+--------------------------------------------------+----------------+---------------------+
+| +Apply                          |  7 |                                                  |              0 |                     |
+| |\                              +----+--------------------------------------------------+----------------+---------------------+
+| | +CartesianProduct             |  8 |                                                  |              0 | In Pipeline 4       |
+| | |\                            +----+--------------------------------------------------+----------------+---------------------+
+| | | +Filter                     |  9 | st.idx = row.student_idx                         |              0 |                     |
+| | | |                           +----+--------------------------------------------------+----------------+                     |
+| | | +NodeByLabelScan            | 10 | st:Student                                       |              0 | Fused in Pipeline 3 |
+| | |                             +----+--------------------------------------------------+----------------+---------------------+
+| | +NodeUniqueIndexSeek(Locking) | 11 | UNIQUE g:Group(id) WHERE id = row.group_id       |              0 | In Pipeline 2       |
+| |                               +----+--------------------------------------------------+----------------+---------------------+
+| +LoadCSV                        | 12 | row                                              |             10 | In Pipeline 1       |
++---------------------------------+----+--------------------------------------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 183 ms, results consumed after another 0 ms
+
+====================================================================================================
+# B) w transakcji importu - z etykietą Person, bez USING INDEX
+MATCH (st:Person:Student {idx: row.student_idx})
+
+0 rows
+ready to start consuming query after 45 ms, results consumed after another 0 ms
+Created 923 nodes, set 8307 properties, added 2769 labels
+0 rows
+ready to start consuming query after 9 ms, results consumed after another 0 ms
+Created 1 node, set 6 properties, added 3 labels
+0 rows
+ready to start consuming query after 238 ms, results consumed after another 0 ms
+Created 10000 nodes, set 80000 properties, added 30000 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 12 nodes, set 24 properties, added 12 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 48 nodes, set 96 properties, added 48 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 4 nodes, set 12 properties, added 4 labels
+0 rows
+ready to start consuming query after 4 ms, results consumed after another 0 ms
+Created 336 nodes, set 1008 properties, added 336 labels
+0 rows
+ready to start consuming query after 4 ms, results consumed after another 0 ms
+Created 336 nodes, set 672 properties, added 336 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 8 nodes, set 40 properties, added 8 labels
+0 rows
+ready to start consuming query after 4 ms, results consumed after another 0 ms
+Created 160 nodes, set 480 properties, added 160 labels
+0 rows
+ready to start consuming query after 10 ms, results consumed after another 0 ms
+Created 1344 nodes, set 4032 properties, added 1344 labels
+0 rows
+ready to start consuming query after 82 ms, results consumed after another 0 ms
+Created 9216 nodes, set 64512 properties, added 9216 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 4 nodes, set 12 properties, added 4 labels
+0 rows
+ready to start consuming query after 4 ms, results consumed after another 0 ms
+Created 101 nodes, set 505 properties, added 101 labels
+0 rows
+ready to start consuming query after 44 ms, results consumed after another 0 ms
+Created 3804 nodes, set 15216 properties, added 3804 labels
++--------------------+
+| węzły w transakcji |
++--------------------+
+| 26297              |
++--------------------+
+
+1 row
+ready to start consuming query after 1 ms, results consumed after another 9 ms
++-------------------------------------------------------------------+
+| Plan      | Statement    | Version | Planner | Runtime     | Time |
++-------------------------------------------------------------------+
+| "EXPLAIN" | "WRITE_ONLY" | "25"    | "COST"  | "PIPELINED" | 73   |
++-------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 128
+
++-----------------------------------+----+---------------------------------------------------+----------------+---------------------+
+| Operator                          | Id | Details                                           | Estimated Rows | Pipeline            |
++-----------------------------------+----+---------------------------------------------------+----------------+---------------------+
+| +ProduceResults                   |  0 |                                                   |              0 |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +EmptyResult                      |  1 |                                                   |              0 |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +Foreach                          |  2 | _ IN CASE                                         |              0 |                     |
+| |                                 |    |   WHEN NOT coalesce(row.grade, "") = "" THEN [1]  |                |                     |
+| |                                 |    |   ELSE []                                         |                |                     |
+| |                                 |    | END,                                              |                |                     |
+| |                                 |    | SET r.grade = toFloat(row.grade)                  |                |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +SetProperty                      |  3 | r.registered_at = datetime(row.registered_at)     |              0 |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +Apply                            |  4 |                                                   |              0 |                     |
+| |\                                +----+---------------------------------------------------+----------------+                     |
+| | +MergeInto                      |  5 | MERGE (st)-[r:REGISTERED_IN]->(g)                 |              0 |                     |
+| | |                               +----+---------------------------------------------------+----------------+                     |
+| | +Argument                       |  6 | st, g                                             |              0 | Fused in Pipeline 5 |
+| |                                 +----+---------------------------------------------------+----------------+---------------------+
+| +Apply                            |  7 |                                                   |              0 |                     |
+| |\                                +----+---------------------------------------------------+----------------+---------------------+
+| | +CartesianProduct               |  8 |                                                   |              0 | In Pipeline 4       |
+| | |\                              +----+---------------------------------------------------+----------------+---------------------+
+| | | +NodeUniqueIndexSeek(Locking) |  9 | UNIQUE g:Group(id) WHERE id = row.group_id        |              0 | In Pipeline 3       |
+| | |                               +----+---------------------------------------------------+----------------+---------------------+
+| | +Filter                         | 10 | st:Student                                        |              0 |                     |
+| | |                               +----+---------------------------------------------------+----------------+                     |
+| | +NodeUniqueIndexSeek(Locking)   | 11 | UNIQUE st:Person(idx) WHERE idx = row.student_idx |              0 | Fused in Pipeline 2 |
+| |                                 +----+---------------------------------------------------+----------------+---------------------+
+| +LoadCSV                          | 12 | row                                               |             10 | In Pipeline 1       |
++-----------------------------------+----+---------------------------------------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 73 ms, results consumed after another 0 ms
+
+====================================================================================================
+# C) w transakcji importu - obecna (queries/edges.cypher): z USING INDEX st:Person(idx)
+MATCH (st:Person:Student {idx: row.student_idx}) USING INDEX st:Person(idx)
+
+0 rows
+ready to start consuming query after 26 ms, results consumed after another 0 ms
+Created 923 nodes, set 8307 properties, added 2769 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 1 node, set 6 properties, added 3 labels
+0 rows
+ready to start consuming query after 187 ms, results consumed after another 0 ms
+Created 10000 nodes, set 80000 properties, added 30000 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 12 nodes, set 24 properties, added 12 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 48 nodes, set 96 properties, added 48 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 4 nodes, set 12 properties, added 4 labels
+0 rows
+ready to start consuming query after 5 ms, results consumed after another 0 ms
+Created 336 nodes, set 1008 properties, added 336 labels
+0 rows
+ready to start consuming query after 5 ms, results consumed after another 0 ms
+Created 336 nodes, set 672 properties, added 336 labels
+0 rows
+ready to start consuming query after 2 ms, results consumed after another 0 ms
+Created 8 nodes, set 40 properties, added 8 labels
+0 rows
+ready to start consuming query after 15 ms, results consumed after another 0 ms
+Created 160 nodes, set 480 properties, added 160 labels
+0 rows
+ready to start consuming query after 11 ms, results consumed after another 0 ms
+Created 1344 nodes, set 4032 properties, added 1344 labels
+0 rows
+ready to start consuming query after 60 ms, results consumed after another 0 ms
+Created 9216 nodes, set 64512 properties, added 9216 labels
+0 rows
+ready to start consuming query after 2 ms, results consumed after another 0 ms
+Created 4 nodes, set 12 properties, added 4 labels
+0 rows
+ready to start consuming query after 3 ms, results consumed after another 0 ms
+Created 101 nodes, set 505 properties, added 101 labels
+0 rows
+ready to start consuming query after 32 ms, results consumed after another 0 ms
+Created 3804 nodes, set 15216 properties, added 3804 labels
++--------------------+
+| węzły w transakcji |
++--------------------+
+| 26297              |
++--------------------+
+
+1 row
+ready to start consuming query after 1 ms, results consumed after another 7 ms
++-------------------------------------------------------------------+
+| Plan      | Statement    | Version | Planner | Runtime     | Time |
++-------------------------------------------------------------------+
+| "EXPLAIN" | "WRITE_ONLY" | "25"    | "COST"  | "PIPELINED" | 65   |
++-------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 128
+
++-----------------------------------+----+---------------------------------------------------+----------------+---------------------+
+| Operator                          | Id | Details                                           | Estimated Rows | Pipeline            |
++-----------------------------------+----+---------------------------------------------------+----------------+---------------------+
+| +ProduceResults                   |  0 |                                                   |              0 |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +EmptyResult                      |  1 |                                                   |              0 |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +Foreach                          |  2 | _ IN CASE                                         |              0 |                     |
+| |                                 |    |   WHEN NOT coalesce(row.grade, "") = "" THEN [1]  |                |                     |
+| |                                 |    |   ELSE []                                         |                |                     |
+| |                                 |    | END,                                              |                |                     |
+| |                                 |    | SET r.grade = toFloat(row.grade)                  |                |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +SetProperty                      |  3 | r.registered_at = datetime(row.registered_at)     |              0 |                     |
+| |                                 +----+---------------------------------------------------+----------------+                     |
+| +Apply                            |  4 |                                                   |              0 |                     |
+| |\                                +----+---------------------------------------------------+----------------+                     |
+| | +MergeInto                      |  5 | MERGE (st)-[r:REGISTERED_IN]->(g)                 |              0 |                     |
+| | |                               +----+---------------------------------------------------+----------------+                     |
+| | +Argument                       |  6 | st, g                                             |              0 | Fused in Pipeline 5 |
+| |                                 +----+---------------------------------------------------+----------------+---------------------+
+| +Apply                            |  7 |                                                   |              0 |                     |
+| |\                                +----+---------------------------------------------------+----------------+---------------------+
+| | +CartesianProduct               |  8 |                                                   |              0 | In Pipeline 4       |
+| | |\                              +----+---------------------------------------------------+----------------+---------------------+
+| | | +NodeUniqueIndexSeek(Locking) |  9 | UNIQUE g:Group(id) WHERE id = row.group_id        |              0 | In Pipeline 3       |
+| | |                               +----+---------------------------------------------------+----------------+---------------------+
+| | +Filter                         | 10 | st:Student                                        |              0 |                     |
+| | |                               +----+---------------------------------------------------+----------------+                     |
+| | +NodeUniqueIndexSeek(Locking)   | 11 | UNIQUE st:Person(idx) WHERE idx = row.student_idx |              0 | Fused in Pipeline 2 |
+| |                                 +----+---------------------------------------------------+----------------+---------------------+
+| +LoadCSV                          | 12 | row                                               |             10 | In Pipeline 1       |
++-----------------------------------+----+---------------------------------------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 65 ms, results consumed after another 0 ms
+
+====================================================================================================
+# D) po zatwierdzeniu węzłów (statystyki wypełnionej bazy) - pierwotna postać
+MATCH (st:Student {idx: row.student_idx})
+
+0 rows
+ready to start consuming query after 18 ms, results consumed after another 0 ms
++-------------------------------------------------------------------+
+| Plan      | Statement    | Version | Planner | Runtime     | Time |
++-------------------------------------------------------------------+
+| "EXPLAIN" | "WRITE_ONLY" | "25"    | "COST"  | "PIPELINED" | 53   |
++-------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 1024
+
++---------------------------------+----+--------------------------------------------------+----------------+---------------------+
+| Operator                        | Id | Details                                          | Estimated Rows | Pipeline            |
++---------------------------------+----+--------------------------------------------------+----------------+---------------------+
+| +ProduceResults                 |  0 |                                                  |           5000 |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +EmptyResult                    |  1 |                                                  |           5000 |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +Foreach                        |  2 | _ IN CASE                                        |           5000 |                     |
+| |                               |    |   WHEN NOT coalesce(row.grade, "") = "" THEN [1] |                |                     |
+| |                               |    |   ELSE []                                        |                |                     |
+| |                               |    | END,                                             |                |                     |
+| |                               |    | SET r.grade = toFloat(row.grade)                 |                |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +SetProperty                    |  3 | r.registered_at = datetime(row.registered_at)    |           5000 |                     |
+| |                               +----+--------------------------------------------------+----------------+                     |
+| +Apply                          |  4 |                                                  |           5000 |                     |
+| |\                              +----+--------------------------------------------------+----------------+                     |
+| | +MergeInto                    |  5 | MERGE (st)-[r:REGISTERED_IN]->(g)                |           5000 |                     |
+| | |                             +----+--------------------------------------------------+----------------+                     |
+| | +Argument                     |  6 | st, g                                            |           5000 | Fused in Pipeline 5 |
+| |                               +----+--------------------------------------------------+----------------+---------------------+
+| +Apply                          |  7 |                                                  |           5000 |                     |
+| |\                              +----+--------------------------------------------------+----------------+---------------------+
+| | +CartesianProduct             |  8 |                                                  |           5000 | In Pipeline 4       |
+| | |\                            +----+--------------------------------------------------+----------------+---------------------+
+| | | +Filter                     |  9 | st.idx = row.student_idx                         |           5000 |                     |
+| | | |                           +----+--------------------------------------------------+----------------+                     |
+| | | +NodeByLabelScan            | 10 | st:Student                                       |         100000 | Fused in Pipeline 3 |
+| | |                             +----+--------------------------------------------------+----------------+---------------------+
+| | +NodeUniqueIndexSeek(Locking) | 11 | UNIQUE g:Group(id) WHERE id = row.group_id       |             10 | In Pipeline 2       |
+| |                               +----+--------------------------------------------------+----------------+---------------------+
+| +LoadCSV                        | 12 | row                                              |             10 | In Pipeline 1       |
++---------------------------------+----+--------------------------------------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 53 ms, results consumed after another 0 ms
+
+====================================================================================================
+# E) wypełniona baza: MATCH (st:Student {idx: $i}) RETURN st.name
+
++---------+
+| st.name |
++---------+
++---------+
+
++------------------------------------------------------------------+
+| Plan      | Statement   | Version | Planner | Runtime     | Time |
++------------------------------------------------------------------+
+| "EXPLAIN" | "READ_ONLY" | "25"    | "COST"  | "PIPELINED" | 45   |
++------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 128
+
++----------------------+----+--------------------------------------+----------------+---------------------+
+| Operator             | Id | Details                              | Estimated Rows | Pipeline            |
++----------------------+----+--------------------------------------+----------------+---------------------+
+| +ProduceResults      |  0 | `st.name`                            |              1 |                     |
+| |                    +----+--------------------------------------+----------------+                     |
+| +Projection          |  1 | st.name AS `st.name`                 |              1 |                     |
+| |                    +----+--------------------------------------+----------------+                     |
+| +Filter              |  2 | st:Student                           |              1 |                     |
+| |                    +----+--------------------------------------+----------------+                     |
+| +NodeUniqueIndexSeek |  3 | UNIQUE st:Person(idx) WHERE idx = $i |              1 | Fused in Pipeline 0 |
++----------------------+----+--------------------------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 45 ms, results consumed after another 0 ms
+
+====================================================================================================
+# F) wypełniona baza: MATCH (st:Student {idx: $i}) SET st.x = 1
+
++-------------------------------------------------------------------+
+| Plan      | Statement    | Version | Planner | Runtime     | Time |
++-------------------------------------------------------------------+
+| "EXPLAIN" | "WRITE_ONLY" | "25"    | "COST"  | "PIPELINED" | 24   |
++-------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 1024
+
++------------------+----+-------------------+----------------+---------------------+
+| Operator         | Id | Details           | Estimated Rows | Pipeline            |
++------------------+----+-------------------+----------------+---------------------+
+| +ProduceResults  |  0 |                   |            500 |                     |
+| |                +----+-------------------+----------------+                     |
+| +EmptyResult     |  1 |                   |            500 |                     |
+| |                +----+-------------------+----------------+                     |
+| +SetProperty     |  2 | st.x = $autoint_0 |            500 |                     |
+| |                +----+-------------------+----------------+                     |
+| +Filter          |  3 | st.idx = $i       |            500 |                     |
+| |                +----+-------------------+----------------+                     |
+| +NodeByLabelScan |  4 | st:Student        |          10000 | Fused in Pipeline 0 |
++------------------+----+-------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 24 ms, results consumed after another 0 ms
+
+====================================================================================================
+# G) wypełniona baza: MATCH (st:Student {idx: $i}) MATCH (g:Group {id: $g}) MERGE (st)-[:REGISTERED_IN]->(g)
+
++-------------------------------------------------------------------+
+| Plan      | Statement    | Version | Planner | Runtime     | Time |
++-------------------------------------------------------------------+
+| "EXPLAIN" | "WRITE_ONLY" | "25"    | "COST"  | "PIPELINED" | 46   |
++-------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 1024
+
++-------------------------------+----+----------------------------------------+----------------+---------------------+
+| Operator                      | Id | Details                                | Estimated Rows | Pipeline            |
++-------------------------------+----+----------------------------------------+----------------+---------------------+
+| +ProduceResults               |  0 |                                        |            500 |                     |
+| |                             +----+----------------------------------------+----------------+                     |
+| +EmptyResult                  |  1 |                                        |            500 |                     |
+| |                             +----+----------------------------------------+----------------+                     |
+| +Apply                        |  2 |                                        |            500 |                     |
+| |\                            +----+----------------------------------------+----------------+                     |
+| | +MergeInto                  |  3 | MERGE (st)-[anon_0:REGISTERED_IN]->(g) |            500 |                     |
+| | |                           +----+----------------------------------------+----------------+                     |
+| | +Argument                   |  4 | st, g                                  |            500 | Fused in Pipeline 3 |
+| |                             +----+----------------------------------------+----------------+---------------------+
+| +CartesianProduct             |  5 |                                        |            500 | In Pipeline 2       |
+| |\                            +----+----------------------------------------+----------------+---------------------+
+| | +Filter                     |  6 | st.idx = $i                            |            500 |                     |
+| | |                           +----+----------------------------------------+----------------+                     |
+| | +NodeByLabelScan            |  7 | st:Student                             |          10000 | Fused in Pipeline 1 |
+| |                             +----+----------------------------------------+----------------+---------------------+
+| +NodeUniqueIndexSeek(Locking) |  8 | UNIQUE g:Group(id) WHERE id = $g       |              1 | In Pipeline 0       |
++-------------------------------+----+----------------------------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 46 ms, results consumed after another 0 ms
+
+====================================================================================================
+# H) wypełniona baza: MATCH (st:Person:Student {idx: $i}) SET st.x = 1
+
++-------------------------------------------------------------------+
+| Plan      | Statement    | Version | Planner | Runtime     | Time |
++-------------------------------------------------------------------+
+| "EXPLAIN" | "WRITE_ONLY" | "25"    | "COST"  | "PIPELINED" | 29   |
++-------------------------------------------------------------------+
+
+
+Cypher 25
+
+Planner COST
+
+Runtime PIPELINED
+
+Runtime version 2026.07.1
+
+Batch size 128
+
++-------------------------------+----+--------------------------------------+----------------+---------------------+
+| Operator                      | Id | Details                              | Estimated Rows | Pipeline            |
++-------------------------------+----+--------------------------------------+----------------+---------------------+
+| +ProduceResults               |  0 |                                      |              0 |                     |
+| |                             +----+--------------------------------------+----------------+                     |
+| +EmptyResult                  |  1 |                                      |              0 |                     |
+| |                             +----+--------------------------------------+----------------+                     |
+| +SetProperty                  |  2 | st.x = $autoint_0                    |              0 |                     |
+| |                             +----+--------------------------------------+----------------+                     |
+| +Filter                       |  3 | st:Student                           |              0 |                     |
+| |                             +----+--------------------------------------+----------------+                     |
+| +NodeUniqueIndexSeek(Locking) |  4 | UNIQUE st:Person(idx) WHERE idx = $i |              1 | Fused in Pipeline 0 |
++-------------------------------+----+--------------------------------------+----------------+---------------------+
+
+Total database accesses: ?
+
+0 rows
+ready to start consuming query after 29 ms, results consumed after another 0 ms

@@ -2,13 +2,13 @@
 
 Testy funkcjonalne, bezpieczeństwa oraz pomiary wydajności przeprowadzono lokalnie na komputerze z procesorem AMD Ryzen 7 5800X (8 rdzeni, 16 wątków, do 4,85 GHz), 16 GB pamięci RAM i dyskiem SSD NVMe ADATA XPG SX8200 Pro 512 GB, pod kontrolą systemu Arch Linux (jądro 7.2.11) oraz środowiska Docker 29.9.2 z Docker Compose (5.1).
 
-Zakres testów oparto na wymaganiach z rozdziału 3. Każdy przypadek zaimplementowano jako niezależny skrypt Pythona w katalogu `tests/`, uruchamiany zbiorczo przez `tests/run_all.py` (z zapisem raportów w `tests/wyniki/`). Żądania kierowano z hosta po HTTPS z weryfikacją lokalnego CA, a operacje pomocnicze (dane testowe, kontrola stanu baz, generowanie tokenów) wykonywano z kontenera `app` z użyciem kont bazodanowych API; w testach logowania stosowano właściwe hasła. Obiekty testowe oznaczano prefiksem `test-` i usuwano po przebiegu. Wszystkie testy zakończyły się zgodnie z oczekiwaniami.
+Zakres testów oparto na wymaganiach z rozdziału 3. Każdy przypadek zaimplementowano jako niezależny skrypt Pythona w katalogu `tests/`, uruchamiany zbiorczo przez `tests/run_all.py` (z zapisem raportów w `tests/wyniki/`). Żądania kierowano z hosta po HTTPS z weryfikacją lokalnego CA, a operacje pomocnicze (dane testowe, kontrola stanu baz, generowanie tokenów) wykonywano z kontenera `app` z użyciem kont bazodanowych API.
 
 7.2 Uwierzytelnianie i kontrola dostępu
 
 7.2.1 Kontrola dostępu i kolejność sprawdzeń
 
-Mechanizmy RBAC i ReBAC zweryfikowano skryptem `tests/test_permissions.py` dla wszystkich 59 punktów końcowych backendu grafowego pobranych ze specyfikacji OpenAPI (5.4), przy czym macierz uprawnień zdefiniowano niezależnie na podstawie tabel 3.1–3.3. Każdy punkt końcowy wywołano bez tokenu oraz z rolami studenta, prowadzącego, administratora i osoby łączącej role studenta i prowadzącego; żądania zapisujące wysyłano z błędną treścią (422) lub nieistniejącymi identyfikatorami (404), aby nie modyfikować bazy (tab. 7.1).
+Mechanizmy RBAC i ReBAC zweryfikowano skryptem `tests/test_permissions.py` dla wszystkich 59 punktów końcowych backendu grafowego pobranych ze specyfikacji OpenAPI (5.4), przy czym macierz uprawnień zdefiniowano na podstawie tabel 3.1–3.3. Każdy punkt końcowy wywołano bez tokenu oraz z rolami studenta, prowadzącego, administratora i osoby łączącej role studenta i prowadzącego.
 
 **Tab. 7.1:** Wyniki testu RBAC dla 59 punktów końcowych (291 żądań)
 
@@ -22,7 +22,7 @@ Mechanizmy RBAC i ReBAC zweryfikowano skryptem `tests/test_permissions.py` dla w
 
 *¹ Z wyjątkiem listy własnych grup (`GET /me/groups`), dostępnej wyłącznie dla roli prowadzącego.*
 
-W 16 scenariuszach ReBAC (4.4.2) potwierdzono, że prowadzący ma dostęp wyłącznie do własnych grup i nauczanych studentów (200 wobec 403 dla cudzych zasobów), administrator do dowolnej grupy i studenta (200), student wyłącznie do własnych zapisów, semestrów i opinii o swoich grupach (403 dla cudzych danych lub zapisów bez tury), a użytkownik wielorolowy łączy uprawnienia obu ról przy zachowaniu odmów dla cudzych zasobów. Potwierdza to spełnienie wymagań z 3.1.
+W 16 scenariuszach ReBAC (4.4.2) potwierdzono, że prowadzący ma dostęp wyłącznie do własnych grup i nauczanych studentów, administrator do dowolnej grupy i studenta, student wyłącznie do własnych zapisów, semestrów i opinii o swoich grupach, a użytkownik wielorolowy łączy uprawnienia obu ról przy zachowaniu odmów dla cudzych zasobów. Potwierdza to spełnienie wymagań z 3.1.
 
 Skryptem `tests/test_check_order.py` sprawdzono ponadto kolejność autoryzacji i walidacji (5.5.8): dla trzech błędnych żądań zapisu wywołania bez tokenu, z tokenem studenta i z tokenem administratora zwróciły kolejno kody 401, 403 i dopiero 422, więc komunikaty walidacji pozostają ukryte przed nieuprawnionymi użytkownikami.
 
@@ -50,18 +50,18 @@ Skutki odebrania roli `Admin` zweryfikowano skryptem `tests/test_role_revocation
 
 **Tab. 7.3:** Dostęp do punktów końcowych administratora po odebraniu roli `Admin`
 
-| Krok | Bez unieważniania | Z unieważnianiem |
-| --- | :---: | :---: |
-| `GET /admin/people/next-idx` przed odebraniem roli | 200 | 200 |
-| `GET /admin/people/next-idx` po odebraniu roli (stary token) | 200 | 401 `Token revoked` |
-| `PATCH /admin/users/281056` z `{"active": false}` (stary token) | 200 | 401 `Token revoked` |
-| ponowne logowanie i `GET /admin/people/next-idx` | 403 | 403 |
+| Krok                                               | Bez unieważniania |  Z unieważnianiem   |
+| -------------------------------------------------- | :---------------: | :-----------------: |
+| `GET /admin/people/next-idx` przed odebraniem roli |        200        |         200         |
+| `GET /admin/people/next-idx` po odebraniu roli     |        200        | 401 `Token revoked` |
+| `PATCH /admin/users/281056` z `{"active": false}`  |        200        | 401 `Token revoked` |
+| ponowne logowanie i `GET /admin/people/next-idx`   |        403        |         403         |
 
 Mechanizm unieważniania natychmiast blokuje dotychczasowy token kodem 401, zmuszając użytkownika do ponownego logowania już bez odebranej roli.
 
 7.3 Współbieżność
 
-Skuteczność blokad przy równoległych zapisach i modyfikacji ról (5.5.10, 6.4.1) sprawdzono skryptami `tests/test_concurrent_registration.py` (Neo4j) oraz `tests/test_concurrent_registration_rel.py` (PostgreSQL). Żądania wysyłano z wątków synchronizowanych barierą; scenariusze kontrolne bez blokad (C, C1, C2) uruchomiono bezpośrednio przez sterowniki (w PostgreSQL z 100-milisekundowym opóźnieniem zatwierdzenia, aby wymusić kolizję). Scenariusz D dotyczy wyłącznie backendu grafowego (tab. 7.4).
+Skuteczność blokad przy równoległych zapisach i modyfikacji ról (5.5.10, 6.4.1) sprawdzono skryptami `tests/test_concurrent_registration.py` (Neo4j) oraz `tests/test_concurrent_registration_rel.py` (PostgreSQL). Scenariusze kontrolne bez blokad (C, C1, C2) uruchomiono bezpośrednio przez sterowniki (w PostgreSQL z 100-milisekundowym opóźnieniem zatwierdzenia, aby wymusić kolizję). Scenariusz D dotyczy wyłącznie backendu grafowego (tab. 7.4).
 
 **Tab. 7.4:** Wyniki testów współbieżności dla backendu grafowego i relacyjnego (trzy uruchomienia, identyczne wyniki)
 
@@ -98,7 +98,7 @@ Reguły opinii (3.4, 3.5, 4.3.5) zweryfikowano skryptem `tests/test_opinions.py`
 
 7.5.1 Ograniczenia schematu
 
-Skryptem `tests/test_schema_constraints.py` sprawdzono ograniczenia schematu bezpośrednio w Neo4j (z pominięciem API, na koncie aplikacji). Każda z 14 prób niepoprawnego zapisu w osobnej zatwierdzanej transakcji została odrzucona z odpowiednim kodem błędu GQL (ang. *Graph Query Language*, 4.3.7, tab. 7.6).
+Skryptem `tests/test_schema_constraints.py` sprawdzono ograniczenia schematu bezpośrednio w Neo4j. Każda z 14 prób niepoprawnego zapisu w osobnej zatwierdzanej transakcji została odrzucona z odpowiednim kodem błędu GQL (ang. *Graph Query Language*, 4.3.7, tab. 7.6).
 
 **Tab. 7.6:** Niepoprawne operacje zapisu odrzucone bezpośrednio przez bazę Neo4j (14 przypadków)
 
@@ -159,9 +159,9 @@ Brak jawnych danych potwierdzono, nagrywając pakiety na czterech połączeniach
 | API → Neo4j | TLS 1.3 | 24 | brak |
 | API → PostgreSQL | TLS 1.3 | 25 | brak |
 
-W próbie kontrolnej z kluczami sesji z `SSLKEYLOGFILE` [CYTOWANIE: https://docs.python.org/3/library/ssl.html#ssl.SSLContext.keylog_filename] program `tshark` odczytał z tego samego nagrania wszystkie trzy żądania z hasłem i znacznikiem, potwierdzając obecność danych i skuteczność szyfrowania (rys. 7.1).
+![[Pasted image 20261125130900.png]]
 
-*[Zrzut ekranu: to samo nagranie w programie Wireshark bez kluczy sesji i z kluczami sesji]*
+*Zaszyfrowany ruch z aplikacji widoczny w Wireshark*
 
 **Rys. 7.1:** Przechwycone połączenie w programie Wireshark bez kluczy sesji oraz po odszyfrowaniu
 
@@ -175,13 +175,11 @@ Restart środowiska nie zmienił liczby obiektów (idempotentność `MERGE`, 5.3
 
 7.8.1 Zgodność backendów i metodyka pomiarów
 
-Zgodność semantyczną zweryfikowano skryptem `bench/compare.py`: w 13 przypadkach (w tym błędach 401, 403, 422) backendy `/api` i `/api/rel` zwróciły identyczne kody i treść JSON (po sprowadzeniu znaczników czasu do strefy UTC, ang. *Coordinated Universal Time*, gdyż Neo4j zachowuje oryginalne przesunięcie, a PostgreSQL zwraca czas w strefie sesji [CYTOWANIE: https://www.postgresql.org/docs/current/datatype-datetime.html]).
+Zgodność semantyczną zweryfikowano skryptem `bench/compare.py`: w 13 przypadkach (w tym błędach 401, 403, 422) backendy `/api` i `/api/rel` zwróciły identyczne kody i treść JSON.
 
-Pomiary (`bench/measure.py`) objęły siedem z ośmiu wspólnych punktów końcowych (6.4; zapis na grupę sprawdzono w 7.3) w pięciu warstwach stosu: **silnik** (`PROFILE` w Neo4j, `EXPLAIN (ANALYZE, TIMING OFF)` w PostgreSQL), **sterownik** (z pobraniem wierszy w kontenerze `app`), **FastAPI** (bez sieci i TLS), **HTTPS do API** (port 8000) oraz **HTTPS przez nginx** (port 5173). Treść i parametry zapytań przechwytywano z wywołania API i odtwarzano zgodnie z modelem transakcji każdego backendu (5.5.3, 6.4). Przed pomiarami każdy punkt końcowy wywołano 200 razy: Neo4j działa w maszynie wirtualnej Javy, której kompilator JIT (ang. *Just-In-Time*) optymalizuje kod dopiero po setkach wykonań, a przy krótszej rozgrzewce warstwy mierzone wcześniej wypadały wolniej od późniejszych, choć obejmują mniej pracy. Następnie każdą warstwę mierzono 50 razy po 10 przebiegach rozgrzewkowych (dla `POST /login` 10 pomiarów ze względu na bcrypt); pełne dane wraz z 95. percentylami zapisano w `bench/results/`. Warstwy mierzono w osobnych seriach, dlatego różnice median sąsiednich warstw mniejsze niż ok. 0,3 ms mieszczą się w rozrzucie pomiarów.
+Pomiary (`bench/run.py`, `bench/measure.py`) objęły siedem z ośmiu wspólnych punktów końcowych. Mierzono czas żądania HTTPS przez serwer nginx (port 5173), czyli tak, jak wysyła je przeglądarka. Podane wartości to mediany 50 pomiarów (dla `POST /login` 10 ze względu na bcrypt), poprzedzonych rozgrzewką: każdy punkt końcowy wywołano wcześniej 200 razy, ponieważ Neo4j działa w maszynie wirtualnej Javy, której kompilator JIT (ang. *Just-In-Time*) optymalizuje kod dopiero po setkach wykonań.
 
-W PostgreSQL wyłączono pomiar per operator (`TIMING OFF`), gdyż zawyżał czas katalogu o ok. 10%, natomiast w Neo4j czas silnika pochodzi z `PROFILE` i zawiera narzut profilowania – miarodajne porównanie zaczyna się więc od warstwy sterownika. Czas silnika PostgreSQL mierzono na poleceniu przygotowanym (`PREPARE` i `EXPLAIN ANALYZE EXECUTE`), tak jak wykonuje je API: `psycopg` przygotowuje zapytanie po pięciu wykonaniach, a PostgreSQL po kolejnych pięciu może przejść na plan ogólny [CYTOWANIE: https://www.postgresql.org/docs/current/sql-prepare.html]. Pierwotny pomiar bez przygotowania zawyżał czas katalogu przedmiotów przy 10 000 studentów (103,6 ms wobec 86,1 ms całej warstwy sterownika): plan dla konkretnych parametrów miał szacowany koszt ok. 262 tys., powyżej progu kompilacji JIT (`jit_above_cost` = 100 tys.) [CYTOWANIE: https://www.postgresql.org/docs/current/jit-decision.html], a kompilacja 108 funkcji wydłużała wykonanie o ok. 40%; plan ogólny używany przez API (koszt ok. 37 tys.) progu nie przekracza. Równolegle zbierano metryki diagnostyczne z `PROFILE` [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/planning-and-tuning/] i `EXPLAIN (ANALYZE, BUFFERS, MEMORY, SERIALIZE)` [CYTOWANIE: https://www.postgresql.org/docs/current/sql-explain.html].
-
-Do badania skalowalności wygenerowano (`bench/generate.py`) spójne zbiory dla 1 000, 3 000 i 10 000 studentów (tab. 7.10), mierzone na świeżych środowiskach (`docker compose down -v` przed każdą skalą) z domyślną konfiguracją baz. Parametry zapytań punktowych zwracały zbliżoną liczbę wierszy (poza katalogiem: 168 lub 336 wierszy i opiniami: 9 lub 14); cały zbiór mieścił się w pamięci RAM (zero chybień pamięci podręcznej).
+Do badania skalowalności wygenerowano (`bench/generate.py`) spójne zbiory dla 1 000, 3 000 i 10 000 studentów (tab. 7.10), mierzone na świeżych środowiskach (`docker compose down -v` przed każdą skalą) z domyślną konfiguracją baz. Parametry zapytań punktowych zwracały zbliżoną liczbę wierszy (poza katalogiem: 168 lub 336 wierszy i opiniami: 9 lub 14).
 
 **Tab. 7.10:** Rozmiar wygenerowanych zbiorów danych w kolejnych skalach pomiarowych
 
@@ -192,34 +190,9 @@ Do badania skalowalności wygenerowano (`bench/generate.py`) spójne zbiory dla 
 | 3 000 | 2 | 2 688 | 84 000 | 8 607 | 114 052 |
 | 10 000 | 4 | 9 216 | 280 000 | 27 065 | 378 121 |
 
-7.8.2 Czas wykonania w warstwach i wpływ skali danych
+7.8.2 Czas odpowiedzi i wpływ skali danych
 
-**Tab. 7.11:** Mediana czasu wykonania żądania w kolejnych warstwach dla skali 10 000 studentów [ms]
-
-| Punkt końcowy | Baza | Silnik | Sterownik | FastAPI | HTTPS do API | HTTPS przez nginx |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `POST /login` | Neo4j | 0,05 | 0,77 | 180,10 | 179,59 | 180,39 |
-|  | PostgreSQL | 0,03 | 0,25 | 178,31 | 178,79 | 179,89 |
-| `GET /subjects` | Neo4j | 186,85 | 219,99 | 225,76 | 221,72 | 223,10 |
-|  | PostgreSQL | 81,83 | 85,39 | 88,77 | 89,43 | 90,66 |
-| `GET /opinions` | Neo4j | 0,24 | 1,69 | 2,04 | 2,41 | 3,31 |
-|  | PostgreSQL | 0,15 | 0,45 | 0,84 | 1,17 | 1,93 |
-| `GET /me/registrations/{id}/groups` | Neo4j | 0,38 | 3,13 | 3,74 | 3,60 | 5,04 |
-|  | PostgreSQL | 0,28 | 1,58 | 2,03 | 2,68 | 3,61 |
-| `GET /groups/{id}/students` | Neo4j | 0,15 | 2,84 | 3,13 | 3,84 | 4,63 |
-|  | PostgreSQL | 0,57 | 1,58 | 1,92 | 2,40 | 3,25 |
-| `GET /students/{idx}` | Neo4j | 1,31 | 5,08 | 5,66 | 5,51 | 6,52 |
-|  | PostgreSQL | 1,13 | 1,68 | 2,33 | 2,72 | 3,48 |
-| `PUT /groups/{id}/students/{idx}/grade` | Neo4j | 0,11 | 1,83 | 2,16 | 2,42 | 3,26 |
-|  | PostgreSQL | 0,05 | 0,79 | 1,13 | 1,12 | 2,06 |
-
-![[narzut_10000.png]]
-
-**Rys. 7.2:** Udział kolejnych warstw w czasie żądania przez serwer nginx dla zapytań punktowych przy 10 000 studentów (warstwy HTTPS do API i nginx połączono, ponieważ ich osobne różnice mieszczą się w rozrzucie pomiarów)
-
-Poza katalogiem przedmiotów wykonanie zapytań w silniku stanowi jedynie 3–20% czasu żądania w Neo4j i 3–33% w PostgreSQL (tab. 7.11, rys. 7.2). Główną różnicę wprowadza sterownik: w Neo4j dodaje 0,7–1,5 ms na zapytanie (osobne transakcje automatyczne po Bolt i konwersja `native()`, 5.5.5), podczas gdy w PostgreSQL 0,2–0,7 ms dzięki jednej transakcji na żądanie i automatycznemu przygotowywaniu zapytań w `psycopg` [CYTOWANIE: https://www.psycopg.org/psycopg3/docs/advanced/prepare.html]. FastAPI wnosi 0,3–0,6 ms (w `POST /login` ponad 98% czasu zajmuje bcrypt), a uvicorn, TLS i nginx łącznie 0,9–1,6 ms w obu backendach. W efekcie zapytania punktowe w Neo4j trwają 1,4–1,9 raza dłużej mimo porównywalnych czasów silników (dla `GET /groups/{id}/students` silnik Neo4j był nawet blisko czterokrotnie szybszy). W katalogu przedmiotów (`GET /subjects`), jedynym punkcie zdominowanym przez silnik, PostgreSQL okazał się 2,5 raza szybszy.
-
-**Tab. 7.12:** Mediana czasu żądania przez serwer nginx w zależności od liczby studentów [ms]
+**Tab. 7.11:** Mediana czasu żądania przez serwer nginx w zależności od liczby studentów [ms]
 
 | Punkt końcowy | Baza | 29 | 1 000 | 3 000 | 10 000 |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -238,48 +211,17 @@ Poza katalogiem przedmiotów wykonanie zapytań w silniku stanowi jedynie 3–20
 
 ![[skala_czas.png]]
 
-**Rys. 7.3:** Mediana czasu żądania przez serwer nginx (linia ciągła) i czasu silnika (linia przerywana) w zależności od liczby studentów
+**Rys. 7.2:** Mediana czasu żądania przez serwer nginx (linia ciągła) i czasu silnika (linia przerywana) w zależności od liczby studentów
 
-![[skala_praca.png]]
+PostgreSQL odpowiadał szybciej we wszystkich porównywanych punktach końcowych: przy 10 000 studentów 1,4–1,9 raza w zapytaniach punktowych i 2,5 raza w katalogu przedmiotów (`GET /subjects`, tab. 7.11). Dziesięciokrotny wzrost liczby studentów (1 000 → 10 000) wydłużył zapytania punktowe w Neo4j najwyżej o 28%, a w PostgreSQL o 67%; czas katalogu przedmiotów wzrósł odpowiednio 5,1 i 3,8 raza (rys. 7.2). Zapytania punktowe w obu backendach mieszczą się poniżej 7 ms.
 
-**Rys. 7.4:** Względna praca bazy odniesiona do skali 1 000 studentów: *db hits* (Neo4j) oraz odczytane bloki bufora (PostgreSQL)
+Szczegółowa analiza przyczyn tych różnic wykracza poza zakres pracy. Wpływają na nie m.in. sposób przesyłania zapytań przez sterowniki oraz plany wykonania wybierane przez planistów obu baz – PostgreSQL wykonuje zapytania API jako polecenia przygotowane i po kilku wykonaniach może przejść na plan ogólny, sporządzony bez znajomości wartości parametrów [CYTOWANIE: https://www.postgresql.org/docs/current/sql-prepare.html].
 
-Dziesięciokrotny wzrost liczby studentów (1 000 → 10 000) wydłużył zapytania punktowe w Neo4j najwyżej o 28%, a w PostgreSQL o 67% (tab. 7.12, rys. 7.3). W Neo4j liczba *db hits* zapytań punktowych rośnie tylko wraz z wynikiem (rys. 7.4): w liście grup zapisów 3,6 raza, bo zapis przy 10 000 studentów otwiera 18 grup zamiast 4 (praca na zwrócony wiersz pozostaje stała), a w opiniach 1,6 raza przy 14 opiniach zamiast 9. W PostgreSQL odczytane bloki rosną 1,1–3,3 raza, przy czym planista częściej wybiera dostęp przez indeks (`Seq Scan` 17 → 11, `Index Only Scan` 11 → 15 we wszystkich planach). W katalogu przedmiotów czas silnika wzrósł siedmiokrotnie w Neo4j (11,6× więcej *db hits* przez zagnieżdżone podzapytania na komórkę siatki, 5.4.3) i pięciokrotnie w PostgreSQL (3,1× więcej bloków dzięki `Hash Join`).
+7.8.3 Import i rozmiar baz
 
-7.8.3 Diagnostyka zapytań
+Rozmiar Neo4j (tab. 7.12) zmierzono po `CALL db.checkpoint()`, bez wstępnie przydzielonego dziennika transakcji (256 MiB).
 
-Jednostki pracy bazy w diagnostyce (tab. 7.13) są różne (*db hits* w Neo4j, 8-kilobajtowe bloki bufora w PostgreSQL) i należy je porównywać wyłącznie w obrębie jednego silnika.
-
-**Tab. 7.13:** Wyniki diagnostyki zapytań dla skali 10 000 studentów (sumy po zapytaniach punktu końcowego)
-
-| Punkt końcowy | Baza | Wzorce krawędzi / złączenia | Praca | Pamięć [kB] | Maks. błąd oszacowania |
-| --- | --- | ---: | ---: | ---: | ---: |
-| `POST /login` | Neo4j | 0 | 4 | 0 | 1 |
-|  | PostgreSQL | 4 | 9 | 4 | 1 |
-| `GET /subjects` | Neo4j | 16 | 822 402 | 168 | 3,3 |
-|  | PostgreSQL | 10 | 53 363 | 379 | 8,8 |
-| `GET /opinions` | Neo4j | 6 | 382 | 5 | 14 |
-|  | PostgreSQL | 6 | 242 | 32 | 14 |
-| `GET /me/registrations/{id}/groups` | Neo4j | 10 | 461 | 8 | 18 |
-|  | PostgreSQL | 6 | 353 | 676 | 18 |
-| `GET /groups/{id}/students` | Neo4j | 2 | 210 | 5 | 10 |
-|  | PostgreSQL | 4 | 210 | 284 | 1,9 |
-| `GET /students/{idx}` | Neo4j | 11 | 2 742 | 45 | 49 |
-|  | PostgreSQL | 11 | 1 843 | 41 | 49 |
-| `PUT /groups/{id}/students/{idx}/grade` | Neo4j | 2 | 87 | 1 | 10 |
-|  | PostgreSQL | 0 | 14 | 13 | 1 |
-
-Liczba wzorców krawędzi w Cypher i złączeń w SQL jest zbliżona: Neo4j wygrywa w logowaniu dzięki wieloetykietowości (0 wobec 4 `LEFT JOIN`, 5.4.2, 6.2.2), natomiast w zapisie oceny tabela `registered_in` z kluczem złożonym obywa się bez złączeń. Zużycie pamięci nie przekracza 0,7 MB. Planowanie w PostgreSQL trwało 0,004–0,02 ms dla zapytań wykonywanych z planem ogólnym z pamięci podręcznej i do 1 ms tam, gdzie planista pozostał przy planach dla konkretnych parametrów (lista grup zapisów, lista studentów grupy). Największy błąd oszacowania (49×) wystąpił w ocenach studenta; planista Neo4j nie utrzymuje histogramów wartości właściwości [CYTOWANIE: https://neo4j.com/docs/cypher-manual/current/planning-and-tuning/execution-plans/], a plan ogólny PostgreSQL powstaje bez wartości parametrów.
-
-Diagnostyka ujawniła ten sam błąd wydajnościowy `GET /opinions` w obu backendach (5.5.9): warunek `$x IS NULL OR ...` na obu kolumnach filtra nie pozwala planiście wybrać indeksu, jeśli nie zna wartości parametrów. W Neo4j skutkował pełnym skanem `NodeByLabelScan`; po rozdzieleniu zapytania na warianty dla prowadzącego i grupy (`NodeUniqueIndexSeek`) praca przy 10 000 studentów spadła z 2 227 do 382 *db hits*, błąd oszacowania z 692 do 14, a czas przez nginx z 4,61 do 3,31 ms. W PostgreSQL problem ujawnił się dopiero przy pomiarze na poleceniu przygotowanym: plan ogólny przeglądał całą tabelę `opinion` (`Seq Scan`). Po analogicznym rozdzieleniu zapytania plan korzysta z indeksów, a czas silnika spadł z 0,42 do 0,15 ms, czas przez nginx z 2,28 do 1,93 ms.
-
-Diagnostyka wskazuje też miejsce dalszej optymalizacji w Neo4j: sprawdzenie ReBAC w `GET /students/{idx}` (`Teacher → TEACHES → Group ← REGISTERED_IN ← Student`) rozwija krawędzie od prowadzącego, przeglądając studentów wszystkich jego grup (ok. 1 000 *db hits* przy 10 000 studentów dla jednego zwróconego wiersza). Rozpoczęcie dopasowania od obu końców wzorca ograniczyłoby pracę do grup jednego studenta.
-
-7.8.4 Import, rozmiar baz oraz rozszerzenie sterownika Neo4j
-
-Rozmiar Neo4j (tab. 7.14) zmierzono po `CALL db.checkpoint()`, bez wstępnie przydzielonego dziennika transakcji (256 MiB).
-
-**Tab. 7.14:** Czas importu danych przy pierwszym uruchomieniu oraz rozmiar baz na dysku
+**Tab. 7.12:** Czas importu danych przy pierwszym uruchomieniu oraz rozmiar baz na dysku
 
 | Studentów | Import Neo4j przed poprawką [s] | Import Neo4j [s] | Import PostgreSQL [s] | Rozmiar Neo4j [MB] | Rozmiar PostgreSQL [MB] | w tym indeksy PostgreSQL [MB] |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -290,26 +232,10 @@ Rozmiar Neo4j (tab. 7.14) zmierzono po `CALL db.checkpoint()`, bez wstępnie prz
 
 ![[import.png]]
 
-**Rys. 7.5:** Czas importu danych do obu baz w zależności od liczby studentów
+**Rys. 7.3:** Czas importu danych do obu baz w zależności od liczby studentów
 
-Pierwsze pomiary wykazały kwadratowy wzrost czasu importu do Neo4j (do 851,9 s dla 10 000 studentów, druga kolumna tab. 7.14). Pomiar czasu poszczególnych instrukcji wskazał krawędzie studentów: wyszukanie `(:Student {idx: ...})` w trakcie importu nie korzystało z indeksu klucza zdefiniowanego dla `Person`, ponieważ planista planował zapytanie na statystykach pustej bazy. Jawne wskazanie indeksu (5.3.3) skróciło import do 14,2 s. Zamiana `MERGE` na `CREATE` nie dała natomiast mierzalnego zysku (5,5 wobec 5,9 s przy 3 000 studentów), więc import pozostał bezpieczny do powtarzania przy każdym starcie. Czas importu Neo4j obejmuje też połączenie z bazą, utworzenie typu grafu i konta API, dlatego przy małych zbiorach przekracza czas `COPY` w PostgreSQL, rosnącego liniowo z danymi. Baza grafowa zajmuje 3,6 raza mniej miejsca na dysku niż PostgreSQL, w którym połowę rozmiaru (62 MB) stanowią indeksy.
+Pierwsza wersja importu do Neo4j wydłużała się kwadratowo z rozmiarem danych (851,9 s dla 10 000 studentów, druga kolumna tab. 7.12), ponieważ wyszukiwanie studentów przy tworzeniu krawędzi nie korzystało z indeksu. Po wskazaniu indeksu w instrukcjach importu (5.3.3) czas spadł do 14,2 s. Zamiana `MERGE` na `CREATE` nie dała mierzalnego zysku (5,5 wobec 5,9 s przy 3 000 studentów), więc import pozostał bezpieczny do powtarzania przy każdym starcie. Czas importu Neo4j obejmuje też połączenie z bazą, utworzenie typu grafu i konta API, dlatego przy małych zbiorach przekracza czas `COPY` w PostgreSQL, rosnącego liniowo z danymi. Baza grafowa zajmuje 3,6 raza mniej miejsca na dysku niż PostgreSQL, w którym połowę rozmiaru (62 MB) stanowią indeksy.
 
-Dodatkowo przetestowano (`bench/rust_ext.py`) rozszerzenie `neo4j-rust-ext` 6.2.0.0 [CYTOWANIE: https://pypi.org/project/neo4j-rust-ext/], przyspieszające kodowanie i dekodowanie PackStream w języku Rust (tab. 7.15). Oba warianty zmierzono w jednym przebiegu na tej samej bazie; wartości bezwzględne różnią się od tab. 7.11 o rozrzut między niezależnymi przebiegami (dla warstwy sterownika Neo4j do ok. 0,5 ms), dlatego porównywać należy wyłącznie warianty między sobą.
+7.8.4 Podsumowanie porównania
 
-**Tab. 7.15:** Mediana czasu wykonania w Neo4j bez rozszerzenia `neo4j-rust-ext` i z nim [ms]
-
-| Punkt końcowy | 1 000 studentów: sterownik | 1 000: FastAPI | 10 000 studentów: sterownik | 10 000: FastAPI |
-| --- | ---: | ---: | ---: | ---: |
-| `POST /login` | 0,49 → 0,49 | 178,51 → 178,04 | 0,51 → 0,45 | 178,90 → 178,23 |
-| `GET /subjects` | 30,33 → 26,57 | 40,69 → 34,17 | 161,02 → 147,66 | 167,62 → 160,75 |
-| `GET /opinions` | 0,88 → 0,69 | 1,32 → 1,04 | 1,37 → 1,08 | 1,60 → 1,50 |
-| `GET /me/registrations/{id}/groups` | 1,15 → 0,85 | 1,55 → 1,22 | 2,32 → 2,08 | 2,76 → 2,43 |
-| `GET /groups/{id}/students` | 1,67 → 1,31 | 1,93 → 1,71 | 2,34 → 2,01 | 2,87 → 2,50 |
-| `GET /students/{idx}` | 2,85 → 2,33 | 3,44 → 2,89 | 3,12 → 2,90 | 3,96 → 3,37 |
-| `PUT /groups/{id}/students/{idx}/grade` | 1,27 → 1,15 | 1,75 → 1,50 | 1,28 → 1,11 | 1,86 → 1,62 |
-
-Rozszerzenie obniżyło czas sterownika o 0,1–0,5 ms dla zapytań punktowych i o 4–13 ms (8–12%) dla katalogu, przy niezmienionym czasie silnika. Narzut sterownika ponad silnik pozostał jednak większy niż w PostgreSQL (0,6–1,8 wobec 0,2–1,3 ms na punkt końcowy) z powodu osobnych transakcji automatycznych i konwersji `native()` (5.5.5).
-
-7.8.5 Podsumowanie porównania
-
-W zapytaniach punktowych oba silniki działają poniżej 1,5 ms, a o czasie odpowiedzi decydują warstwy pośredniczące; końcowo PostgreSQL okazał się 1,4–1,9 raza szybszy w zapytaniach punktowych i 2,5 raza szybszy w agregującym katalogu przedmiotów. Neo4j zachowuje stałą pracę na zwrócony wiersz w zapytaniach lokalnych, mniejszy rozmiar na dysku i krótsze zapytania korzystające z wieloetykietowości, jednak indeksy w PostgreSQL zapewniły porównywalne skalowanie, przy silniejszych ograniczeniach schematu (6.2.3, 7.5.1). Pomiary ujawniły przy tym trzy problemy wynikające ze sposobu planowania zapytań – kwadratowy czas importu do Neo4j, pełne skany w opiniach w obu backendach oraz kompilację JIT zawyżającą pomiar w PostgreSQL – co pokazuje, że wnioski o wydajności wymagają analizy planów, a nie wyłącznie czasu odpowiedzi.
+PostgreSQL okazał się 1,4–1,9 raza szybszy w zapytaniach punktowych i 2,5 raza szybszy w agregującym katalogu przedmiotów. Przy 10 000 studentów oba backendy odpowiadają na zapytania punktowe w czasie kilku milisekund, więc dla skali uczelni różnica nie wpływa na użyteczność systemu. Neo4j zajmuje mniej miejsca na dysku i pozwala na krótsze zapytania dzięki wieloetykietowości, natomiast PostgreSQL zapewnia silniejsze ograniczenia schematu (6.2.3, 7.5.1).

@@ -1,0 +1,648 @@
+# GET /opinions: wersja pierwotna (IS NULL OR) i po rozdzieleniu - 10000 studentów
+# prowadzący T010042 (14 opinii), group_id = NULL (jak w pomiarach)
+
+####################################################################################################
+# PostgreSQL
+####################################################################################################
+====================================================================================================
+## opinions_old
+parametry: {"teacher_idx": "T010042", "group_id": null}
+zapytanie:
+SELECT
+  o.id,
+  o.grade::float8 AS grade,
+  oc.content,
+  (o.submit AT TIME ZONE 'Europe/Warsaw')::date AS submit,
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type,
+  ac.year || ' ' || ac.season AS cycle,
+  tp.idx AS teacher_idx,
+  tp.name || ' ' || tp.surname AS teacher
+FROM opinion o
+LEFT JOIN opinion_content oc ON oc.opinion_id = o.id
+JOIN class_group g ON g.id = o.group_id
+JOIN person tp ON tp.idx = o.teacher_idx
+JOIN group_type gt ON gt.id = g.group_type_id
+JOIN subject su ON su.code = gt.subject_code
+JOIN academic_cycle ac ON ac.id = gt.cycle_id
+WHERE (%(teacher_idx)s::text IS NULL OR o.teacher_idx = %(teacher_idx)s)
+  AND (%(group_id)s::text IS NULL OR o.group_id = %(group_id)s)
+ORDER BY o.submit DESC
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 211.66, API 149.81, generic 149.81
+czas planowania [ms]: custom 1.049, API 0.003
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.267, API 0.356, generic 0.346
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Sort  (cost=211.62..211.66 rows=14 width=224) (actual time=0.645..0.648 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=176
+  ->  Nested Loop  (cost=16.20..211.36 rows=14 width=224) (actual time=0.084..0.635 rows=14.00 loops=1)
+        Buffers: shared hit=176
+        ->  Nested Loop  (cost=16.06..209.62 rows=14 width=205) (actual time=0.068..0.592 rows=14.00 loops=1)
+              Buffers: shared hit=168
+              ->  Nested Loop  (cost=15.78..205.27 rows=14 width=185) (actual time=0.062..0.547 rows=14.00 loops=1)
+                    Buffers: shared hit=126
+                    ->  Nested Loop  (cost=15.51..200.93 rows=14 width=173) (actual time=0.056..0.505 rows=14.00 loops=1)
+                          Buffers: shared hit=84
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.007..0.009 rows=1.00 loops=1)
+                                Index Cond: (idx = 'T010042'::text)
+                                Index Searches: 1
+                                Buffers: shared hit=3
+                          ->  Nested Loop  (cost=15.22..192.49 rows=14 width=159) (actual time=0.047..0.493 rows=14.00 loops=1)
+                                Buffers: shared hit=81
+                                ->  Hash Right Join  (cost=14.94..80.25 rows=14 width=122) (actual time=0.037..0.437 rows=14.00 loops=1)
+                                      Hash Cond: (oc.opinion_id = o.id)
+                                      Buffers: shared hit=39
+                                      ->  Seq Scan on opinion_content oc  (cost=0.00..58.38 rows=2638 width=64) (actual time=0.006..0.144 rows=2638.00 loops=1)
+                                            Buffers: shared hit=32
+                                      ->  Hash  (cost=14.76..14.76 rows=14 width=95) (actual time=0.023..0.023 rows=14.00 loops=1)
+                                            Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                            Buffers: shared hit=7
+                                            ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..14.76 rows=14 width=95) (actual time=0.009..0.017 rows=14.00 loops=1)
+                                                  Index Cond: (teacher_idx = 'T010042'::text)
+                                                  Index Searches: 1
+                                                  Buffers: shared hit=7
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.02 rows=1 width=74) (actual time=0.003..0.003 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.002..0.002 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.003..0.003 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Memoize  (cost=0.14..0.17 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=14)
+              Cache Key: gt.cycle_id
+              Cache Mode: logical
+              Hits: 10  Misses: 4  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+              Buffers: shared hit=8
+              ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.002..0.002 rows=1.00 loops=4)
+                    Index Cond: (id = gt.cycle_id)
+                    Index Searches: 4
+                    Buffers: shared hit=8
+Planning:
+  Buffers: shared hit=52
+Planning Time: 1.049 ms
+Execution Time: 0.705 ms
+
+--- plan używany przez API
+Sort  (cost=149.80..149.81 rows=1 width=224) (actual time=0.338..0.340 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=287
+  ->  Nested Loop  (cost=1.40..149.79 rows=1 width=224) (actual time=0.021..0.334 rows=14.00 loops=1)
+        Join Filter: (gt.cycle_id = ac.id)
+        Rows Removed by Join Filter: 61
+        Buffers: shared hit=287
+        ->  Nested Loop  (cost=1.40..148.59 rows=1 width=205) (actual time=0.017..0.306 rows=14.00 loops=1)
+              Buffers: shared hit=273
+              ->  Nested Loop  (cost=1.13..148.28 rows=1 width=185) (actual time=0.015..0.283 rows=14.00 loops=1)
+                    Buffers: shared hit=231
+                    ->  Nested Loop  (cost=0.85..147.97 rows=1 width=173) (actual time=0.013..0.264 rows=14.00 loops=1)
+                          Buffers: shared hit=189
+                          ->  Nested Loop  (cost=0.57..139.67 rows=1 width=159) (actual time=0.011..0.240 rows=14.00 loops=1)
+                                Buffers: shared hit=147
+                                ->  Nested Loop Left Join  (cost=0.28..131.36 rows=1 width=122) (actual time=0.008..0.220 rows=14.00 loops=1)
+                                      Buffers: shared hit=105
+                                      ->  Seq Scan on opinion o  (cost=0.00..123.06 rows=1 width=95) (actual time=0.004..0.195 rows=14.00 loops=1)
+                                            Filter: ((($1 IS NULL) OR (teacher_idx = $1)) AND (($2 IS NULL) OR (group_id = $2)))
+                                            Rows Removed by Filter: 3790
+                                            Buffers: shared hit=66
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.001..0.001 rows=0.79 loops=14)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 14
+                                            Buffers: shared hit=39
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                Index Cond: (idx = o.teacher_idx)
+                                Index Searches: 14
+                                Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.001..0.001 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.001..0.001 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Seq Scan on academic_cycle ac  (cost=0.00..1.08 rows=8 width=47) (actual time=0.000..0.000 rows=5.36 loops=14)
+              Buffers: shared hit=14
+Planning Time: 0.003 ms
+Execution Time: 0.361 ms
+
+--- plan ogólny (wymuszony)
+Sort  (cost=149.80..149.81 rows=1 width=224) (actual time=0.336..0.337 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=287
+  ->  Nested Loop  (cost=1.40..149.79 rows=1 width=224) (actual time=0.022..0.331 rows=14.00 loops=1)
+        Join Filter: (gt.cycle_id = ac.id)
+        Rows Removed by Join Filter: 61
+        Buffers: shared hit=287
+        ->  Nested Loop  (cost=1.40..148.59 rows=1 width=205) (actual time=0.018..0.303 rows=14.00 loops=1)
+              Buffers: shared hit=273
+              ->  Nested Loop  (cost=1.13..148.28 rows=1 width=185) (actual time=0.016..0.280 rows=14.00 loops=1)
+                    Buffers: shared hit=231
+                    ->  Nested Loop  (cost=0.85..147.97 rows=1 width=173) (actual time=0.014..0.262 rows=14.00 loops=1)
+                          Buffers: shared hit=189
+                          ->  Nested Loop  (cost=0.57..139.67 rows=1 width=159) (actual time=0.011..0.238 rows=14.00 loops=1)
+                                Buffers: shared hit=147
+                                ->  Nested Loop Left Join  (cost=0.28..131.36 rows=1 width=122) (actual time=0.009..0.216 rows=14.00 loops=1)
+                                      Buffers: shared hit=105
+                                      ->  Seq Scan on opinion o  (cost=0.00..123.06 rows=1 width=95) (actual time=0.005..0.193 rows=14.00 loops=1)
+                                            Filter: ((($1 IS NULL) OR (teacher_idx = $1)) AND (($2 IS NULL) OR (group_id = $2)))
+                                            Rows Removed by Filter: 3790
+                                            Buffers: shared hit=66
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.001..0.001 rows=0.79 loops=14)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 14
+                                            Buffers: shared hit=39
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                Index Cond: (idx = o.teacher_idx)
+                                Index Searches: 14
+                                Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.001..0.001 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.001..0.001 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Seq Scan on academic_cycle ac  (cost=0.00..1.08 rows=8 width=47) (actual time=0.000..0.000 rows=5.36 loops=14)
+              Buffers: shared hit=14
+Planning Time: 0.004 ms
+Execution Time: 0.361 ms
+
+====================================================================================================
+## opinions_new
+parametry: {"teacher_idx": "T010042", "group_id": null}
+zapytanie:
+SELECT
+  o.id,
+  o.grade::float8 AS grade,
+  oc.content,
+  -- Only the day: with the exact time a teacher could match an opinion to a student of a small group.
+  (o.submit AT TIME ZONE 'Europe/Warsaw')::date AS submit,
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type,
+  ac.year || ' ' || ac.season AS cycle,
+  tp.idx AS teacher_idx,
+  tp.name || ' ' || tp.surname AS teacher
+FROM opinion o
+LEFT JOIN opinion_content oc ON oc.opinion_id = o.id
+JOIN class_group g ON g.id = o.group_id
+JOIN person tp ON tp.idx = o.teacher_idx
+JOIN group_type gt ON gt.id = g.group_type_id
+JOIN subject su ON su.code = gt.subject_code
+JOIN academic_cycle ac ON ac.id = gt.cycle_id
+
+WHERE o.teacher_idx = %(teacher_idx)s
+  AND (%(group_id)s::text IS NULL OR o.group_id = %(group_id)s)
+ORDER BY o.submit DESC
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 211.66, API 35.66, generic 35.66
+czas planowania [ms]: custom 0.711, API 0.003
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.266, API 0.159, generic 0.180
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Sort  (cost=211.62..211.66 rows=14 width=224) (actual time=0.453..0.456 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=176
+  ->  Nested Loop  (cost=16.20..211.36 rows=14 width=224) (actual time=0.043..0.447 rows=14.00 loops=1)
+        Buffers: shared hit=176
+        ->  Nested Loop  (cost=16.06..209.62 rows=14 width=205) (actual time=0.036..0.420 rows=14.00 loops=1)
+              Buffers: shared hit=168
+              ->  Nested Loop  (cost=15.78..205.27 rows=14 width=185) (actual time=0.033..0.389 rows=14.00 loops=1)
+                    Buffers: shared hit=126
+                    ->  Nested Loop  (cost=15.51..200.93 rows=14 width=173) (actual time=0.029..0.360 rows=14.00 loops=1)
+                          Buffers: shared hit=84
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.005..0.005 rows=1.00 loops=1)
+                                Index Cond: (idx = 'T010042'::text)
+                                Index Searches: 1
+                                Buffers: shared hit=3
+                          ->  Nested Loop  (cost=15.22..192.49 rows=14 width=159) (actual time=0.023..0.352 rows=14.00 loops=1)
+                                Buffers: shared hit=81
+                                ->  Hash Right Join  (cost=14.94..80.25 rows=14 width=122) (actual time=0.018..0.315 rows=14.00 loops=1)
+                                      Hash Cond: (oc.opinion_id = o.id)
+                                      Buffers: shared hit=39
+                                      ->  Seq Scan on opinion_content oc  (cost=0.00..58.38 rows=2638 width=64) (actual time=0.003..0.106 rows=2638.00 loops=1)
+                                            Buffers: shared hit=32
+                                      ->  Hash  (cost=14.76..14.76 rows=14 width=95) (actual time=0.011..0.011 rows=14.00 loops=1)
+                                            Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                            Buffers: shared hit=7
+                                            ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..14.76 rows=14 width=95) (actual time=0.004..0.007 rows=14.00 loops=1)
+                                                  Index Cond: (teacher_idx = 'T010042'::text)
+                                                  Index Searches: 1
+                                                  Buffers: shared hit=7
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.02 rows=1 width=74) (actual time=0.002..0.002 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.002..0.002 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.002..0.002 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Memoize  (cost=0.14..0.17 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=14)
+              Cache Key: gt.cycle_id
+              Cache Mode: logical
+              Hits: 10  Misses: 4  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+              Buffers: shared hit=8
+              ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=4)
+                    Index Cond: (id = gt.cycle_id)
+                    Index Searches: 4
+                    Buffers: shared hit=8
+Planning:
+  Buffers: shared hit=52
+Planning Time: 0.711 ms
+Execution Time: 0.488 ms
+
+--- plan używany przez API
+Sort  (cost=35.65..35.66 rows=1 width=224) (actual time=0.175..0.176 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=242
+  ->  Nested Loop  (cost=1.81..35.64 rows=1 width=224) (actual time=0.022..0.170 rows=14.00 loops=1)
+        Buffers: shared hit=242
+        ->  Nested Loop  (cost=1.68..35.46 rows=1 width=205) (actual time=0.018..0.145 rows=14.00 loops=1)
+              Buffers: shared hit=214
+              ->  Nested Loop  (cost=1.41..35.15 rows=1 width=185) (actual time=0.016..0.117 rows=14.00 loops=1)
+                    Buffers: shared hit=172
+                    ->  Nested Loop  (cost=1.13..34.84 rows=1 width=173) (actual time=0.014..0.095 rows=14.00 loops=1)
+                          Buffers: shared hit=130
+                          ->  Nested Loop  (cost=0.85..26.53 rows=1 width=159) (actual time=0.011..0.064 rows=14.00 loops=1)
+                                Buffers: shared hit=88
+                                ->  Nested Loop Left Join  (cost=0.56..18.22 rows=1 width=122) (actual time=0.008..0.040 rows=14.00 loops=1)
+                                      Buffers: shared hit=46
+                                      ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..9.92 rows=1 width=95) (actual time=0.006..0.009 rows=14.00 loops=1)
+                                            Index Cond: (teacher_idx = $1)
+                                            Filter: (($2 IS NULL) OR (group_id = $2))
+                                            Index Searches: 1
+                                            Buffers: shared hit=7
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.002..0.002 rows=0.79 loops=14)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 14
+                                            Buffers: shared hit=39
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.002..0.002 rows=1.00 loops=14)
+                                Index Cond: (idx = $1)
+                                Index Searches: 14
+                                Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.001..0.001 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.002..0.002 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=14)
+              Index Cond: (id = gt.cycle_id)
+              Index Searches: 14
+              Buffers: shared hit=28
+Planning Time: 0.003 ms
+Execution Time: 0.201 ms
+
+--- plan ogólny (wymuszony)
+Sort  (cost=35.65..35.66 rows=1 width=224) (actual time=0.139..0.140 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=242
+  ->  Nested Loop  (cost=1.81..35.64 rows=1 width=224) (actual time=0.020..0.134 rows=14.00 loops=1)
+        Buffers: shared hit=242
+        ->  Nested Loop  (cost=1.68..35.46 rows=1 width=205) (actual time=0.016..0.114 rows=14.00 loops=1)
+              Buffers: shared hit=214
+              ->  Nested Loop  (cost=1.41..35.15 rows=1 width=185) (actual time=0.014..0.092 rows=14.00 loops=1)
+                    Buffers: shared hit=172
+                    ->  Nested Loop  (cost=1.13..34.84 rows=1 width=173) (actual time=0.012..0.074 rows=14.00 loops=1)
+                          Buffers: shared hit=130
+                          ->  Nested Loop  (cost=0.85..26.53 rows=1 width=159) (actual time=0.010..0.049 rows=14.00 loops=1)
+                                Buffers: shared hit=88
+                                ->  Nested Loop Left Join  (cost=0.56..18.22 rows=1 width=122) (actual time=0.008..0.029 rows=14.00 loops=1)
+                                      Buffers: shared hit=46
+                                      ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..9.92 rows=1 width=95) (actual time=0.005..0.008 rows=14.00 loops=1)
+                                            Index Cond: (teacher_idx = $1)
+                                            Filter: (($2 IS NULL) OR (group_id = $2))
+                                            Index Searches: 1
+                                            Buffers: shared hit=7
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.001..0.001 rows=0.79 loops=14)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 14
+                                            Buffers: shared hit=39
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.001..0.002 rows=1.00 loops=14)
+                                Index Cond: (idx = $1)
+                                Index Searches: 14
+                                Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.001..0.001 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.001..0.001 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=14)
+              Index Cond: (id = gt.cycle_id)
+              Index Searches: 14
+              Buffers: shared hit=28
+Planning Time: 0.005 ms
+Execution Time: 0.169 ms
+
+# wersja pierwotna dla prowadzącego z najmniejszą liczbą opinii: T010005 (1 opinii)
+====================================================================================================
+## opinions_old_few
+parametry: {"teacher_idx": "T010005", "group_id": null}
+zapytanie:
+SELECT
+  o.id,
+  o.grade::float8 AS grade,
+  oc.content,
+  (o.submit AT TIME ZONE 'Europe/Warsaw')::date AS submit,
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type,
+  ac.year || ' ' || ac.season AS cycle,
+  tp.idx AS teacher_idx,
+  tp.name || ' ' || tp.surname AS teacher
+FROM opinion o
+LEFT JOIN opinion_content oc ON oc.opinion_id = o.id
+JOIN class_group g ON g.id = o.group_id
+JOIN person tp ON tp.idx = o.teacher_idx
+JOIN group_type gt ON gt.id = g.group_type_id
+JOIN subject su ON su.code = gt.subject_code
+JOIN academic_cycle ac ON ac.id = gt.cycle_id
+WHERE (%(teacher_idx)s::text IS NULL OR o.teacher_idx = %(teacher_idx)s)
+  AND (%(group_id)s::text IS NULL OR o.group_id = %(group_id)s)
+ORDER BY o.submit DESC
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 6/0 7/0 8/0 9/0 10/0; po EXPLAIN EXECUTE: 11/0
+koszt planu: custom 87.90, API 87.90, generic 149.81
+czas planowania [ms]: custom 0.571, API 0.552
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.040, API 0.040, generic 0.228
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Sort  (cost=87.89..87.90 rows=4 width=224) (actual time=0.068..0.069 rows=1.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=19 read=1
+  ->  Nested Loop  (cost=1.81..87.85 rows=4 width=224) (actual time=0.065..0.067 rows=1.00 loops=1)
+        Buffers: shared hit=19 read=1
+        ->  Nested Loop  (cost=1.68..87.14 rows=4 width=205) (actual time=0.061..0.063 rows=1.00 loops=1)
+              Buffers: shared hit=17 read=1
+              ->  Nested Loop  (cost=1.41..85.90 rows=4 width=185) (actual time=0.059..0.060 rows=1.00 loops=1)
+                    Buffers: shared hit=14 read=1
+                    ->  Nested Loop  (cost=1.13..84.66 rows=4 width=173) (actual time=0.055..0.057 rows=1.00 loops=1)
+                          Buffers: shared hit=11 read=1
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.003..0.004 rows=1.00 loops=1)
+                                Index Cond: (idx = 'T010005'::text)
+                                Index Searches: 1
+                                Buffers: shared hit=3
+                          ->  Nested Loop  (cost=0.85..76.32 rows=4 width=159) (actual time=0.051..0.052 rows=1.00 loops=1)
+                                Buffers: shared hit=8 read=1
+                                ->  Nested Loop Left Join  (cost=0.56..43.11 rows=4 width=122) (actual time=0.007..0.007 rows=1.00 loops=1)
+                                      Buffers: shared hit=6
+                                      ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..9.91 rows=4 width=95) (actual time=0.003..0.003 rows=1.00 loops=1)
+                                            Index Cond: (teacher_idx = 'T010005'::text)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.003..0.003 rows=1.00 loops=1)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.044..0.044 rows=1.00 loops=1)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 1
+                                      Buffers: shared hit=2 read=1
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.003..0.003 rows=1.00 loops=1)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.002..0.002 rows=1.00 loops=1)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 1
+                    Buffers: shared hit=3
+        ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=1)
+              Index Cond: (id = gt.cycle_id)
+              Index Searches: 1
+              Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=52
+Planning Time: 0.571 ms
+Execution Time: 0.091 ms
+
+--- plan używany przez API
+Sort  (cost=87.89..87.90 rows=4 width=224) (actual time=0.022..0.022 rows=1.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=20
+  ->  Nested Loop  (cost=1.81..87.85 rows=4 width=224) (actual time=0.019..0.021 rows=1.00 loops=1)
+        Buffers: shared hit=20
+        ->  Nested Loop  (cost=1.68..87.14 rows=4 width=205) (actual time=0.015..0.017 rows=1.00 loops=1)
+              Buffers: shared hit=18
+              ->  Nested Loop  (cost=1.41..85.90 rows=4 width=185) (actual time=0.013..0.014 rows=1.00 loops=1)
+                    Buffers: shared hit=15
+                    ->  Nested Loop  (cost=1.13..84.66 rows=4 width=173) (actual time=0.011..0.012 rows=1.00 loops=1)
+                          Buffers: shared hit=12
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.004..0.004 rows=1.00 loops=1)
+                                Index Cond: (idx = 'T010005'::text)
+                                Index Searches: 1
+                                Buffers: shared hit=3
+                          ->  Nested Loop  (cost=0.85..76.32 rows=4 width=159) (actual time=0.007..0.008 rows=1.00 loops=1)
+                                Buffers: shared hit=9
+                                ->  Nested Loop Left Join  (cost=0.56..43.11 rows=4 width=122) (actual time=0.005..0.006 rows=1.00 loops=1)
+                                      Buffers: shared hit=6
+                                      ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..9.91 rows=4 width=95) (actual time=0.002..0.002 rows=1.00 loops=1)
+                                            Index Cond: (teacher_idx = 'T010005'::text)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.002..0.002 rows=1.00 loops=1)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.002..0.002 rows=1.00 loops=1)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 1
+                                      Buffers: shared hit=3
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.001..0.001 rows=1.00 loops=1)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.002..0.002 rows=1.00 loops=1)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 1
+                    Buffers: shared hit=3
+        ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=1)
+              Index Cond: (id = gt.cycle_id)
+              Index Searches: 1
+              Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=52
+Planning Time: 0.552 ms
+Execution Time: 0.042 ms
+
+--- plan ogólny (wymuszony)
+Sort  (cost=149.80..149.81 rows=1 width=224) (actual time=0.247..0.248 rows=1.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=82
+  ->  Nested Loop  (cost=1.40..149.79 rows=1 width=224) (actual time=0.032..0.246 rows=1.00 loops=1)
+        Join Filter: (gt.cycle_id = ac.id)
+        Rows Removed by Join Filter: 4
+        Buffers: shared hit=82
+        ->  Nested Loop  (cost=1.40..148.59 rows=1 width=205) (actual time=0.027..0.241 rows=1.00 loops=1)
+              Buffers: shared hit=81
+              ->  Nested Loop  (cost=1.13..148.28 rows=1 width=185) (actual time=0.025..0.238 rows=1.00 loops=1)
+                    Buffers: shared hit=78
+                    ->  Nested Loop  (cost=0.85..147.97 rows=1 width=173) (actual time=0.023..0.236 rows=1.00 loops=1)
+                          Buffers: shared hit=75
+                          ->  Nested Loop  (cost=0.57..139.67 rows=1 width=159) (actual time=0.020..0.233 rows=1.00 loops=1)
+                                Buffers: shared hit=72
+                                ->  Nested Loop Left Join  (cost=0.28..131.36 rows=1 width=122) (actual time=0.018..0.230 rows=1.00 loops=1)
+                                      Buffers: shared hit=69
+                                      ->  Seq Scan on opinion o  (cost=0.00..123.06 rows=1 width=95) (actual time=0.013..0.226 rows=1.00 loops=1)
+                                            Filter: ((($1 IS NULL) OR (teacher_idx = $1)) AND (($2 IS NULL) OR (group_id = $2)))
+                                            Rows Removed by Filter: 3803
+                                            Buffers: shared hit=66
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.003..0.003 rows=1.00 loops=1)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.002..0.002 rows=1.00 loops=1)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 1
+                                      Buffers: shared hit=3
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.002..0.002 rows=1.00 loops=1)
+                                Index Cond: (idx = o.teacher_idx)
+                                Index Searches: 1
+                                Buffers: shared hit=3
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.002..0.002 rows=1.00 loops=1)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.002..0.002 rows=1.00 loops=1)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 1
+                    Buffers: shared hit=3
+        ->  Seq Scan on academic_cycle ac  (cost=0.00..1.08 rows=8 width=47) (actual time=0.002..0.002 rows=5.00 loops=1)
+              Buffers: shared hit=1
+Planning Time: 0.005 ms
+Execution Time: 0.275 ms
+
+####################################################################################################
+# Neo4j (PROFILE, plan z pamięci podręcznej)
+####################################################################################################
+====================================================================================================
+## opinions_old
+parametry: {"teacher_idx": "T010042", "group_id": null}
+zapytanie:
+MATCH (o:Opinion)-[:ABOUT]->(g:Group), (o)-[:ABOUT_TEACHER]->(t:Teacher)
+WHERE ($teacher_idx IS NULL OR t.idx = $teacher_idx)
+  AND ($group_id IS NULL OR g.id = $group_id)
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+RETURN
+  o.id AS id,
+  o.grade AS grade,
+  o.content AS content,
+  date(o.submit) AS submit,
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type AS g_type,
+  ac.year + " " + ac.season AS cycle,
+  t.idx AS teacher_idx,
+  t.name + " " + t.surname AS teacher
+ORDER BY o.submit DESC
+
+wiersze 14, db hits 2227, maks. błąd oszacowania 692.3, mediana czasu silnika 1.254 ms
+
++ProduceResults  | id, grade, content, submit, group_id, course_code, course_name, g_type, cycle, teacher_idx, teacher  | est. rows 2140 | rows 14 | db hits 0
+  +Projection  | (cache[t.name] + $autostring_1) + cache[t.surname] AS teacher, cache[o.id] AS id, (cache[ac.year] + $autostring_0) + cache[ac.season] AS cycle, date(cache[o.submit]) AS submit, cache[o.grade] AS grade, gt.g_type AS g_type, cache[o.content] AS content, cache[su.name] AS course_name, cache[g.id] AS group_id, cache[su.code] AS course_code, cache[t.idx] AS teacher_idx  | est. rows 2140 | rows 14 | db hits 59
+    +CacheProperties  | cache[o.id], cache[ac.year], cache[ac.season], cache[o.content], cache[su.code], cache[o.grade], cache[su.name]  | est. rows 2140 | rows 14 | db hits 137
+      +Sort  | `o.submit` DESC  | est. rows 2140 | rows 14 | db hits 0
+        +Projection  | cache[o.submit] AS `o.submit`  | est. rows 2140 | rows 14 | db hits 28
+          +Expand(All)  | (si)-[:OFFERED_IN]->(ac)  | est. rows 2140 | rows 14 | db hits 28
+            +Expand(All)  | (si)-[:INSTANCE_OF]->(su)  | est. rows 2140 | rows 14 | db hits 28
+              +Expand(All)  | (gt)<-[:HAS_TYPE]-(si)  | est. rows 2140 | rows 14 | db hits 28
+                +Expand(All)  | (g)-[:OF_TYPE]->(gt)  | est. rows 2140 | rows 14 | db hits 28
+                  +Filter  | ($group_id IS NULL OR cache[g.id] = $group_id)  | est. rows 2140 | rows 14 | db hits 0
+                    +Expand(All)  | (o)-[:ABOUT]->(g)  | est. rows 2853 | rows 14 | db hits 28
+                      +Expand(All)  | (t)<-[:ABOUT_TEACHER]-(o)  | est. rows 2853 | rows 14 | db hits 14
+                        +CacheProperties  | cache[t.name], cache[t.surname]  | est. rows 692 | rows 1 | db hits 2
+                          +Filter  | ($teacher_idx IS NULL OR cache[t.idx] = $teacher_idx)  | est. rows 692 | rows 1 | db hits 923
+                            +NodeByLabelScan  | t:Teacher  | est. rows 923 | rows 923 | db hits 924
+
+====================================================================================================
+## opinions_new
+parametry: {"teacher_idx": "T010042", "group_id": null}
+zapytanie:
+MATCH (t:Teacher {idx: $teacher_idx})<-[:ABOUT_TEACHER]-(o:Opinion)-[:ABOUT]->(g:Group)
+WHERE $group_id IS NULL OR g.id = $group_id
+
+MATCH (g)-[:OF_TYPE]->(gt:GroupType)<-[:HAS_TYPE]-(si:SubjectInstance)-[:INSTANCE_OF]->(su:Subject)
+MATCH (si)-[:OFFERED_IN]->(ac:AcademicCycle)
+RETURN
+  o.id AS id,
+  o.grade AS grade,
+  o.content AS content,
+  date(o.submit) AS submit,
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type AS g_type,
+  ac.year + " " + ac.season AS cycle,
+  t.idx AS teacher_idx,
+  t.name + " " + t.surname AS teacher
+ORDER BY o.submit DESC
+
+wiersze 14, db hits 382, maks. błąd oszacowania 14.0, mediana czasu silnika 0.495 ms
+
++ProduceResults  | id, grade, content, submit, group_id, course_code, course_name, g_type, cycle, teacher_idx, teacher  | est. rows 0 | rows 14 | db hits 0
+  +Projection  | (cache[t.name] + $autostring_1) + cache[t.surname] AS teacher, cache[o.id] AS id, (cache[ac.year] + $autostring_0) + cache[ac.season] AS cycle, date(cache[o.submit]) AS submit, cache[o.grade] AS grade, gt.g_type AS g_type, cache[o.content] AS content, cache[su.name] AS course_name, cache[g.id] AS group_id, cache[su.code] AS course_code, cache[t.idx] AS teacher_idx  | est. rows 0 | rows 14 | db hits 59
+    +CacheProperties  | cache[o.id], cache[ac.year], cache[ac.season], cache[o.content], cache[su.code], cache[o.grade], cache[su.name]  | est. rows 0 | rows 14 | db hits 137
+      +Sort  | `o.submit` DESC  | est. rows 0 | rows 14 | db hits 0
+        +Projection  | cache[o.submit] AS `o.submit`  | est. rows 0 | rows 14 | db hits 28
+          +Expand(All)  | (si)-[:OFFERED_IN]->(ac)  | est. rows 0 | rows 14 | db hits 28
+            +Expand(All)  | (si)-[:INSTANCE_OF]->(su)  | est. rows 0 | rows 14 | db hits 28
+              +Expand(All)  | (gt)<-[:HAS_TYPE]-(si)  | est. rows 0 | rows 14 | db hits 28
+                +Expand(All)  | (g)-[:OF_TYPE]->(gt)  | est. rows 0 | rows 14 | db hits 28
+                  +Filter  | ($group_id IS NULL OR cache[g.id] = $group_id)  | est. rows 0 | rows 14 | db hits 0
+                    +Expand(All)  | (o)-[:ABOUT]->(g)  | est. rows 0 | rows 14 | db hits 28
+                      +Expand(All)  | (t)<-[:ABOUT_TEACHER]-(o)  | est. rows 0 | rows 14 | db hits 14
+                        +CacheProperties  | cache[t.name], cache[t.surname]  | est. rows 0 | rows 1 | db hits 2
+                          +Filter  | t:Teacher  | est. rows 0 | rows 1 | db hits 0
+                            +NodeUniqueIndexSeek  | UNIQUE t:Person(idx) WHERE idx = $teacher_idx, cache[t.idx]  | est. rows 1 | rows 1 | db hits 2

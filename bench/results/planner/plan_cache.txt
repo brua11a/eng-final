@@ -1,0 +1,1794 @@
+# Plany PostgreSQL zapytań API - 10000 studentów
+# custom  = EXPLAIN ANALYZE z wartościami w treści (plan dla konkretnych parametrów)
+# API     = polecenie przygotowane po 10 wykonaniach (plan_cache_mode = auto), jak w API
+# generic = plan ogólny wymuszony (plan_cache_mode = force_generic_plan)
+# liczniki: (custom_plans, generic_plans) z pg_prepared_statements po kolejnych wykonaniach
+
+====================================================================================================
+## POST /login #0
+parametry: {"email": "300000@student.example.edu"}
+zapytanie:
+SELECT
+  u.passwd_hash,
+  u.email,
+  u.idx,
+  i.idx IS NOT NULL AS inactive,
+  a.idx IS NOT NULL AS admin,
+  t.idx IS NOT NULL AS teacher,
+  s.idx IS NOT NULL AS student
+FROM app_user u
+LEFT JOIN inactive i ON i.idx = u.idx
+LEFT JOIN admin a ON a.idx = u.idx
+LEFT JOIN teacher t ON t.idx = u.idx
+LEFT JOIN student s ON s.idx = u.idx
+WHERE u.email = %(email)s
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 21.95, API 21.95, generic 21.95
+czas planowania [ms]: custom 0.927, API 0.004
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.022, API 0.024, generic 0.026
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Nested Loop Left Join  (cost=0.85..21.95 rows=1 width=98) (actual time=0.038..0.039 rows=1.00 loops=1)
+  Buffers: shared hit=9
+  ->  Nested Loop Left Join  (cost=0.56..17.65 rows=1 width=139) (actual time=0.031..0.032 rows=1.00 loops=1)
+        Buffers: shared hit=6
+        ->  Nested Loop Left Join  (cost=0.29..9.34 rows=1 width=131) (actual time=0.023..0.024 rows=1.00 loops=1)
+              Join Filter: (a.idx = u.idx)
+              Rows Removed by Join Filter: 1
+              Buffers: shared hit=4
+              ->  Nested Loop Left Join  (cost=0.29..8.31 rows=1 width=126) (actual time=0.015..0.016 rows=1.00 loops=1)
+                    Join Filter: (i.idx = u.idx)
+                    Buffers: shared hit=3
+                    ->  Index Scan using app_user_email_key on app_user u  (cost=0.29..8.30 rows=1 width=94) (actual time=0.010..0.010 rows=1.00 loops=1)
+                          Index Cond: (email = '300000@student.example.edu'::text)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+                    ->  Seq Scan on inactive i  (cost=0.00..0.00 rows=1 width=32) (actual time=0.004..0.004 rows=0.00 loops=1)
+              ->  Seq Scan on admin a  (cost=0.00..1.01 rows=1 width=5) (actual time=0.007..0.007 rows=1.00 loops=1)
+                    Buffers: shared hit=1
+        ->  Index Only Scan using teacher_pkey on teacher t  (cost=0.28..8.29 rows=1 width=8) (actual time=0.007..0.007 rows=0.00 loops=1)
+              Index Cond: (idx = u.idx)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=2
+  ->  Index Only Scan using student_pkey on student s  (cost=0.29..4.30 rows=1 width=7) (actual time=0.006..0.006 rows=1.00 loops=1)
+        Index Cond: (idx = u.idx)
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=296
+Planning Time: 0.927 ms
+Execution Time: 0.108 ms
+
+--- plan używany przez API
+Nested Loop Left Join  (cost=0.85..21.95 rows=1 width=98) (actual time=0.013..0.014 rows=1.00 loops=1)
+  Buffers: shared hit=9
+  ->  Nested Loop Left Join  (cost=0.56..17.65 rows=1 width=139) (actual time=0.011..0.012 rows=1.00 loops=1)
+        Buffers: shared hit=6
+        ->  Nested Loop Left Join  (cost=0.29..9.34 rows=1 width=131) (actual time=0.009..0.009 rows=1.00 loops=1)
+              Join Filter: (a.idx = u.idx)
+              Rows Removed by Join Filter: 1
+              Buffers: shared hit=4
+              ->  Nested Loop Left Join  (cost=0.29..8.31 rows=1 width=126) (actual time=0.007..0.007 rows=1.00 loops=1)
+                    Join Filter: (i.idx = u.idx)
+                    Buffers: shared hit=3
+                    ->  Index Scan using app_user_email_key on app_user u  (cost=0.29..8.30 rows=1 width=94) (actual time=0.005..0.005 rows=1.00 loops=1)
+                          Index Cond: (email = $1)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+                    ->  Seq Scan on inactive i  (cost=0.00..0.00 rows=1 width=32) (actual time=0.002..0.002 rows=0.00 loops=1)
+              ->  Seq Scan on admin a  (cost=0.00..1.01 rows=1 width=5) (actual time=0.001..0.001 rows=1.00 loops=1)
+                    Buffers: shared hit=1
+        ->  Index Only Scan using teacher_pkey on teacher t  (cost=0.28..8.29 rows=1 width=8) (actual time=0.001..0.001 rows=0.00 loops=1)
+              Index Cond: (idx = u.idx)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=2
+  ->  Index Only Scan using student_pkey on student s  (cost=0.29..4.30 rows=1 width=7) (actual time=0.002..0.002 rows=1.00 loops=1)
+        Index Cond: (idx = u.idx)
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=3
+Planning Time: 0.004 ms
+Execution Time: 0.029 ms
+
+--- plan ogólny (wymuszony)
+Nested Loop Left Join  (cost=0.85..21.95 rows=1 width=98) (actual time=0.013..0.014 rows=1.00 loops=1)
+  Buffers: shared hit=9
+  ->  Nested Loop Left Join  (cost=0.56..17.65 rows=1 width=139) (actual time=0.011..0.011 rows=1.00 loops=1)
+        Buffers: shared hit=6
+        ->  Nested Loop Left Join  (cost=0.29..9.34 rows=1 width=131) (actual time=0.009..0.009 rows=1.00 loops=1)
+              Join Filter: (a.idx = u.idx)
+              Rows Removed by Join Filter: 1
+              Buffers: shared hit=4
+              ->  Nested Loop Left Join  (cost=0.29..8.31 rows=1 width=126) (actual time=0.007..0.007 rows=1.00 loops=1)
+                    Join Filter: (i.idx = u.idx)
+                    Buffers: shared hit=3
+                    ->  Index Scan using app_user_email_key on app_user u  (cost=0.29..8.30 rows=1 width=94) (actual time=0.005..0.005 rows=1.00 loops=1)
+                          Index Cond: (email = $1)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+                    ->  Seq Scan on inactive i  (cost=0.00..0.00 rows=1 width=32) (actual time=0.002..0.002 rows=0.00 loops=1)
+              ->  Seq Scan on admin a  (cost=0.00..1.01 rows=1 width=5) (actual time=0.001..0.001 rows=1.00 loops=1)
+                    Buffers: shared hit=1
+        ->  Index Only Scan using teacher_pkey on teacher t  (cost=0.28..8.29 rows=1 width=8) (actual time=0.001..0.001 rows=0.00 loops=1)
+              Index Cond: (idx = u.idx)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=2
+  ->  Index Only Scan using student_pkey on student s  (cost=0.29..4.30 rows=1 width=7) (actual time=0.002..0.002 rows=1.00 loops=1)
+        Index Cond: (idx = u.idx)
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=3
+Planning Time: 0.004 ms
+Execution Time: 0.028 ms
+
+====================================================================================================
+## GET /subjects #0
+parametry: {}
+zapytanie:
+SELECT id, year, season FROM academic_cycle
+
+liczniki custom/generic po wykonaniach 1..10: 0/1 0/2 0/3 0/4 0/5 0/6 0/7 0/8 0/9 0/10; po EXPLAIN EXECUTE: 0/11
+koszt planu: custom 1.08, API 1.08, generic 1.08
+czas planowania [ms]: custom 0.112, API 0.001
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.006, API 0.006, generic 0.006
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Seq Scan on academic_cycle  (cost=0.00..1.08 rows=8 width=47) (actual time=0.009..0.010 rows=8.00 loops=1)
+  Buffers: shared hit=1
+Planning:
+  Buffers: shared hit=40
+Planning Time: 0.112 ms
+Execution Time: 0.018 ms
+
+--- plan używany przez API
+Seq Scan on academic_cycle  (cost=0.00..1.08 rows=8 width=47) (actual time=0.003..0.004 rows=8.00 loops=1)
+  Buffers: shared hit=1
+Planning Time: 0.001 ms
+Execution Time: 0.009 ms
+
+--- plan ogólny (wymuszony)
+Seq Scan on academic_cycle  (cost=0.00..1.08 rows=8 width=47) (actual time=0.003..0.003 rows=8.00 loops=1)
+  Buffers: shared hit=1
+Planning Time: 0.001 ms
+Execution Time: 0.007 ms
+
+====================================================================================================
+## GET /subjects #1
+parametry: {"name": null, "code": null, "cycle_ids": ["942c8316-cca2-5de1-bf33-9b2142b06649", "0e8dbc8d-24c7-5126-aa72-1ca1948a184b", "8b95611b-8b80-5770-b0ce-afa166396cf2", "e038f718-9736-5499-bd5d-fd03eaacc4fd", "7584cd1a-1e66-5935-a0d2-c077fab319b4", "459e3c71-f9e0-5d3d-8e48-a8c205715fe1", "81a69897-cd0e-5c0b-ac11-0527fcdb3d80", "73e192e9-32b4-5016-b577-e579f05e4f49"]}
+zapytanie:
+SELECT
+  su.code,
+  su.name,
+  se.ects,
+  ARRAY(
+    SELECT DISTINCT fa.name
+    FROM term_subject ts
+    JOIN curriculum_term ct ON ct.id = ts.term_id
+    JOIN curriculum c ON c.id = ct.curriculum_id
+    JOIN programme p ON p.id = c.programme_id
+    JOIN faculty fa ON fa.id = p.faculty_id
+    WHERE ts.subject_code = su.code
+  ) AS faculties,
+  ARRAY(
+    SELECT json_build_object(
+      'offered', EXISTS (
+        SELECT 1
+        FROM term_subject ts
+        JOIN taught_in ti ON ti.term_id = ts.term_id
+        WHERE ts.subject_code = su.code AND ti.cycle_id = cyc.id
+      ),
+      'group_count', (
+        SELECT count(*)
+        FROM group_type gt
+        JOIN class_group g ON g.group_type_id = gt.id
+        WHERE gt.subject_code = su.code AND gt.cycle_id = cyc.id
+      ),
+      -- A registration has no dates of its own: its period runs from the start of its first
+      -- turn to the end of its last one.
+      'registration_open', EXISTS (
+        SELECT 1
+        FROM group_type gt
+        JOIN class_group g ON g.group_type_id = gt.id
+        JOIN opens o ON o.group_id = g.id
+        JOIN registration_turn rt ON rt.registration_id = o.registration_id
+        WHERE gt.subject_code = su.code AND gt.cycle_id = cyc.id
+        GROUP BY o.registration_id
+        HAVING min((rt.date + rt.start_time) AT TIME ZONE 'Europe/Warsaw') <= now()
+           AND now() < max((rt.date + rt.end_time) AT TIME ZONE 'Europe/Warsaw')
+      )
+    )
+    FROM unnest(%(cycle_ids)s::text[]) WITH ORDINALITY AS cyc (id, ord)
+    ORDER BY cyc.ord
+  ) AS cycles
+FROM subject su
+LEFT JOIN subject_ects se ON se.subject_code = su.code
+WHERE (%(name)s::text IS NULL OR strpos(lower(su.name), lower(%(name)s)) > 0)
+  AND (%(code)s::text IS NULL OR strpos(lower(su.code), lower(%(code)s)) > 0)
+ORDER BY su.name COLLATE "C"
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 194446.21, API 27304.23, generic 27304.23
+czas planowania [ms]: custom 2.166, API 0.011
+mediana czasu wykonania [ms] (TIMING OFF): custom 103.445, API 82.556, generic 81.212
+JIT: custom True, API False, generic False
+
+--- plan dla konkretnych parametrów
+Sort  (cost=194445.37..194446.21 rows=336 width=130) (actual time=117.396..117.409 rows=336.00 loops=1)
+  Sort Key: su.name COLLATE "C"
+  Sort Method: quicksort  Memory: 256kB
+  Buffers: shared hit=53365
+  ->  Hash Left Join  (cost=9.56..194431.27 rows=336 width=130) (actual time=22.378..117.202 rows=336.00 loops=1)
+        Hash Cond: (su.code = se.subject_code)
+        Buffers: shared hit=53362
+        ->  Seq Scan on subject su  (cost=0.00..6.36 rows=336 width=30) (actual time=0.007..0.031 rows=336.00 loops=1)
+              Buffers: shared hit=3
+        ->  Hash  (cost=5.36..5.36 rows=336 width=14) (actual time=20.563..20.563 rows=336.00 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 24kB
+              Buffers: shared hit=2
+              ->  Seq Scan on subject_ects se  (cost=0.00..5.36 rows=336 width=14) (actual time=20.505..20.523 rows=336.00 loops=1)
+                    Buffers: shared hit=2
+        SubPlan 1
+          ->  Unique  (cost=21.12..21.14 rows=4 width=3) (actual time=0.043..0.043 rows=1.00 loops=336)
+                Buffers: shared hit=5649
+                ->  Sort  (cost=21.12..21.13 rows=4 width=3) (actual time=0.043..0.043 rows=4.00 loops=336)
+                      Sort Key: fa.name
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=5649
+                      ->  Nested Loop  (cost=9.93..21.08 rows=4 width=3) (actual time=0.021..0.042 rows=4.00 loops=336)
+                            Join Filter: (p.faculty_id = fa.id)
+                            Rows Removed by Join Filter: 6
+                            Buffers: shared hit=5649
+                            ->  Hash Join  (cost=9.93..19.83 rows=4 width=37) (actual time=0.021..0.040 rows=4.00 loops=336)
+                                  Hash Cond: (c.programme_id = p.id)
+                                  Buffers: shared hit=5648
+                                  ->  Nested Loop  (cost=8.66..18.55 rows=4 width=37) (actual time=0.020..0.040 rows=4.00 loops=336)
+                                        Buffers: shared hit=5647
+                                        ->  Hash Join  (cost=8.52..17.77 rows=4 width=37) (actual time=0.018..0.035 rows=4.00 loops=336)
+                                              Hash Cond: (ct.id = ts.term_id)
+                                              Buffers: shared hit=2959
+                                              ->  Seq Scan on curriculum_term ct  (cost=0.00..8.36 rows=336 width=74) (actual time=0.001..0.012 rows=336.00 loops=336)
+                                                    Buffers: shared hit=1680
+                                              ->  Hash  (cost=8.47..8.47 rows=4 width=37) (actual time=0.003..0.003 rows=4.00 loops=336)
+                                                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                    Buffers: shared hit=1279
+                                                    ->  Index Scan using term_subject_subject_code_idx on term_subject ts  (cost=0.28..8.47 rows=4 width=37) (actual time=0.002..0.002 rows=4.00 loops=336)
+                                                          Index Cond: (subject_code = su.code)
+                                                          Index Searches: 336
+                                                          Buffers: shared hit=1279
+                                        ->  Index Scan using curriculum_pkey on curriculum c  (cost=0.14..0.19 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=1344)
+                                              Index Cond: (id = ct.curriculum_id)
+                                              Index Searches: 1344
+                                              Buffers: shared hit=2688
+                                  ->  Hash  (cost=1.12..1.12 rows=12 width=74) (actual time=0.011..0.011 rows=12.00 loops=1)
+                                        Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                        Buffers: shared hit=1
+                                        ->  Seq Scan on programme p  (cost=0.00..1.12 rows=12 width=74) (actual time=0.006..0.007 rows=12.00 loops=1)
+                                              Buffers: shared hit=1
+                            ->  Materialize  (cost=0.00..1.06 rows=4 width=40) (actual time=0.000..0.000 rows=2.50 loops=1344)
+                                  Storage: Memory  Maximum Storage: 17kB
+                                  Buffers: shared hit=1
+                                  ->  Seq Scan on faculty fa  (cost=0.00..1.04 rows=4 width=40) (actual time=0.004..0.005 rows=4.00 loops=1)
+                                        Buffers: shared hit=1
+        SubPlan 6
+          ->  Function Scan on unnest cyc  (cost=0.00..557.47 rows=8 width=40) (actual time=0.038..0.242 rows=8.00 loops=336)
+                Buffers: shared hit=47708
+                SubPlan 3
+                  ->  Hash Join  (cost=8.52..15.41 rows=3 width=37) (actual time=0.014..0.025 rows=2.71 loops=336)
+                        Hash Cond: (ti.term_id = ts_1.term_id)
+                        Buffers: shared hit=2623
+                        ->  Seq Scan on taught_in ti  (cost=0.00..6.28 rows=228 width=74) (actual time=0.001..0.008 rows=228.00 loops=336)
+                              Buffers: shared hit=1344
+                        ->  Hash  (cost=8.47..8.47 rows=4 width=37) (actual time=0.003..0.003 rows=4.00 loops=336)
+                              Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                              Buffers: shared hit=1279
+                              ->  Index Scan using term_subject_subject_code_idx on term_subject ts_1  (cost=0.28..8.47 rows=4 width=37) (actual time=0.002..0.002 rows=4.00 loops=336)
+                                    Index Cond: (subject_code = su.code)
+                                    Index Searches: 336
+                                    Buffers: shared hit=1279
+                SubPlan 4
+                  ->  Aggregate  (cost=12.79..12.80 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=2688)
+                        Buffers: shared hit=8847
+                        ->  Nested Loop  (cost=0.56..12.78 rows=7 width=0) (actual time=0.002..0.003 rows=3.43 loops=2688)
+                              Buffers: shared hit=8847
+                              ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..8.30 rows=1 width=37) (actual time=0.002..0.002 rows=0.50 loops=2688)
+                                    Index Cond: ((subject_code = su.code) AND (cycle_id = cyc.id))
+                                    Index Searches: 2688
+                                    Buffers: shared hit=6153
+                              ->  Index Only Scan using class_group_group_type_id_number_key on class_group g  (cost=0.29..4.41 rows=7 width=37) (actual time=0.002..0.002 rows=6.86 loops=1344)
+                                    Index Cond: (group_type_id = gt.id)
+                                    Heap Fetches: 0
+                                    Index Searches: 1344
+                                    Buffers: shared hit=2694
+                SubPlan 5
+                  ->  HashAggregate  (cost=41.35..41.43 rows=1 width=41) (actual time=0.022..0.022 rows=0.00 loops=2688)
+                        Group Key: o.registration_id
+                        Filter: ((min(((rt.date + rt.start_time) AT TIME ZONE 'Europe/Warsaw'::text)) <= now()) AND (now() < max(((rt.date + rt.end_time) AT TIME ZONE 'Europe/Warsaw'::text))))
+                        Batches: 1  Memory Usage: 32kB
+                        Rows Removed by Filter: 0
+                        Buffers: shared hit=36238
+                        ->  Nested Loop  (cost=5.04..40.46 rows=51 width=57) (actual time=0.006..0.012 rows=21.65 loops=2688)
+                              Buffers: shared hit=36238
+                              ->  Nested Loop  (cost=4.90..38.78 rows=2 width=37) (actual time=0.006..0.008 rows=0.86 loops=2688)
+                                    Buffers: shared hit=31066
+                                    ->  Nested Loop  (cost=4.62..36.47 rows=7 width=37) (actual time=0.002..0.003 rows=3.43 loops=2688)
+                                          Buffers: shared hit=10330
+                                          ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt_1  (cost=0.28..8.30 rows=1 width=37) (actual time=0.001..0.001 rows=0.50 loops=2688)
+                                                Index Cond: ((subject_code = su.code) AND (cycle_id = cyc.id))
+                                                Index Searches: 2688
+                                                Buffers: shared hit=6153
+                                          ->  Bitmap Heap Scan on class_group g_1  (cost=4.34..28.10 rows=7 width=74) (actual time=0.002..0.002 rows=6.86 loops=1344)
+                                                Recheck Cond: (gt_1.id = group_type_id)
+                                                Heap Blocks: exact=1484
+                                                Buffers: shared hit=4177
+                                                ->  Bitmap Index Scan on class_group_group_type_id_number_key  (cost=0.00..4.34 rows=7 width=0) (actual time=0.001..0.001 rows=6.86 loops=1344)
+                                                      Index Cond: (group_type_id = gt_1.id)
+                                                      Index Searches: 1344
+                                                      Buffers: shared hit=2693
+                                    ->  Index Scan using opens_group_id_idx on opens o  (cost=0.28..0.32 rows=1 width=74) (actual time=0.001..0.001 rows=0.25 loops=9216)
+                                          Index Cond: (group_id = g_1.id)
+                                          Index Searches: 9216
+                                          Buffers: shared hit=20736
+                              ->  Index Scan using registration_turn_registration_id_idx on registration_turn rt  (cost=0.14..0.59 rows=25 width=57) (actual time=0.001..0.003 rows=25.26 loops=2304)
+                                    Index Cond: (registration_id = o.registration_id)
+                                    Index Searches: 2304
+                                    Buffers: shared hit=5172
+Planning:
+  Buffers: shared hit=651
+Planning Time: 2.166 ms
+JIT:
+  Functions: 107
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 2.232 ms (Deform 0.800 ms), Inlining 0.000 ms, Optimization 0.757 ms, Emission 20.645 ms, Total 23.633 ms
+Execution Time: 130.467 ms
+
+--- plan używany przez API
+Sort  (cost=27304.13..27304.23 rows=38 width=130) (actual time=96.477..96.490 rows=336.00 loops=1)
+  Sort Key: su.name COLLATE "C"
+  Sort Method: quicksort  Memory: 256kB
+  Buffers: shared hit=53362
+  ->  Hash Right Join  (cost=13.55..27303.14 rows=38 width=130) (actual time=0.618..96.245 rows=336.00 loops=1)
+        Hash Cond: (se.subject_code = su.code)
+        Buffers: shared hit=53362
+        ->  Seq Scan on subject_ects se  (cost=0.00..5.36 rows=336 width=14) (actual time=0.003..0.026 rows=336.00 loops=1)
+              Buffers: shared hit=2
+        ->  Hash  (cost=13.08..13.08 rows=38 width=30) (actual time=0.042..0.043 rows=336.00 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 29kB
+              Buffers: shared hit=3
+              ->  Seq Scan on subject su  (cost=0.00..13.08 rows=38 width=30) (actual time=0.006..0.025 rows=336.00 loops=1)
+                    Filter: ((($2 IS NULL) OR (strpos(lower(name), lower($2)) > 0)) AND (($3 IS NULL) OR (strpos(lower(code), lower($3)) > 0)))
+                    Buffers: shared hit=3
+        SubPlan 1
+          ->  Unique  (cost=21.12..21.14 rows=4 width=3) (actual time=0.042..0.043 rows=1.00 loops=336)
+                Buffers: shared hit=5649
+                ->  Sort  (cost=21.12..21.13 rows=4 width=3) (actual time=0.042..0.042 rows=4.00 loops=336)
+                      Sort Key: fa.name
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=5649
+                      ->  Nested Loop  (cost=9.93..21.08 rows=4 width=3) (actual time=0.021..0.041 rows=4.00 loops=336)
+                            Join Filter: (p.faculty_id = fa.id)
+                            Rows Removed by Join Filter: 6
+                            Buffers: shared hit=5649
+                            ->  Hash Join  (cost=9.93..19.83 rows=4 width=37) (actual time=0.020..0.040 rows=4.00 loops=336)
+                                  Hash Cond: (c.programme_id = p.id)
+                                  Buffers: shared hit=5648
+                                  ->  Nested Loop  (cost=8.66..18.55 rows=4 width=37) (actual time=0.020..0.039 rows=4.00 loops=336)
+                                        Buffers: shared hit=5647
+                                        ->  Hash Join  (cost=8.52..17.77 rows=4 width=37) (actual time=0.018..0.035 rows=4.00 loops=336)
+                                              Hash Cond: (ct.id = ts.term_id)
+                                              Buffers: shared hit=2959
+                                              ->  Seq Scan on curriculum_term ct  (cost=0.00..8.36 rows=336 width=74) (actual time=0.001..0.012 rows=336.00 loops=336)
+                                                    Buffers: shared hit=1680
+                                              ->  Hash  (cost=8.47..8.47 rows=4 width=37) (actual time=0.003..0.003 rows=4.00 loops=336)
+                                                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                    Buffers: shared hit=1279
+                                                    ->  Index Scan using term_subject_subject_code_idx on term_subject ts  (cost=0.28..8.47 rows=4 width=37) (actual time=0.002..0.002 rows=4.00 loops=336)
+                                                          Index Cond: (subject_code = su.code)
+                                                          Index Searches: 336
+                                                          Buffers: shared hit=1279
+                                        ->  Index Scan using curriculum_pkey on curriculum c  (cost=0.14..0.19 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=1344)
+                                              Index Cond: (id = ct.curriculum_id)
+                                              Index Searches: 1344
+                                              Buffers: shared hit=2688
+                                  ->  Hash  (cost=1.12..1.12 rows=12 width=74) (actual time=0.005..0.005 rows=12.00 loops=1)
+                                        Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                        Buffers: shared hit=1
+                                        ->  Seq Scan on programme p  (cost=0.00..1.12 rows=12 width=74) (actual time=0.002..0.003 rows=12.00 loops=1)
+                                              Buffers: shared hit=1
+                            ->  Materialize  (cost=0.00..1.06 rows=4 width=40) (actual time=0.000..0.000 rows=2.50 loops=1344)
+                                  Storage: Memory  Maximum Storage: 17kB
+                                  Buffers: shared hit=1
+                                  ->  Seq Scan on faculty fa  (cost=0.00..1.04 rows=4 width=40) (actual time=0.002..0.003 rows=4.00 loops=1)
+                                        Buffers: shared hit=1
+        SubPlan 6
+          ->  Function Scan on unnest cyc  (cost=0.00..696.84 rows=10 width=40) (actual time=0.034..0.242 rows=8.00 loops=336)
+                Buffers: shared hit=47708
+                SubPlan 3
+                  ->  Hash Join  (cost=8.52..15.41 rows=3 width=37) (actual time=0.013..0.024 rows=2.71 loops=336)
+                        Hash Cond: (ti.term_id = ts_1.term_id)
+                        Buffers: shared hit=2623
+                        ->  Seq Scan on taught_in ti  (cost=0.00..6.28 rows=228 width=74) (actual time=0.001..0.008 rows=228.00 loops=336)
+                              Buffers: shared hit=1344
+                        ->  Hash  (cost=8.47..8.47 rows=4 width=37) (actual time=0.003..0.003 rows=4.00 loops=336)
+                              Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                              Buffers: shared hit=1279
+                              ->  Index Scan using term_subject_subject_code_idx on term_subject ts_1  (cost=0.28..8.47 rows=4 width=37) (actual time=0.001..0.002 rows=4.00 loops=336)
+                                    Index Cond: (subject_code = su.code)
+                                    Index Searches: 336
+                                    Buffers: shared hit=1279
+                SubPlan 4
+                  ->  Aggregate  (cost=12.79..12.80 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=2688)
+                        Buffers: shared hit=8847
+                        ->  Nested Loop  (cost=0.56..12.78 rows=7 width=0) (actual time=0.002..0.003 rows=3.43 loops=2688)
+                              Buffers: shared hit=8847
+                              ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..8.30 rows=1 width=37) (actual time=0.001..0.002 rows=0.50 loops=2688)
+                                    Index Cond: ((subject_code = su.code) AND (cycle_id = cyc.id))
+                                    Index Searches: 2688
+                                    Buffers: shared hit=6153
+                              ->  Index Only Scan using class_group_group_type_id_number_key on class_group g  (cost=0.29..4.41 rows=7 width=37) (actual time=0.002..0.002 rows=6.86 loops=1344)
+                                    Index Cond: (group_type_id = gt.id)
+                                    Heap Fetches: 0
+                                    Index Searches: 1344
+                                    Buffers: shared hit=2694
+                SubPlan 5
+                  ->  HashAggregate  (cost=41.35..41.43 rows=1 width=41) (actual time=0.023..0.023 rows=0.00 loops=2688)
+                        Group Key: o.registration_id
+                        Filter: ((min(((rt.date + rt.start_time) AT TIME ZONE 'Europe/Warsaw'::text)) <= now()) AND (now() < max(((rt.date + rt.end_time) AT TIME ZONE 'Europe/Warsaw'::text))))
+                        Batches: 1  Memory Usage: 32kB
+                        Rows Removed by Filter: 0
+                        Buffers: shared hit=36238
+                        ->  Nested Loop  (cost=5.04..40.46 rows=51 width=57) (actual time=0.006..0.012 rows=21.65 loops=2688)
+                              Buffers: shared hit=36238
+                              ->  Nested Loop  (cost=4.90..38.78 rows=2 width=37) (actual time=0.006..0.008 rows=0.86 loops=2688)
+                                    Buffers: shared hit=31066
+                                    ->  Nested Loop  (cost=4.62..36.47 rows=7 width=37) (actual time=0.002..0.003 rows=3.43 loops=2688)
+                                          Buffers: shared hit=10330
+                                          ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt_1  (cost=0.28..8.30 rows=1 width=37) (actual time=0.001..0.001 rows=0.50 loops=2688)
+                                                Index Cond: ((subject_code = su.code) AND (cycle_id = cyc.id))
+                                                Index Searches: 2688
+                                                Buffers: shared hit=6153
+                                          ->  Bitmap Heap Scan on class_group g_1  (cost=4.34..28.10 rows=7 width=74) (actual time=0.002..0.002 rows=6.86 loops=1344)
+                                                Recheck Cond: (gt_1.id = group_type_id)
+                                                Heap Blocks: exact=1484
+                                                Buffers: shared hit=4177
+                                                ->  Bitmap Index Scan on class_group_group_type_id_number_key  (cost=0.00..4.34 rows=7 width=0) (actual time=0.001..0.001 rows=6.86 loops=1344)
+                                                      Index Cond: (group_type_id = gt_1.id)
+                                                      Index Searches: 1344
+                                                      Buffers: shared hit=2693
+                                    ->  Index Scan using opens_group_id_idx on opens o  (cost=0.28..0.32 rows=1 width=74) (actual time=0.001..0.001 rows=0.25 loops=9216)
+                                          Index Cond: (group_id = g_1.id)
+                                          Index Searches: 9216
+                                          Buffers: shared hit=20736
+                              ->  Index Scan using registration_turn_registration_id_idx on registration_turn rt  (cost=0.14..0.59 rows=25 width=57) (actual time=0.001..0.003 rows=25.26 loops=2304)
+                                    Index Cond: (registration_id = o.registration_id)
+                                    Index Searches: 2304
+                                    Buffers: shared hit=5172
+Planning Time: 0.011 ms
+Execution Time: 96.604 ms
+
+--- plan ogólny (wymuszony)
+Sort  (cost=27304.13..27304.23 rows=38 width=130) (actual time=103.701..103.714 rows=336.00 loops=1)
+  Sort Key: su.name COLLATE "C"
+  Sort Method: quicksort  Memory: 256kB
+  Buffers: shared hit=53362
+  ->  Hash Right Join  (cost=13.55..27303.14 rows=38 width=130) (actual time=0.851..103.529 rows=336.00 loops=1)
+        Hash Cond: (se.subject_code = su.code)
+        Buffers: shared hit=53362
+        ->  Seq Scan on subject_ects se  (cost=0.00..5.36 rows=336 width=14) (actual time=0.003..0.029 rows=336.00 loops=1)
+              Buffers: shared hit=2
+        ->  Hash  (cost=13.08..13.08 rows=38 width=30) (actual time=0.043..0.044 rows=336.00 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 29kB
+              Buffers: shared hit=3
+              ->  Seq Scan on subject su  (cost=0.00..13.08 rows=38 width=30) (actual time=0.007..0.026 rows=336.00 loops=1)
+                    Filter: ((($2 IS NULL) OR (strpos(lower(name), lower($2)) > 0)) AND (($3 IS NULL) OR (strpos(lower(code), lower($3)) > 0)))
+                    Buffers: shared hit=3
+        SubPlan 1
+          ->  Unique  (cost=21.12..21.14 rows=4 width=3) (actual time=0.046..0.046 rows=1.00 loops=336)
+                Buffers: shared hit=5649
+                ->  Sort  (cost=21.12..21.13 rows=4 width=3) (actual time=0.046..0.046 rows=4.00 loops=336)
+                      Sort Key: fa.name
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=5649
+                      ->  Nested Loop  (cost=9.93..21.08 rows=4 width=3) (actual time=0.023..0.045 rows=4.00 loops=336)
+                            Join Filter: (p.faculty_id = fa.id)
+                            Rows Removed by Join Filter: 6
+                            Buffers: shared hit=5649
+                            ->  Hash Join  (cost=9.93..19.83 rows=4 width=37) (actual time=0.022..0.043 rows=4.00 loops=336)
+                                  Hash Cond: (c.programme_id = p.id)
+                                  Buffers: shared hit=5648
+                                  ->  Nested Loop  (cost=8.66..18.55 rows=4 width=37) (actual time=0.022..0.042 rows=4.00 loops=336)
+                                        Buffers: shared hit=5647
+                                        ->  Hash Join  (cost=8.52..17.77 rows=4 width=37) (actual time=0.020..0.037 rows=4.00 loops=336)
+                                              Hash Cond: (ct.id = ts.term_id)
+                                              Buffers: shared hit=2959
+                                              ->  Seq Scan on curriculum_term ct  (cost=0.00..8.36 rows=336 width=74) (actual time=0.001..0.013 rows=336.00 loops=336)
+                                                    Buffers: shared hit=1680
+                                              ->  Hash  (cost=8.47..8.47 rows=4 width=37) (actual time=0.003..0.003 rows=4.00 loops=336)
+                                                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                    Buffers: shared hit=1279
+                                                    ->  Index Scan using term_subject_subject_code_idx on term_subject ts  (cost=0.28..8.47 rows=4 width=37) (actual time=0.002..0.002 rows=4.00 loops=336)
+                                                          Index Cond: (subject_code = su.code)
+                                                          Index Searches: 336
+                                                          Buffers: shared hit=1279
+                                        ->  Index Scan using curriculum_pkey on curriculum c  (cost=0.14..0.19 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=1344)
+                                              Index Cond: (id = ct.curriculum_id)
+                                              Index Searches: 1344
+                                              Buffers: shared hit=2688
+                                  ->  Hash  (cost=1.12..1.12 rows=12 width=74) (actual time=0.005..0.005 rows=12.00 loops=1)
+                                        Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                        Buffers: shared hit=1
+                                        ->  Seq Scan on programme p  (cost=0.00..1.12 rows=12 width=74) (actual time=0.002..0.003 rows=12.00 loops=1)
+                                              Buffers: shared hit=1
+                            ->  Materialize  (cost=0.00..1.06 rows=4 width=40) (actual time=0.000..0.000 rows=2.50 loops=1344)
+                                  Storage: Memory  Maximum Storage: 17kB
+                                  Buffers: shared hit=1
+                                  ->  Seq Scan on faculty fa  (cost=0.00..1.04 rows=4 width=40) (actual time=0.002..0.002 rows=4.00 loops=1)
+                                        Buffers: shared hit=1
+        SubPlan 6
+          ->  Function Scan on unnest cyc  (cost=0.00..696.84 rows=10 width=40) (actual time=0.038..0.260 rows=8.00 loops=336)
+                Buffers: shared hit=47708
+                SubPlan 3
+                  ->  Hash Join  (cost=8.52..15.41 rows=3 width=37) (actual time=0.015..0.026 rows=2.71 loops=336)
+                        Hash Cond: (ti.term_id = ts_1.term_id)
+                        Buffers: shared hit=2623
+                        ->  Seq Scan on taught_in ti  (cost=0.00..6.28 rows=228 width=74) (actual time=0.001..0.009 rows=228.00 loops=336)
+                              Buffers: shared hit=1344
+                        ->  Hash  (cost=8.47..8.47 rows=4 width=37) (actual time=0.003..0.003 rows=4.00 loops=336)
+                              Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                              Buffers: shared hit=1279
+                              ->  Index Scan using term_subject_subject_code_idx on term_subject ts_1  (cost=0.28..8.47 rows=4 width=37) (actual time=0.002..0.002 rows=4.00 loops=336)
+                                    Index Cond: (subject_code = su.code)
+                                    Index Searches: 336
+                                    Buffers: shared hit=1279
+                SubPlan 4
+                  ->  Aggregate  (cost=12.79..12.80 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=2688)
+                        Buffers: shared hit=8847
+                        ->  Nested Loop  (cost=0.56..12.78 rows=7 width=0) (actual time=0.002..0.003 rows=3.43 loops=2688)
+                              Buffers: shared hit=8847
+                              ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..8.30 rows=1 width=37) (actual time=0.002..0.002 rows=0.50 loops=2688)
+                                    Index Cond: ((subject_code = su.code) AND (cycle_id = cyc.id))
+                                    Index Searches: 2688
+                                    Buffers: shared hit=6153
+                              ->  Index Only Scan using class_group_group_type_id_number_key on class_group g  (cost=0.29..4.41 rows=7 width=37) (actual time=0.002..0.002 rows=6.86 loops=1344)
+                                    Index Cond: (group_type_id = gt.id)
+                                    Heap Fetches: 0
+                                    Index Searches: 1344
+                                    Buffers: shared hit=2694
+                SubPlan 5
+                  ->  HashAggregate  (cost=41.35..41.43 rows=1 width=41) (actual time=0.024..0.024 rows=0.00 loops=2688)
+                        Group Key: o.registration_id
+                        Filter: ((min(((rt.date + rt.start_time) AT TIME ZONE 'Europe/Warsaw'::text)) <= now()) AND (now() < max(((rt.date + rt.end_time) AT TIME ZONE 'Europe/Warsaw'::text))))
+                        Batches: 1  Memory Usage: 32kB
+                        Rows Removed by Filter: 0
+                        Buffers: shared hit=36238
+                        ->  Nested Loop  (cost=5.04..40.46 rows=51 width=57) (actual time=0.007..0.013 rows=21.65 loops=2688)
+                              Buffers: shared hit=36238
+                              ->  Nested Loop  (cost=4.90..38.78 rows=2 width=37) (actual time=0.007..0.008 rows=0.86 loops=2688)
+                                    Buffers: shared hit=31066
+                                    ->  Nested Loop  (cost=4.62..36.47 rows=7 width=37) (actual time=0.002..0.004 rows=3.43 loops=2688)
+                                          Buffers: shared hit=10330
+                                          ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt_1  (cost=0.28..8.30 rows=1 width=37) (actual time=0.002..0.002 rows=0.50 loops=2688)
+                                                Index Cond: ((subject_code = su.code) AND (cycle_id = cyc.id))
+                                                Index Searches: 2688
+                                                Buffers: shared hit=6153
+                                          ->  Bitmap Heap Scan on class_group g_1  (cost=4.34..28.10 rows=7 width=74) (actual time=0.002..0.002 rows=6.86 loops=1344)
+                                                Recheck Cond: (gt_1.id = group_type_id)
+                                                Heap Blocks: exact=1484
+                                                Buffers: shared hit=4177
+                                                ->  Bitmap Index Scan on class_group_group_type_id_number_key  (cost=0.00..4.34 rows=7 width=0) (actual time=0.001..0.001 rows=6.86 loops=1344)
+                                                      Index Cond: (group_type_id = gt_1.id)
+                                                      Index Searches: 1344
+                                                      Buffers: shared hit=2693
+                                    ->  Index Scan using opens_group_id_idx on opens o  (cost=0.28..0.32 rows=1 width=74) (actual time=0.001..0.001 rows=0.25 loops=9216)
+                                          Index Cond: (group_id = g_1.id)
+                                          Index Searches: 9216
+                                          Buffers: shared hit=20736
+                              ->  Index Scan using registration_turn_registration_id_idx on registration_turn rt  (cost=0.14..0.59 rows=25 width=57) (actual time=0.001..0.003 rows=25.26 loops=2304)
+                                    Index Cond: (registration_id = o.registration_id)
+                                    Index Searches: 2304
+                                    Buffers: shared hit=5172
+Planning Time: 0.016 ms
+Execution Time: 103.818 ms
+
+====================================================================================================
+## GET /opinions #0
+parametry: {"teacher_idx": "T010042", "group_id": null}
+zapytanie:
+SELECT
+  o.id,
+  o.grade::float8 AS grade,
+  oc.content,
+  -- Only the day: with the exact time a teacher could match an opinion to a student of a small group.
+  (o.submit AT TIME ZONE 'Europe/Warsaw')::date AS submit,
+  g.id AS group_id,
+  su.code AS course_code,
+  su.name AS course_name,
+  gt.g_type,
+  ac.year || ' ' || ac.season AS cycle,
+  tp.idx AS teacher_idx,
+  tp.name || ' ' || tp.surname AS teacher
+FROM opinion o
+LEFT JOIN opinion_content oc ON oc.opinion_id = o.id
+JOIN class_group g ON g.id = o.group_id
+JOIN person tp ON tp.idx = o.teacher_idx
+JOIN group_type gt ON gt.id = g.group_type_id
+JOIN subject su ON su.code = gt.subject_code
+JOIN academic_cycle ac ON ac.id = gt.cycle_id
+
+WHERE o.teacher_idx = %(teacher_idx)s
+  AND (%(group_id)s::text IS NULL OR o.group_id = %(group_id)s)
+ORDER BY o.submit DESC
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 211.66, API 35.66, generic 35.66
+czas planowania [ms]: custom 1.091, API 0.003
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.275, API 0.164, generic 0.150
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Sort  (cost=211.62..211.66 rows=14 width=224) (actual time=0.465..0.467 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=179
+  ->  Nested Loop  (cost=16.20..211.36 rows=14 width=224) (actual time=0.085..0.442 rows=14.00 loops=1)
+        Buffers: shared hit=176
+        ->  Nested Loop  (cost=16.06..209.62 rows=14 width=205) (actual time=0.066..0.406 rows=14.00 loops=1)
+              Buffers: shared hit=168
+              ->  Nested Loop  (cost=15.78..205.27 rows=14 width=185) (actual time=0.060..0.378 rows=14.00 loops=1)
+                    Buffers: shared hit=126
+                    ->  Nested Loop  (cost=15.51..200.93 rows=14 width=173) (actual time=0.055..0.349 rows=14.00 loops=1)
+                          Buffers: shared hit=84
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.008..0.009 rows=1.00 loops=1)
+                                Index Cond: (idx = 'T010042'::text)
+                                Index Searches: 1
+                                Buffers: shared hit=3
+                          ->  Nested Loop  (cost=15.22..192.49 rows=14 width=159) (actual time=0.045..0.338 rows=14.00 loops=1)
+                                Buffers: shared hit=81
+                                ->  Hash Right Join  (cost=14.94..80.25 rows=14 width=122) (actual time=0.039..0.300 rows=14.00 loops=1)
+                                      Hash Cond: (oc.opinion_id = o.id)
+                                      Buffers: shared hit=39
+                                      ->  Seq Scan on opinion_content oc  (cost=0.00..58.38 rows=2638 width=64) (actual time=0.006..0.097 rows=2638.00 loops=1)
+                                            Buffers: shared hit=32
+                                      ->  Hash  (cost=14.76..14.76 rows=14 width=95) (actual time=0.027..0.027 rows=14.00 loops=1)
+                                            Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                            Buffers: shared hit=7
+                                            ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..14.76 rows=14 width=95) (actual time=0.007..0.022 rows=14.00 loops=1)
+                                                  Index Cond: (teacher_idx = 'T010042'::text)
+                                                  Index Searches: 1
+                                                  Buffers: shared hit=7
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.02 rows=1 width=74) (actual time=0.002..0.002 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.002..0.002 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.002..0.002 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Memoize  (cost=0.14..0.17 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=14)
+              Cache Key: gt.cycle_id
+              Cache Mode: logical
+              Hits: 10  Misses: 4  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+              Buffers: shared hit=8
+              ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=4)
+                    Index Cond: (id = gt.cycle_id)
+                    Index Searches: 4
+                    Buffers: shared hit=8
+Planning:
+  Buffers: shared hit=233
+Planning Time: 1.091 ms
+Execution Time: 0.518 ms
+
+--- plan używany przez API
+Sort  (cost=35.65..35.66 rows=1 width=224) (actual time=0.140..0.142 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=242
+  ->  Nested Loop  (cost=1.81..35.64 rows=1 width=224) (actual time=0.019..0.136 rows=14.00 loops=1)
+        Buffers: shared hit=242
+        ->  Nested Loop  (cost=1.68..35.46 rows=1 width=205) (actual time=0.015..0.116 rows=14.00 loops=1)
+              Buffers: shared hit=214
+              ->  Nested Loop  (cost=1.41..35.15 rows=1 width=185) (actual time=0.013..0.093 rows=14.00 loops=1)
+                    Buffers: shared hit=172
+                    ->  Nested Loop  (cost=1.13..34.84 rows=1 width=173) (actual time=0.012..0.074 rows=14.00 loops=1)
+                          Buffers: shared hit=130
+                          ->  Nested Loop  (cost=0.85..26.53 rows=1 width=159) (actual time=0.010..0.049 rows=14.00 loops=1)
+                                Buffers: shared hit=88
+                                ->  Nested Loop Left Join  (cost=0.56..18.22 rows=1 width=122) (actual time=0.007..0.029 rows=14.00 loops=1)
+                                      Buffers: shared hit=46
+                                      ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..9.92 rows=1 width=95) (actual time=0.005..0.008 rows=14.00 loops=1)
+                                            Index Cond: (teacher_idx = $1)
+                                            Filter: (($2 IS NULL) OR (group_id = $2))
+                                            Index Searches: 1
+                                            Buffers: shared hit=7
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.001..0.001 rows=0.79 loops=14)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 14
+                                            Buffers: shared hit=39
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.001..0.002 rows=1.00 loops=14)
+                                Index Cond: (idx = $1)
+                                Index Searches: 14
+                                Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.001..0.001 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.001..0.001 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=14)
+              Index Cond: (id = gt.cycle_id)
+              Index Searches: 14
+              Buffers: shared hit=28
+Planning Time: 0.003 ms
+Execution Time: 0.162 ms
+
+--- plan ogólny (wymuszony)
+Sort  (cost=35.65..35.66 rows=1 width=224) (actual time=0.138..0.139 rows=14.00 loops=1)
+  Sort Key: o.submit DESC
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=242
+  ->  Nested Loop  (cost=1.81..35.64 rows=1 width=224) (actual time=0.020..0.133 rows=14.00 loops=1)
+        Buffers: shared hit=242
+        ->  Nested Loop  (cost=1.68..35.46 rows=1 width=205) (actual time=0.016..0.113 rows=14.00 loops=1)
+              Buffers: shared hit=214
+              ->  Nested Loop  (cost=1.41..35.15 rows=1 width=185) (actual time=0.014..0.091 rows=14.00 loops=1)
+                    Buffers: shared hit=172
+                    ->  Nested Loop  (cost=1.13..34.84 rows=1 width=173) (actual time=0.012..0.074 rows=14.00 loops=1)
+                          Buffers: shared hit=130
+                          ->  Nested Loop  (cost=0.85..26.53 rows=1 width=159) (actual time=0.010..0.049 rows=14.00 loops=1)
+                                Buffers: shared hit=88
+                                ->  Nested Loop Left Join  (cost=0.56..18.22 rows=1 width=122) (actual time=0.008..0.029 rows=14.00 loops=1)
+                                      Buffers: shared hit=46
+                                      ->  Index Scan using opinion_teacher_idx_idx on opinion o  (cost=0.28..9.92 rows=1 width=95) (actual time=0.005..0.008 rows=14.00 loops=1)
+                                            Index Cond: (teacher_idx = $1)
+                                            Filter: (($2 IS NULL) OR (group_id = $2))
+                                            Index Searches: 1
+                                            Buffers: shared hit=7
+                                      ->  Index Scan using opinion_content_pkey on opinion_content oc  (cost=0.28..8.30 rows=1 width=64) (actual time=0.001..0.001 rows=0.79 loops=14)
+                                            Index Cond: (opinion_id = o.id)
+                                            Index Searches: 14
+                                            Buffers: shared hit=39
+                                ->  Index Scan using class_group_pkey on class_group g  (cost=0.29..8.30 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=14)
+                                      Index Cond: (id = o.group_id)
+                                      Index Searches: 14
+                                      Buffers: shared hit=42
+                          ->  Index Scan using person_pkey on person tp  (cost=0.29..8.30 rows=1 width=22) (actual time=0.001..0.002 rows=1.00 loops=14)
+                                Index Cond: (idx = $1)
+                                Index Searches: 14
+                                Buffers: shared hit=42
+                    ->  Index Scan using group_type_pkey on group_type gt  (cost=0.28..0.31 rows=1 width=86) (actual time=0.001..0.001 rows=1.00 loops=14)
+                          Index Cond: (id = g.group_type_id)
+                          Index Searches: 14
+                          Buffers: shared hit=42
+              ->  Index Scan using subject_pkey on subject su  (cost=0.27..0.31 rows=1 width=30) (actual time=0.001..0.001 rows=1.00 loops=14)
+                    Index Cond: (code = gt.subject_code)
+                    Index Searches: 14
+                    Buffers: shared hit=42
+        ->  Index Scan using academic_cycle_pkey on academic_cycle ac  (cost=0.13..0.16 rows=1 width=47) (actual time=0.001..0.001 rows=1.00 loops=14)
+              Index Cond: (id = gt.cycle_id)
+              Index Searches: 14
+              Buffers: shared hit=28
+Planning Time: 0.004 ms
+Execution Time: 0.163 ms
+
+====================================================================================================
+## GET /me/registrations/{id}/groups #0
+parametry: {"student_idx": "300000", "registration_id": "40c6246b-4e52-5ed5-9e0c-83071f537d4e"}
+zapytanie:
+SELECT registration_id AS id
+FROM assigned
+WHERE student_idx = %(student_idx)s AND registration_id = %(registration_id)s
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 4.30, API 4.30, generic 4.30
+czas planowania [ms]: custom 0.182, API 0.003
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.010, API 0.010, generic 0.009
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Index Only Scan using assigned_student_idx_registration_id_key on assigned  (cost=0.29..4.30 rows=1 width=37) (actual time=0.018..0.019 rows=1.00 loops=1)
+  Index Cond: ((student_idx = '300000'::text) AND (registration_id = '40c6246b-4e52-5ed5-9e0c-83071f537d4e'::text))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=52
+Planning Time: 0.182 ms
+Execution Time: 0.032 ms
+
+--- plan używany przez API
+Index Only Scan using assigned_student_idx_registration_id_key on assigned  (cost=0.29..4.30 rows=1 width=37) (actual time=0.005..0.006 rows=1.00 loops=1)
+  Index Cond: ((student_idx = $1) AND (registration_id = $2))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.003 ms
+Execution Time: 0.011 ms
+
+--- plan ogólny (wymuszony)
+Index Only Scan using assigned_student_idx_registration_id_key on assigned  (cost=0.29..4.30 rows=1 width=37) (actual time=0.005..0.005 rows=1.00 loops=1)
+  Index Cond: ((student_idx = $1) AND (registration_id = $2))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.003 ms
+Execution Time: 0.010 ms
+
+====================================================================================================
+## GET /me/registrations/{id}/groups #1
+parametry: {"student_idx": "300000", "registration_id": "40c6246b-4e52-5ed5-9e0c-83071f537d4e", "subject_code": "W01P1-S70"}
+zapytanie:
+SELECT
+  g.id,
+  gt.g_type,
+  g.number,
+  g.weekday,
+  g.start_time AS start,
+  g.end_time AS "end",
+  g.capacity,
+  (SELECT count(*) FROM registered_in ri WHERE ri.group_id = g.id) AS filled,
+  r.building || ' ' || r.room_num AS room,
+  tp.name || ' ' || tp.surname AS teacher,
+  EXISTS (
+    SELECT 1 FROM registered_in ri
+    WHERE ri.group_id = g.id AND ri.student_idx = %(student_idx)s
+  ) AS registered
+FROM opens o
+JOIN class_group g ON g.id = o.group_id
+JOIN group_type gt ON gt.id = g.group_type_id
+LEFT JOIN in_room ir ON ir.group_id = g.id
+LEFT JOIN room r ON r.id = ir.room_id
+LEFT JOIN teaches te ON te.group_id = g.id
+LEFT JOIN person tp ON tp.idx = te.teacher_idx
+WHERE o.registration_id = %(registration_id)s
+  AND gt.subject_code = %(subject_code)s
+ORDER BY gt.g_type COLLATE "C", g.number
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 6/0 7/0 8/0 9/0 10/0; po EXPLAIN EXECUTE: 11/0
+koszt planu: custom 122.09, API 122.09, generic 172.94
+czas planowania [ms]: custom 1.326, API 0.799
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.274, API 0.273, generic 0.234
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Sort  (cost=122.08..122.09 rows=1 width=172) (actual time=0.413..0.415 rows=18.00 loops=1)
+  Sort Key: gt.g_type COLLATE "C", g.number
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=353
+  ->  Nested Loop Left Join  (cost=6.02..122.07 rows=1 width=172) (actual time=0.075..0.394 rows=18.00 loops=1)
+        Buffers: shared hit=350
+        ->  Nested Loop Left Join  (cost=5.74..104.18 rows=1 width=84) (actual time=0.037..0.196 rows=18.00 loops=1)
+              Buffers: shared hit=186
+              ->  Nested Loop Left Join  (cost=5.45..103.79 rows=1 width=76) (actual time=0.028..0.144 rows=16.00 loops=1)
+                    Buffers: shared hit=138
+                    ->  Nested Loop Left Join  (cost=5.18..103.50 rows=1 width=104) (actual time=0.026..0.121 rows=16.00 loops=1)
+                          Buffers: shared hit=90
+                          ->  Nested Loop  (cost=4.90..103.11 rows=1 width=67) (actual time=0.022..0.073 rows=16.00 loops=1)
+                                Buffers: shared hit=42
+                                ->  Nested Loop  (cost=4.62..96.41 rows=21 width=67) (actual time=0.015..0.025 rows=16.00 loops=1)
+                                      Buffers: shared hit=9
+                                      ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..11.90 rows=3 width=39) (actual time=0.005..0.006 rows=2.00 loops=1)
+                                            Index Cond: (subject_code = 'W01P1-S70'::text)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                      ->  Bitmap Heap Scan on class_group g  (cost=4.34..28.10 rows=7 width=102) (actual time=0.007..0.007 rows=8.00 loops=2)
+                                            Recheck Cond: (group_type_id = gt.id)
+                                            Heap Blocks: exact=2
+                                            Buffers: shared hit=6
+                                            ->  Bitmap Index Scan on class_group_group_type_id_number_key  (cost=0.00..4.34 rows=7 width=0) (actual time=0.003..0.003 rows=8.00 loops=2)
+                                                  Index Cond: (group_type_id = gt.id)
+                                                  Index Searches: 2
+                                                  Buffers: shared hit=4
+                                ->  Index Only Scan using opens_pkey on opens o  (cost=0.28..0.32 rows=1 width=37) (actual time=0.003..0.003 rows=1.00 loops=16)
+                                      Index Cond: ((registration_id = '40c6246b-4e52-5ed5-9e0c-83071f537d4e'::text) AND (group_id = g.id))
+                                      Heap Fetches: 0
+                                      Index Searches: 16
+                                      Buffers: shared hit=33
+                          ->  Index Scan using in_room_pkey on in_room ir  (cost=0.29..0.39 rows=1 width=74) (actual time=0.003..0.003 rows=1.00 loops=16)
+                                Index Cond: (group_id = g.id)
+                                Index Searches: 16
+                                Buffers: shared hit=48
+                    ->  Index Scan using room_pkey on room r  (cost=0.27..0.29 rows=1 width=46) (actual time=0.001..0.001 rows=1.00 loops=16)
+                          Index Cond: (id = ir.room_id)
+                          Index Searches: 16
+                          Buffers: shared hit=48
+              ->  Index Scan using teaches_group_id_idx on teaches te  (cost=0.29..0.38 rows=1 width=45) (actual time=0.003..0.003 rows=1.12 loops=16)
+                    Index Cond: (group_id = g.id)
+                    Index Searches: 16
+                    Buffers: shared hit=48
+        ->  Index Scan using person_pkey on person tp  (cost=0.29..0.35 rows=1 width=22) (actual time=0.002..0.002 rows=1.00 loops=18)
+              Index Cond: (idx = te.teacher_idx)
+              Index Searches: 18
+              Buffers: shared hit=54
+        SubPlan 1
+          ->  Aggregate  (cost=9.08..9.09 rows=1 width=8) (actual time=0.006..0.006 rows=1.00 loops=18)
+                Buffers: shared hit=55
+                ->  Index Only Scan using registered_in_group_id_idx on registered_in ri  (cost=0.42..9.00 rows=33 width=0) (actual time=0.003..0.004 rows=24.89 loops=18)
+                      Index Cond: (group_id = g.id)
+                      Heap Fetches: 0
+                      Index Searches: 18
+                      Buffers: shared hit=55
+        SubPlan 2
+          ->  Index Only Scan using registered_in_pkey on registered_in ri_1  (cost=0.42..8.44 rows=1 width=0) (actual time=0.002..0.002 rows=0.11 loops=18)
+                Index Cond: ((student_idx = '300000'::text) AND (group_id = g.id))
+                Heap Fetches: 0
+                Index Searches: 18
+                Buffers: shared hit=55
+Planning:
+  Buffers: shared hit=274
+Planning Time: 1.326 ms
+Execution Time: 0.456 ms
+
+--- plan używany przez API
+Sort  (cost=122.08..122.09 rows=1 width=172) (actual time=0.274..0.276 rows=18.00 loops=1)
+  Sort Key: gt.g_type COLLATE "C", g.number
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=350
+  ->  Nested Loop Left Join  (cost=6.02..122.07 rows=1 width=172) (actual time=0.035..0.265 rows=18.00 loops=1)
+        Buffers: shared hit=350
+        ->  Nested Loop Left Join  (cost=5.74..104.18 rows=1 width=84) (actual time=0.018..0.118 rows=18.00 loops=1)
+              Buffers: shared hit=186
+              ->  Nested Loop Left Join  (cost=5.45..103.79 rows=1 width=76) (actual time=0.016..0.091 rows=16.00 loops=1)
+                    Buffers: shared hit=138
+                    ->  Nested Loop Left Join  (cost=5.18..103.50 rows=1 width=104) (actual time=0.014..0.071 rows=16.00 loops=1)
+                          Buffers: shared hit=90
+                          ->  Nested Loop  (cost=4.90..103.11 rows=1 width=67) (actual time=0.012..0.044 rows=16.00 loops=1)
+                                Buffers: shared hit=42
+                                ->  Nested Loop  (cost=4.62..96.41 rows=21 width=67) (actual time=0.009..0.016 rows=16.00 loops=1)
+                                      Buffers: shared hit=9
+                                      ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..11.90 rows=3 width=39) (actual time=0.003..0.004 rows=2.00 loops=1)
+                                            Index Cond: (subject_code = 'W01P1-S70'::text)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                      ->  Bitmap Heap Scan on class_group g  (cost=4.34..28.10 rows=7 width=102) (actual time=0.003..0.004 rows=8.00 loops=2)
+                                            Recheck Cond: (group_type_id = gt.id)
+                                            Heap Blocks: exact=2
+                                            Buffers: shared hit=6
+                                            ->  Bitmap Index Scan on class_group_group_type_id_number_key  (cost=0.00..4.34 rows=7 width=0) (actual time=0.002..0.002 rows=8.00 loops=2)
+                                                  Index Cond: (group_type_id = gt.id)
+                                                  Index Searches: 2
+                                                  Buffers: shared hit=4
+                                ->  Index Only Scan using opens_pkey on opens o  (cost=0.28..0.32 rows=1 width=37) (actual time=0.001..0.001 rows=1.00 loops=16)
+                                      Index Cond: ((registration_id = '40c6246b-4e52-5ed5-9e0c-83071f537d4e'::text) AND (group_id = g.id))
+                                      Heap Fetches: 0
+                                      Index Searches: 16
+                                      Buffers: shared hit=33
+                          ->  Index Scan using in_room_pkey on in_room ir  (cost=0.29..0.39 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=16)
+                                Index Cond: (group_id = g.id)
+                                Index Searches: 16
+                                Buffers: shared hit=48
+                    ->  Index Scan using room_pkey on room r  (cost=0.27..0.29 rows=1 width=46) (actual time=0.001..0.001 rows=1.00 loops=16)
+                          Index Cond: (id = ir.room_id)
+                          Index Searches: 16
+                          Buffers: shared hit=48
+              ->  Index Scan using teaches_group_id_idx on teaches te  (cost=0.29..0.38 rows=1 width=45) (actual time=0.001..0.001 rows=1.12 loops=16)
+                    Index Cond: (group_id = g.id)
+                    Index Searches: 16
+                    Buffers: shared hit=48
+        ->  Index Scan using person_pkey on person tp  (cost=0.29..0.35 rows=1 width=22) (actual time=0.001..0.001 rows=1.00 loops=18)
+              Index Cond: (idx = te.teacher_idx)
+              Index Searches: 18
+              Buffers: shared hit=54
+        SubPlan 1
+          ->  Aggregate  (cost=9.08..9.09 rows=1 width=8) (actual time=0.004..0.004 rows=1.00 loops=18)
+                Buffers: shared hit=55
+                ->  Index Only Scan using registered_in_group_id_idx on registered_in ri  (cost=0.42..9.00 rows=33 width=0) (actual time=0.001..0.002 rows=24.89 loops=18)
+                      Index Cond: (group_id = g.id)
+                      Heap Fetches: 0
+                      Index Searches: 18
+                      Buffers: shared hit=55
+        SubPlan 2
+          ->  Index Only Scan using registered_in_pkey on registered_in ri_1  (cost=0.42..8.44 rows=1 width=0) (actual time=0.002..0.002 rows=0.11 loops=18)
+                Index Cond: ((student_idx = '300000'::text) AND (group_id = g.id))
+                Heap Fetches: 0
+                Index Searches: 18
+                Buffers: shared hit=55
+Planning:
+  Buffers: shared hit=78
+Planning Time: 0.799 ms
+Execution Time: 0.303 ms
+
+--- plan ogólny (wymuszony)
+Sort  (cost=172.93..172.94 rows=2 width=172) (actual time=0.242..0.244 rows=18.00 loops=1)
+  Sort Key: gt.g_type COLLATE "C", g.number
+  Sort Method: quicksort  Memory: 27kB
+  Buffers: shared hit=299
+  ->  Nested Loop Left Join  (cost=6.02..172.92 rows=2 width=172) (actual time=0.047..0.234 rows=18.00 loops=1)
+        Buffers: shared hit=299
+        ->  Nested Loop Left Join  (cost=5.74..137.13 rows=2 width=84) (actual time=0.018..0.117 rows=18.00 loops=1)
+              Buffers: shared hit=186
+              ->  Nested Loop Left Join  (cost=5.45..136.35 rows=2 width=76) (actual time=0.017..0.090 rows=16.00 loops=1)
+                    Buffers: shared hit=138
+                    ->  Nested Loop Left Join  (cost=5.18..135.77 rows=2 width=104) (actual time=0.015..0.070 rows=16.00 loops=1)
+                          Buffers: shared hit=90
+                          ->  Nested Loop  (cost=4.90..134.99 rows=2 width=67) (actual time=0.013..0.044 rows=16.00 loops=1)
+                                Buffers: shared hit=42
+                                ->  Nested Loop  (cost=4.62..126.39 rows=27 width=67) (actual time=0.010..0.017 rows=16.00 loops=1)
+                                      Buffers: shared hit=9
+                                      ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..13.70 rows=4 width=39) (actual time=0.004..0.005 rows=2.00 loops=1)
+                                            Index Cond: (subject_code = $3)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                                      ->  Bitmap Heap Scan on class_group g  (cost=4.34..28.10 rows=7 width=102) (actual time=0.003..0.004 rows=8.00 loops=2)
+                                            Recheck Cond: (group_type_id = gt.id)
+                                            Heap Blocks: exact=2
+                                            Buffers: shared hit=6
+                                            ->  Bitmap Index Scan on class_group_group_type_id_number_key  (cost=0.00..4.34 rows=7 width=0) (actual time=0.002..0.002 rows=8.00 loops=2)
+                                                  Index Cond: (group_type_id = gt.id)
+                                                  Index Searches: 2
+                                                  Buffers: shared hit=4
+                                ->  Index Only Scan using opens_pkey on opens o  (cost=0.28..0.32 rows=1 width=37) (actual time=0.001..0.001 rows=1.00 loops=16)
+                                      Index Cond: ((registration_id = $2) AND (group_id = g.id))
+                                      Heap Fetches: 0
+                                      Index Searches: 16
+                                      Buffers: shared hit=33
+                          ->  Index Scan using in_room_pkey on in_room ir  (cost=0.29..0.39 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=16)
+                                Index Cond: (group_id = g.id)
+                                Index Searches: 16
+                                Buffers: shared hit=48
+                    ->  Index Scan using room_pkey on room r  (cost=0.27..0.29 rows=1 width=46) (actual time=0.001..0.001 rows=1.00 loops=16)
+                          Index Cond: (id = ir.room_id)
+                          Index Searches: 16
+                          Buffers: shared hit=48
+              ->  Index Scan using teaches_group_id_idx on teaches te  (cost=0.29..0.38 rows=1 width=45) (actual time=0.001..0.001 rows=1.12 loops=16)
+                    Index Cond: (group_id = g.id)
+                    Index Searches: 16
+                    Buffers: shared hit=48
+        ->  Index Scan using person_pkey on person tp  (cost=0.29..0.35 rows=1 width=22) (actual time=0.001..0.001 rows=1.00 loops=18)
+              Index Cond: (idx = te.teacher_idx)
+              Index Searches: 18
+              Buffers: shared hit=54
+        SubPlan 1
+          ->  Aggregate  (cost=9.08..9.09 rows=1 width=8) (actual time=0.004..0.004 rows=1.00 loops=18)
+                Buffers: shared hit=55
+                ->  Index Only Scan using registered_in_group_id_idx on registered_in ri  (cost=0.42..9.00 rows=33 width=0) (actual time=0.001..0.002 rows=24.89 loops=18)
+                      Index Cond: (group_id = g.id)
+                      Heap Fetches: 0
+                      Index Searches: 18
+                      Buffers: shared hit=55
+        SubPlan 3
+          ->  Index Only Scan using registered_in_pkey on registered_in ri_1  (cost=0.42..8.96 rows=31 width=37) (actual time=0.004..0.007 rows=49.00 loops=1)
+                Index Cond: (student_idx = $1)
+                Heap Fetches: 0
+                Index Searches: 1
+                Buffers: shared hit=4
+Planning Time: 0.006 ms
+Execution Time: 0.278 ms
+
+====================================================================================================
+## GET /groups/{id}/students #0
+parametry: {"teacher_idx": "T040049", "group_id": "00076e12-7855-5332-9b1e-05d9307e7291"}
+zapytanie:
+SELECT group_id AS id FROM teaches
+WHERE teacher_idx = %(teacher_idx)s AND group_id = %(group_id)s
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 4.30, API 4.30, generic 4.30
+czas planowania [ms]: custom 0.067, API 0.003
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.011, API 0.011, generic 0.010
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Index Only Scan using teaches_pkey on teaches  (cost=0.29..4.30 rows=1 width=37) (actual time=0.016..0.017 rows=1.00 loops=1)
+  Index Cond: ((teacher_idx = 'T040049'::text) AND (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.067 ms
+Execution Time: 0.028 ms
+
+--- plan używany przez API
+Index Only Scan using teaches_pkey on teaches  (cost=0.29..4.30 rows=1 width=37) (actual time=0.006..0.006 rows=1.00 loops=1)
+  Index Cond: ((teacher_idx = $1) AND (group_id = $2))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.003 ms
+Execution Time: 0.011 ms
+
+--- plan ogólny (wymuszony)
+Index Only Scan using teaches_pkey on teaches  (cost=0.29..4.30 rows=1 width=37) (actual time=0.006..0.006 rows=1.00 loops=1)
+  Index Cond: ((teacher_idx = $1) AND (group_id = $2))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.003 ms
+Execution Time: 0.011 ms
+
+====================================================================================================
+## GET /groups/{id}/students #1
+parametry: {"group_id": "00076e12-7855-5332-9b1e-05d9307e7291"}
+zapytanie:
+SELECT
+  p.idx,
+  p.name,
+  p.surname,
+  p.phone,
+  ph.photo,
+  s.joined,
+  gr.grade::float8 AS grade
+FROM registered_in ri
+JOIN student s ON s.idx = ri.student_idx
+JOIN person p ON p.idx = s.idx
+LEFT JOIN person_photo ph ON ph.idx = p.idx
+LEFT JOIN grade gr ON gr.student_idx = ri.student_idx AND gr.group_id = ri.group_id
+WHERE ri.group_id = %(group_id)s
+ORDER BY p.surname COLLATE "C", p.name COLLATE "C"
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 6/0 7/0 8/0 9/0 10/0; po EXPLAIN EXECUTE: 11/0
+koszt planu: custom 584.29, API 584.29, generic 609.69
+czas planowania [ms]: custom 0.876, API 0.680
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.685, API 0.648, generic 0.548
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Sort  (cost=584.21..584.29 rows=31 width=123) (actual time=1.124..1.126 rows=16.00 loops=1)
+  Sort Key: p.surname COLLATE "C", p.name COLLATE "C"
+  Sort Method: quicksort  Memory: 26kB
+  Buffers: shared hit=207
+  ->  Nested Loop Left Join  (cost=120.80..583.44 rows=31 width=123) (actual time=0.763..1.114 rows=16.00 loops=1)
+        Buffers: shared hit=207
+        ->  Nested Loop Left Join  (cost=120.38..321.42 rows=31 width=95) (actual time=0.750..1.047 rows=16.00 loops=1)
+              Buffers: shared hit=143
+              ->  Nested Loop  (cost=120.10..311.94 rows=31 width=84) (actual time=0.745..1.015 rows=16.00 loops=1)
+                    Buffers: shared hit=107
+                    ->  Hash Join  (cost=119.82..301.08 rows=31 width=59) (actual time=0.735..0.972 rows=16.00 loops=1)
+                          Hash Cond: (s.idx = ri.student_idx)
+                          Buffers: shared hit=59
+                          ->  Seq Scan on student s  (cost=0.00..155.00 rows=10000 width=15) (actual time=0.004..0.366 rows=10000.00 loops=1)
+                                Buffers: shared hit=55
+                          ->  Hash  (cost=119.43..119.43 rows=31 width=44) (actual time=0.019..0.019 rows=16.00 loops=1)
+                                Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                Buffers: shared hit=4
+                                ->  Bitmap Heap Scan on registered_in ri  (cost=4.66..119.43 rows=31 width=44) (actual time=0.014..0.016 rows=16.00 loops=1)
+                                      Recheck Cond: (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text)
+                                      Heap Blocks: exact=1
+                                      Buffers: shared hit=4
+                                      ->  Bitmap Index Scan on registered_in_group_id_idx  (cost=0.00..4.66 rows=31 width=0) (actual time=0.006..0.006 rows=16.00 loops=1)
+                                            Index Cond: (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                    ->  Index Scan using person_pkey on person p  (cost=0.29..0.35 rows=1 width=32) (actual time=0.002..0.002 rows=1.00 loops=16)
+                          Index Cond: (idx = s.idx)
+                          Index Searches: 16
+                          Buffers: shared hit=48
+              ->  Index Scan using person_photo_pkey on person_photo ph  (cost=0.28..0.31 rows=1 width=18) (actual time=0.002..0.002 rows=0.25 loops=16)
+                    Index Cond: (idx = p.idx)
+                    Index Searches: 16
+                    Buffers: shared hit=36
+        ->  Index Scan using grade_pkey on grade gr  (cost=0.42..8.44 rows=1 width=49) (actual time=0.004..0.004 rows=1.00 loops=16)
+              Index Cond: ((student_idx = ri.student_idx) AND (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text))
+              Index Searches: 16
+              Buffers: shared hit=64
+Planning:
+  Buffers: shared hit=133
+Planning Time: 0.876 ms
+Execution Time: 1.153 ms
+
+--- plan używany przez API
+Sort  (cost=584.21..584.29 rows=31 width=123) (actual time=1.051..1.053 rows=16.00 loops=1)
+  Sort Key: p.surname COLLATE "C", p.name COLLATE "C"
+  Sort Method: quicksort  Memory: 26kB
+  Buffers: shared hit=207
+  ->  Nested Loop Left Join  (cost=120.80..583.44 rows=31 width=123) (actual time=0.712..1.044 rows=16.00 loops=1)
+        Buffers: shared hit=207
+        ->  Nested Loop Left Join  (cost=120.38..321.42 rows=31 width=95) (actual time=0.707..0.995 rows=16.00 loops=1)
+              Buffers: shared hit=143
+              ->  Nested Loop  (cost=120.10..311.94 rows=31 width=84) (actual time=0.704..0.965 rows=16.00 loops=1)
+                    Buffers: shared hit=107
+                    ->  Hash Join  (cost=119.82..301.08 rows=31 width=59) (actual time=0.700..0.929 rows=16.00 loops=1)
+                          Hash Cond: (s.idx = ri.student_idx)
+                          Buffers: shared hit=59
+                          ->  Seq Scan on student s  (cost=0.00..155.00 rows=10000 width=15) (actual time=0.003..0.356 rows=10000.00 loops=1)
+                                Buffers: shared hit=55
+                          ->  Hash  (cost=119.43..119.43 rows=31 width=44) (actual time=0.011..0.011 rows=16.00 loops=1)
+                                Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                Buffers: shared hit=4
+                                ->  Bitmap Heap Scan on registered_in ri  (cost=4.66..119.43 rows=31 width=44) (actual time=0.007..0.008 rows=16.00 loops=1)
+                                      Recheck Cond: (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text)
+                                      Heap Blocks: exact=1
+                                      Buffers: shared hit=4
+                                      ->  Bitmap Index Scan on registered_in_group_id_idx  (cost=0.00..4.66 rows=31 width=0) (actual time=0.004..0.004 rows=16.00 loops=1)
+                                            Index Cond: (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                    ->  Index Scan using person_pkey on person p  (cost=0.29..0.35 rows=1 width=32) (actual time=0.002..0.002 rows=1.00 loops=16)
+                          Index Cond: (idx = s.idx)
+                          Index Searches: 16
+                          Buffers: shared hit=48
+              ->  Index Scan using person_photo_pkey on person_photo ph  (cost=0.28..0.31 rows=1 width=18) (actual time=0.002..0.002 rows=0.25 loops=16)
+                    Index Cond: (idx = p.idx)
+                    Index Searches: 16
+                    Buffers: shared hit=36
+        ->  Index Scan using grade_pkey on grade gr  (cost=0.42..8.44 rows=1 width=49) (actual time=0.003..0.003 rows=1.00 loops=16)
+              Index Cond: ((student_idx = ri.student_idx) AND (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text))
+              Index Searches: 16
+              Buffers: shared hit=64
+Planning:
+  Buffers: shared hit=63
+Planning Time: 0.680 ms
+Execution Time: 1.075 ms
+
+--- plan ogólny (wymuszony)
+Sort  (cost=609.61..609.69 rows=33 width=123) (actual time=0.852..0.853 rows=16.00 loops=1)
+  Sort Key: p.surname COLLATE "C", p.name COLLATE "C"
+  Sort Method: quicksort  Memory: 26kB
+  Buffers: shared hit=207
+  ->  Nested Loop Left Join  (cost=127.92..608.78 rows=33 width=123) (actual time=0.582..0.847 rows=16.00 loops=1)
+        Buffers: shared hit=207
+        ->  Nested Loop Left Join  (cost=127.50..329.85 rows=33 width=95) (actual time=0.578..0.807 rows=16.00 loops=1)
+              Buffers: shared hit=143
+              ->  Nested Loop  (cost=127.22..319.76 rows=33 width=84) (actual time=0.575..0.783 rows=16.00 loops=1)
+                    Buffers: shared hit=107
+                    ->  Hash Join  (cost=126.94..308.20 rows=33 width=59) (actual time=0.572..0.754 rows=16.00 loops=1)
+                          Hash Cond: (s.idx = ri.student_idx)
+                          Buffers: shared hit=59
+                          ->  Seq Scan on student s  (cost=0.00..155.00 rows=10000 width=15) (actual time=0.002..0.283 rows=10000.00 loops=1)
+                                Buffers: shared hit=55
+                          ->  Hash  (cost=126.52..126.52 rows=33 width=44) (actual time=0.009..0.009 rows=16.00 loops=1)
+                                Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                Buffers: shared hit=4
+                                ->  Bitmap Heap Scan on registered_in ri  (cost=4.68..126.52 rows=33 width=44) (actual time=0.006..0.007 rows=16.00 loops=1)
+                                      Recheck Cond: (group_id = $1)
+                                      Heap Blocks: exact=1
+                                      Buffers: shared hit=4
+                                      ->  Bitmap Index Scan on registered_in_group_id_idx  (cost=0.00..4.67 rows=33 width=0) (actual time=0.004..0.004 rows=16.00 loops=1)
+                                            Index Cond: (group_id = $1)
+                                            Index Searches: 1
+                                            Buffers: shared hit=3
+                    ->  Index Scan using person_pkey on person p  (cost=0.29..0.35 rows=1 width=32) (actual time=0.002..0.002 rows=1.00 loops=16)
+                          Index Cond: (idx = s.idx)
+                          Index Searches: 16
+                          Buffers: shared hit=48
+              ->  Index Scan using person_photo_pkey on person_photo ph  (cost=0.28..0.31 rows=1 width=18) (actual time=0.001..0.001 rows=0.25 loops=16)
+                    Index Cond: (idx = p.idx)
+                    Index Searches: 16
+                    Buffers: shared hit=36
+        ->  Index Scan using grade_pkey on grade gr  (cost=0.42..8.44 rows=1 width=49) (actual time=0.002..0.002 rows=1.00 loops=16)
+              Index Cond: ((student_idx = ri.student_idx) AND (group_id = $1))
+              Index Searches: 16
+              Buffers: shared hit=64
+Planning Time: 0.003 ms
+Execution Time: 0.874 ms
+
+====================================================================================================
+## GET /students/{idx} #0
+parametry: {"teacher_idx": "T040049", "student_idx": "307504"}
+zapytanie:
+SELECT ri.student_idx AS idx
+FROM teaches te
+JOIN registered_in ri ON ri.group_id = te.group_id
+WHERE te.teacher_idx = %(teacher_idx)s AND ri.student_idx = %(student_idx)s
+LIMIT 1
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 13.54, API 13.56, generic 13.56
+czas planowania [ms]: custom 0.385, API 0.004
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.016, API 0.019, generic 0.017
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Limit  (cost=0.71..13.54 rows=1 width=7) (actual time=0.018..0.018 rows=1.00 loops=1)
+  Buffers: shared hit=7
+  ->  Merge Join  (cost=0.71..13.54 rows=1 width=7) (actual time=0.017..0.017 rows=1.00 loops=1)
+        Merge Cond: (te.group_id = ri.group_id)
+        Buffers: shared hit=7
+        ->  Index Only Scan using teaches_pkey on teaches te  (cost=0.29..4.48 rows=11 width=37) (actual time=0.007..0.007 rows=1.00 loops=1)
+              Index Cond: (teacher_idx = 'T040049'::text)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=3
+        ->  Index Only Scan using registered_in_pkey on registered_in ri  (cost=0.42..8.95 rows=30 width=44) (actual time=0.009..0.009 rows=1.00 loops=1)
+              Index Cond: (student_idx = '307504'::text)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=4
+Planning:
+  Buffers: shared hit=14
+Planning Time: 0.385 ms
+Execution Time: 0.032 ms
+
+--- plan używany przez API
+Limit  (cost=0.71..13.56 rows=1 width=7) (actual time=0.010..0.011 rows=1.00 loops=1)
+  Buffers: shared hit=7
+  ->  Merge Join  (cost=0.71..13.56 rows=1 width=7) (actual time=0.010..0.010 rows=1.00 loops=1)
+        Merge Cond: (te.group_id = ri.group_id)
+        Buffers: shared hit=7
+        ->  Index Only Scan using teaches_pkey on teaches te  (cost=0.29..4.48 rows=11 width=37) (actual time=0.005..0.005 rows=1.00 loops=1)
+              Index Cond: (teacher_idx = $1)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=3
+        ->  Index Only Scan using registered_in_pkey on registered_in ri  (cost=0.42..8.96 rows=31 width=44) (actual time=0.004..0.004 rows=1.00 loops=1)
+              Index Cond: (student_idx = $2)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=4
+Planning Time: 0.004 ms
+Execution Time: 0.021 ms
+
+--- plan ogólny (wymuszony)
+Limit  (cost=0.71..13.56 rows=1 width=7) (actual time=0.008..0.009 rows=1.00 loops=1)
+  Buffers: shared hit=7
+  ->  Merge Join  (cost=0.71..13.56 rows=1 width=7) (actual time=0.008..0.008 rows=1.00 loops=1)
+        Merge Cond: (te.group_id = ri.group_id)
+        Buffers: shared hit=7
+        ->  Index Only Scan using teaches_pkey on teaches te  (cost=0.29..4.48 rows=11 width=37) (actual time=0.004..0.004 rows=1.00 loops=1)
+              Index Cond: (teacher_idx = $1)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=3
+        ->  Index Only Scan using registered_in_pkey on registered_in ri  (cost=0.42..8.96 rows=31 width=44) (actual time=0.004..0.004 rows=1.00 loops=1)
+              Index Cond: (student_idx = $2)
+              Heap Fetches: 0
+              Index Searches: 1
+              Buffers: shared hit=4
+Planning Time: 0.002 ms
+Execution Time: 0.015 ms
+
+====================================================================================================
+## GET /students/{idx} #1
+parametry: {"student_idx": "307504"}
+zapytanie:
+SELECT
+  p.idx,
+  p.name,
+  p.surname,
+  p.phone,
+  ph.photo,
+  s.joined,
+  ARRAY(SELECT e.term_id FROM enrolled e WHERE e.student_idx = s.idx) AS term_ids
+FROM student s
+JOIN person p ON p.idx = s.idx
+LEFT JOIN person_photo ph ON ph.idx = p.idx
+WHERE s.idx = %(student_idx)s
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 29.28, API 29.28, generic 29.28
+czas planowania [ms]: custom 0.169, API 0.003
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.022, API 0.021, generic 0.026
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Nested Loop Left Join  (cost=0.85..29.28 rows=1 width=83) (actual time=0.037..0.038 rows=1.00 loops=1)
+  Buffers: shared hit=11
+  ->  Nested Loop  (cost=0.57..16.62 rows=1 width=47) (actual time=0.012..0.013 rows=1.00 loops=1)
+        Buffers: shared hit=6
+        ->  Index Scan using student_pkey on student s  (cost=0.29..8.30 rows=1 width=15) (actual time=0.006..0.007 rows=1.00 loops=1)
+              Index Cond: (idx = '307504'::text)
+              Index Searches: 1
+              Buffers: shared hit=3
+        ->  Index Scan using person_pkey on person p  (cost=0.29..8.30 rows=1 width=32) (actual time=0.005..0.005 rows=1.00 loops=1)
+              Index Cond: (idx = '307504'::text)
+              Index Searches: 1
+              Buffers: shared hit=3
+  ->  Index Scan using person_photo_pkey on person_photo ph  (cost=0.28..8.30 rows=1 width=18) (actual time=0.004..0.004 rows=0.00 loops=1)
+        Index Cond: (idx = '307504'::text)
+        Index Searches: 1
+        Buffers: shared hit=2
+  SubPlan 1
+    ->  Index Only Scan using enrolled_pkey on enrolled e  (cost=0.29..4.36 rows=4 width=37) (actual time=0.017..0.017 rows=7.00 loops=1)
+          Index Cond: (student_idx = s.idx)
+          Heap Fetches: 0
+          Index Searches: 1
+          Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=41
+Planning Time: 0.169 ms
+Execution Time: 0.052 ms
+
+--- plan używany przez API
+Nested Loop Left Join  (cost=0.85..29.28 rows=1 width=83) (actual time=0.014..0.015 rows=1.00 loops=1)
+  Buffers: shared hit=11
+  ->  Nested Loop  (cost=0.57..16.62 rows=1 width=47) (actual time=0.007..0.007 rows=1.00 loops=1)
+        Buffers: shared hit=6
+        ->  Index Scan using student_pkey on student s  (cost=0.29..8.30 rows=1 width=15) (actual time=0.004..0.004 rows=1.00 loops=1)
+              Index Cond: (idx = $1)
+              Index Searches: 1
+              Buffers: shared hit=3
+        ->  Index Scan using person_pkey on person p  (cost=0.29..8.30 rows=1 width=32) (actual time=0.002..0.002 rows=1.00 loops=1)
+              Index Cond: (idx = $1)
+              Index Searches: 1
+              Buffers: shared hit=3
+  ->  Index Scan using person_photo_pkey on person_photo ph  (cost=0.28..8.30 rows=1 width=18) (actual time=0.002..0.002 rows=0.00 loops=1)
+        Index Cond: (idx = $1)
+        Index Searches: 1
+        Buffers: shared hit=2
+  SubPlan 1
+    ->  Index Only Scan using enrolled_pkey on enrolled e  (cost=0.29..4.36 rows=4 width=37) (actual time=0.003..0.003 rows=7.00 loops=1)
+          Index Cond: (student_idx = s.idx)
+          Heap Fetches: 0
+          Index Searches: 1
+          Buffers: shared hit=3
+Planning Time: 0.003 ms
+Execution Time: 0.025 ms
+
+--- plan ogólny (wymuszony)
+Nested Loop Left Join  (cost=0.85..29.28 rows=1 width=83) (actual time=0.016..0.016 rows=1.00 loops=1)
+  Buffers: shared hit=11
+  ->  Nested Loop  (cost=0.57..16.62 rows=1 width=47) (actual time=0.008..0.008 rows=1.00 loops=1)
+        Buffers: shared hit=6
+        ->  Index Scan using student_pkey on student s  (cost=0.29..8.30 rows=1 width=15) (actual time=0.005..0.005 rows=1.00 loops=1)
+              Index Cond: (idx = $1)
+              Index Searches: 1
+              Buffers: shared hit=3
+        ->  Index Scan using person_pkey on person p  (cost=0.29..8.30 rows=1 width=32) (actual time=0.002..0.002 rows=1.00 loops=1)
+              Index Cond: (idx = $1)
+              Index Searches: 1
+              Buffers: shared hit=3
+  ->  Index Scan using person_photo_pkey on person_photo ph  (cost=0.28..8.30 rows=1 width=18) (actual time=0.002..0.002 rows=0.00 loops=1)
+        Index Cond: (idx = $1)
+        Index Searches: 1
+        Buffers: shared hit=2
+  SubPlan 1
+    ->  Index Only Scan using enrolled_pkey on enrolled e  (cost=0.29..4.36 rows=4 width=37) (actual time=0.003..0.004 rows=7.00 loops=1)
+          Index Cond: (student_idx = s.idx)
+          Heap Fetches: 0
+          Index Searches: 1
+          Buffers: shared hit=3
+Planning Time: 0.005 ms
+Execution Time: 0.030 ms
+
+====================================================================================================
+## GET /students/{idx} #2
+parametry: {"student_idx": "307504"}
+zapytanie:
+SELECT
+  su.code AS subject,
+  se.ects,
+  ac.year,
+  ac.season,
+  gt.id AS type,
+  gt.weight,
+  mine.grade::float8 AS grade
+FROM (
+  SELECT DISTINCT gt0.subject_code, gt0.cycle_id
+  FROM registered_in ri
+  JOIN class_group g ON g.id = ri.group_id
+  JOIN group_type gt0 ON gt0.id = g.group_type_id
+  WHERE ri.student_idx = %(student_idx)s
+) si
+JOIN subject su ON su.code = si.subject_code
+LEFT JOIN subject_ects se ON se.subject_code = su.code
+JOIN academic_cycle ac ON ac.id = si.cycle_id
+JOIN group_type gt ON gt.subject_code = si.subject_code AND gt.cycle_id = si.cycle_id
+LEFT JOIN (
+  SELECT gr.grade, g.group_type_id
+  FROM grade gr
+  JOIN class_group g ON g.id = gr.group_id
+  WHERE gr.student_idx = %(student_idx)s
+) mine ON mine.group_type_id = gt.id
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 337.57, API 346.12, generic 346.12
+czas planowania [ms]: custom 0.930, API 0.004
+mediana czasu wykonania [ms] (TIMING OFF): custom 1.089, API 1.082, generic 1.074
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Nested Loop Left Join  (cost=245.58..337.57 rows=1 width=77) (actual time=0.281..1.297 rows=49.00 loops=1)
+  Buffers: shared hit=1825
+  ->  Nested Loop Left Join  (cost=245.31..337.20 rows=1 width=70) (actual time=0.275..1.217 rows=49.00 loops=1)
+        Buffers: shared hit=1678
+        ->  Nested Loop  (cost=244.60..265.29 rows=4 width=65) (actual time=0.264..0.397 rows=49.00 loops=1)
+              Join Filter: (ac.id = gt.cycle_id)
+              Rows Removed by Join Filter: 63
+              Buffers: shared hit=498
+              ->  Nested Loop  (cost=244.33..258.68 rows=8 width=104) (actual time=0.257..0.321 rows=28.00 loops=1)
+                    Buffers: shared hit=383
+                    ->  Nested Loop  (cost=244.05..248.88 rows=8 width=94) (actual time=0.253..0.276 rows=28.00 loops=1)
+                          Join Filter: (ac.id = gt0.cycle_id)
+                          Rows Removed by Join Filter: 84
+                          Buffers: shared hit=299
+                          ->  Unique  (cost=244.05..244.28 rows=30 width=47) (actual time=0.247..0.255 rows=28.00 loops=1)
+                                Buffers: shared hit=298
+                                ->  Sort  (cost=244.05..244.13 rows=30 width=47) (actual time=0.247..0.249 rows=49.00 loops=1)
+                                      Sort Key: gt0.subject_code, gt0.cycle_id
+                                      Sort Method: quicksort  Memory: 28kB
+                                      Buffers: shared hit=298
+                                      ->  Nested Loop  (cost=0.99..243.32 rows=30 width=47) (actual time=0.016..0.217 rows=49.00 loops=1)
+                                            Buffers: shared hit=298
+                                            ->  Nested Loop  (cost=0.71..234.02 rows=30 width=37) (actual time=0.013..0.139 rows=49.00 loops=1)
+                                                  Buffers: shared hit=151
+                                                  ->  Index Only Scan using registered_in_pkey on registered_in ri  (cost=0.42..8.95 rows=30 width=37) (actual time=0.008..0.011 rows=49.00 loops=1)
+                                                        Index Cond: (student_idx = '307504'::text)
+                                                        Heap Fetches: 0
+                                                        Index Searches: 1
+                                                        Buffers: shared hit=4
+                                                  ->  Index Scan using class_group_pkey on class_group g_1  (cost=0.29..7.50 rows=1 width=74) (actual time=0.002..0.002 rows=1.00 loops=49)
+                                                        Index Cond: (id = ri.group_id)
+                                                        Index Searches: 49
+                                                        Buffers: shared hit=147
+                                            ->  Index Scan using group_type_pkey on group_type gt0  (cost=0.28..0.31 rows=1 width=84) (actual time=0.001..0.001 rows=1.00 loops=49)
+                                                  Index Cond: (id = g_1.group_type_id)
+                                                  Index Searches: 49
+                                                  Buffers: shared hit=147
+                          ->  Materialize  (cost=0.00..1.12 rows=8 width=47) (actual time=0.000..0.000 rows=4.00 loops=28)
+                                Storage: Memory  Maximum Storage: 17kB
+                                Buffers: shared hit=1
+                                ->  Seq Scan on academic_cycle ac  (cost=0.00..1.08 rows=8 width=47) (actual time=0.004..0.004 rows=7.00 loops=1)
+                                      Buffers: shared hit=1
+                    ->  Index Only Scan using subject_pkey on subject su  (cost=0.27..1.22 rows=1 width=10) (actual time=0.001..0.001 rows=1.00 loops=28)
+                          Index Cond: (code = gt0.subject_code)
+                          Heap Fetches: 28
+                          Index Searches: 28
+                          Buffers: shared hit=84
+              ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..0.78 rows=4 width=92) (actual time=0.002..0.002 rows=4.00 loops=28)
+                    Index Cond: (subject_code = su.code)
+                    Index Searches: 28
+                    Buffers: shared hit=115
+        ->  Nested Loop  (cost=0.71..17.97 rows=1 width=42) (actual time=0.007..0.017 rows=0.86 loops=49)
+              Buffers: shared hit=1180
+              ->  Index Scan using class_group_group_type_id_number_key on class_group g  (cost=0.29..1.22 rows=7 width=74) (actual time=0.002..0.003 rows=6.71 loops=49)
+                    Index Cond: (group_type_id = gt.id)
+                    Index Searches: 49
+                    Buffers: shared hit=151
+              ->  Index Scan using grade_pkey on grade gr  (cost=0.42..2.37 rows=1 width=42) (actual time=0.002..0.002 rows=0.13 loops=329)
+                    Index Cond: ((student_idx = '307504'::text) AND (group_id = g.id))
+                    Index Searches: 329
+                    Buffers: shared hit=1029
+  ->  Index Scan using subject_ects_pkey on subject_ects se  (cost=0.27..0.36 rows=1 width=14) (actual time=0.001..0.001 rows=1.00 loops=49)
+        Index Cond: (subject_code = su.code)
+        Index Searches: 49
+        Buffers: shared hit=147
+Planning:
+  Buffers: shared hit=75
+Planning Time: 0.930 ms
+Execution Time: 1.328 ms
+
+--- plan używany przez API
+Nested Loop Left Join  (cost=254.24..346.12 rows=1 width=77) (actual time=0.184..1.111 rows=49.00 loops=1)
+  Buffers: shared hit=1825
+  ->  Nested Loop Left Join  (cost=253.97..345.75 rows=1 width=70) (actual time=0.181..1.037 rows=49.00 loops=1)
+        Buffers: shared hit=1678
+        ->  Nested Loop  (cost=253.26..273.83 rows=4 width=65) (actual time=0.176..0.306 rows=49.00 loops=1)
+              Join Filter: (ac.id = gt.cycle_id)
+              Rows Removed by Join Filter: 63
+              Buffers: shared hit=498
+              ->  Nested Loop  (cost=252.99..267.22 rows=8 width=104) (actual time=0.172..0.233 rows=28.00 loops=1)
+                    Buffers: shared hit=383
+                    ->  Nested Loop  (cost=252.71..257.67 rows=8 width=94) (actual time=0.169..0.191 rows=28.00 loops=1)
+                          Join Filter: (ac.id = gt0.cycle_id)
+                          Rows Removed by Join Filter: 84
+                          Buffers: shared hit=299
+                          ->  Unique  (cost=252.71..252.95 rows=31 width=47) (actual time=0.165..0.173 rows=28.00 loops=1)
+                                Buffers: shared hit=298
+                                ->  Sort  (cost=252.71..252.79 rows=31 width=47) (actual time=0.165..0.167 rows=49.00 loops=1)
+                                      Sort Key: gt0.subject_code, gt0.cycle_id
+                                      Sort Method: quicksort  Memory: 28kB
+                                      Buffers: shared hit=298
+                                      ->  Nested Loop  (cost=0.99..251.95 rows=31 width=47) (actual time=0.012..0.139 rows=49.00 loops=1)
+                                            Buffers: shared hit=298
+                                            ->  Nested Loop  (cost=0.71..242.34 rows=31 width=37) (actual time=0.010..0.080 rows=49.00 loops=1)
+                                                  Buffers: shared hit=151
+                                                  ->  Index Only Scan using registered_in_pkey on registered_in ri  (cost=0.42..8.96 rows=31 width=37) (actual time=0.007..0.010 rows=49.00 loops=1)
+                                                        Index Cond: (student_idx = $1)
+                                                        Heap Fetches: 0
+                                                        Index Searches: 1
+                                                        Buffers: shared hit=4
+                                                  ->  Index Scan using class_group_pkey on class_group g_1  (cost=0.29..7.53 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=49)
+                                                        Index Cond: (id = ri.group_id)
+                                                        Index Searches: 49
+                                                        Buffers: shared hit=147
+                                            ->  Index Scan using group_type_pkey on group_type gt0  (cost=0.28..0.31 rows=1 width=84) (actual time=0.001..0.001 rows=1.00 loops=49)
+                                                  Index Cond: (id = g_1.group_type_id)
+                                                  Index Searches: 49
+                                                  Buffers: shared hit=147
+                          ->  Materialize  (cost=0.00..1.12 rows=8 width=47) (actual time=0.000..0.000 rows=4.00 loops=28)
+                                Storage: Memory  Maximum Storage: 17kB
+                                Buffers: shared hit=1
+                                ->  Seq Scan on academic_cycle ac  (cost=0.00..1.08 rows=8 width=47) (actual time=0.003..0.003 rows=7.00 loops=1)
+                                      Buffers: shared hit=1
+                    ->  Index Only Scan using subject_pkey on subject su  (cost=0.27..1.19 rows=1 width=10) (actual time=0.001..0.001 rows=1.00 loops=28)
+                          Index Cond: (code = gt0.subject_code)
+                          Heap Fetches: 28
+                          Index Searches: 28
+                          Buffers: shared hit=84
+              ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..0.78 rows=4 width=92) (actual time=0.002..0.002 rows=4.00 loops=28)
+                    Index Cond: (subject_code = su.code)
+                    Index Searches: 28
+                    Buffers: shared hit=115
+        ->  Nested Loop  (cost=0.71..17.97 rows=1 width=42) (actual time=0.005..0.015 rows=0.86 loops=49)
+              Buffers: shared hit=1180
+              ->  Index Scan using class_group_group_type_id_number_key on class_group g  (cost=0.29..1.22 rows=7 width=74) (actual time=0.001..0.002 rows=6.71 loops=49)
+                    Index Cond: (group_type_id = gt.id)
+                    Index Searches: 49
+                    Buffers: shared hit=151
+              ->  Index Scan using grade_pkey on grade gr  (cost=0.42..2.37 rows=1 width=42) (actual time=0.002..0.002 rows=0.13 loops=329)
+                    Index Cond: ((student_idx = $1) AND (group_id = g.id))
+                    Index Searches: 329
+                    Buffers: shared hit=1029
+  ->  Index Scan using subject_ects_pkey on subject_ects se  (cost=0.27..0.36 rows=1 width=14) (actual time=0.001..0.001 rows=1.00 loops=49)
+        Index Cond: (subject_code = su.code)
+        Index Searches: 49
+        Buffers: shared hit=147
+Planning Time: 0.004 ms
+Execution Time: 1.137 ms
+
+--- plan ogólny (wymuszony)
+Nested Loop Left Join  (cost=254.24..346.12 rows=1 width=77) (actual time=0.182..1.101 rows=49.00 loops=1)
+  Buffers: shared hit=1825
+  ->  Nested Loop Left Join  (cost=253.97..345.75 rows=1 width=70) (actual time=0.179..1.022 rows=49.00 loops=1)
+        Buffers: shared hit=1678
+        ->  Nested Loop  (cost=253.26..273.83 rows=4 width=65) (actual time=0.173..0.296 rows=49.00 loops=1)
+              Join Filter: (ac.id = gt.cycle_id)
+              Rows Removed by Join Filter: 63
+              Buffers: shared hit=498
+              ->  Nested Loop  (cost=252.99..267.22 rows=8 width=104) (actual time=0.170..0.230 rows=28.00 loops=1)
+                    Buffers: shared hit=383
+                    ->  Nested Loop  (cost=252.71..257.67 rows=8 width=94) (actual time=0.168..0.189 rows=28.00 loops=1)
+                          Join Filter: (ac.id = gt0.cycle_id)
+                          Rows Removed by Join Filter: 84
+                          Buffers: shared hit=299
+                          ->  Unique  (cost=252.71..252.95 rows=31 width=47) (actual time=0.164..0.172 rows=28.00 loops=1)
+                                Buffers: shared hit=298
+                                ->  Sort  (cost=252.71..252.79 rows=31 width=47) (actual time=0.164..0.166 rows=49.00 loops=1)
+                                      Sort Key: gt0.subject_code, gt0.cycle_id
+                                      Sort Method: quicksort  Memory: 28kB
+                                      Buffers: shared hit=298
+                                      ->  Nested Loop  (cost=0.99..251.95 rows=31 width=47) (actual time=0.011..0.138 rows=49.00 loops=1)
+                                            Buffers: shared hit=298
+                                            ->  Nested Loop  (cost=0.71..242.34 rows=31 width=37) (actual time=0.009..0.079 rows=49.00 loops=1)
+                                                  Buffers: shared hit=151
+                                                  ->  Index Only Scan using registered_in_pkey on registered_in ri  (cost=0.42..8.96 rows=31 width=37) (actual time=0.006..0.009 rows=49.00 loops=1)
+                                                        Index Cond: (student_idx = $1)
+                                                        Heap Fetches: 0
+                                                        Index Searches: 1
+                                                        Buffers: shared hit=4
+                                                  ->  Index Scan using class_group_pkey on class_group g_1  (cost=0.29..7.53 rows=1 width=74) (actual time=0.001..0.001 rows=1.00 loops=49)
+                                                        Index Cond: (id = ri.group_id)
+                                                        Index Searches: 49
+                                                        Buffers: shared hit=147
+                                            ->  Index Scan using group_type_pkey on group_type gt0  (cost=0.28..0.31 rows=1 width=84) (actual time=0.001..0.001 rows=1.00 loops=49)
+                                                  Index Cond: (id = g_1.group_type_id)
+                                                  Index Searches: 49
+                                                  Buffers: shared hit=147
+                          ->  Materialize  (cost=0.00..1.12 rows=8 width=47) (actual time=0.000..0.000 rows=4.00 loops=28)
+                                Storage: Memory  Maximum Storage: 17kB
+                                Buffers: shared hit=1
+                                ->  Seq Scan on academic_cycle ac  (cost=0.00..1.08 rows=8 width=47) (actual time=0.002..0.003 rows=7.00 loops=1)
+                                      Buffers: shared hit=1
+                    ->  Index Only Scan using subject_pkey on subject su  (cost=0.27..1.19 rows=1 width=10) (actual time=0.001..0.001 rows=1.00 loops=28)
+                          Index Cond: (code = gt0.subject_code)
+                          Heap Fetches: 28
+                          Index Searches: 28
+                          Buffers: shared hit=84
+              ->  Index Scan using group_type_subject_code_cycle_id_idx on group_type gt  (cost=0.28..0.78 rows=4 width=92) (actual time=0.001..0.002 rows=4.00 loops=28)
+                    Index Cond: (subject_code = su.code)
+                    Index Searches: 28
+                    Buffers: shared hit=115
+        ->  Nested Loop  (cost=0.71..17.97 rows=1 width=42) (actual time=0.005..0.015 rows=0.86 loops=49)
+              Buffers: shared hit=1180
+              ->  Index Scan using class_group_group_type_id_number_key on class_group g  (cost=0.29..1.22 rows=7 width=74) (actual time=0.001..0.002 rows=6.71 loops=49)
+                    Index Cond: (group_type_id = gt.id)
+                    Index Searches: 49
+                    Buffers: shared hit=151
+              ->  Index Scan using grade_pkey on grade gr  (cost=0.42..2.37 rows=1 width=42) (actual time=0.002..0.002 rows=0.13 loops=329)
+                    Index Cond: ((student_idx = $1) AND (group_id = g.id))
+                    Index Searches: 329
+                    Buffers: shared hit=1029
+  ->  Index Scan using subject_ects_pkey on subject_ects se  (cost=0.27..0.36 rows=1 width=14) (actual time=0.001..0.001 rows=1.00 loops=49)
+        Index Cond: (subject_code = su.code)
+        Index Searches: 49
+        Buffers: shared hit=147
+Planning Time: 0.003 ms
+Execution Time: 1.125 ms
+
+====================================================================================================
+## PUT /groups/{id}/students/{idx}/grade #0
+parametry: {"teacher_idx": "T040049", "group_id": "00076e12-7855-5332-9b1e-05d9307e7291"}
+zapytanie:
+SELECT group_id AS id FROM teaches
+WHERE teacher_idx = %(teacher_idx)s AND group_id = %(group_id)s
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 4.30, API 4.30, generic 4.30
+czas planowania [ms]: custom 0.080, API 0.004
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.009, API 0.012, generic 0.008
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Index Only Scan using teaches_pkey on teaches  (cost=0.29..4.30 rows=1 width=37) (actual time=0.020..0.021 rows=1.00 loops=1)
+  Index Cond: ((teacher_idx = 'T040049'::text) AND (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.080 ms
+Execution Time: 0.035 ms
+
+--- plan używany przez API
+Index Only Scan using teaches_pkey on teaches  (cost=0.29..4.30 rows=1 width=37) (actual time=0.006..0.006 rows=1.00 loops=1)
+  Index Cond: ((teacher_idx = $1) AND (group_id = $2))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.004 ms
+Execution Time: 0.013 ms
+
+--- plan ogólny (wymuszony)
+Index Only Scan using teaches_pkey on teaches  (cost=0.29..4.30 rows=1 width=37) (actual time=0.004..0.005 rows=1.00 loops=1)
+  Index Cond: ((teacher_idx = $1) AND (group_id = $2))
+  Heap Fetches: 0
+  Index Searches: 1
+  Buffers: shared hit=3
+Planning Time: 0.002 ms
+Execution Time: 0.009 ms
+
+====================================================================================================
+## PUT /groups/{id}/students/{idx}/grade #1
+parametry: {"student_idx": "307504", "group_id": "00076e12-7855-5332-9b1e-05d9307e7291", "grade": 4.5}
+zapytanie:
+INSERT INTO grade (student_idx, group_id, grade)
+SELECT student_idx, group_id, %(grade)s
+FROM registered_in
+WHERE student_idx = %(student_idx)s AND group_id = %(group_id)s
+ON CONFLICT (student_idx, group_id) DO UPDATE SET grade = excluded.grade
+RETURNING group_id, student_idx, grade::float8 AS grade
+
+liczniki custom/generic po wykonaniach 1..10: 1/0 2/0 3/0 4/0 5/0 5/1 5/2 5/3 5/4 5/5; po EXPLAIN EXECUTE: 5/6
+koszt planu: custom 8.44, API 8.44, generic 8.44
+czas planowania [ms]: custom 0.039, API 0.003
+mediana czasu wykonania [ms] (TIMING OFF): custom 0.040, API 0.040, generic 0.039
+JIT: custom False, API False, generic False
+
+--- plan dla konkretnych parametrów
+Insert on grade  (cost=0.42..8.44 rows=1 width=56) (actual time=0.081..0.082 rows=1.00 loops=1)
+  Conflict Resolution: UPDATE
+  Conflict Arbiter Indexes: grade_pkey
+  Tuples Inserted: 0
+  Conflicting Tuples: 1
+  Buffers: shared hit=20
+  ->  Index Only Scan using registered_in_pkey on registered_in  (cost=0.42..8.44 rows=1 width=56) (actual time=0.007..0.008 rows=1.00 loops=1)
+        Index Cond: ((student_idx = '307504'::text) AND (group_id = '00076e12-7855-5332-9b1e-05d9307e7291'::text))
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=4
+Planning Time: 0.039 ms
+Execution Time: 0.119 ms
+
+--- plan używany przez API
+Insert on grade  (cost=0.42..8.44 rows=1 width=56) (actual time=0.024..0.024 rows=1.00 loops=1)
+  Conflict Resolution: UPDATE
+  Conflict Arbiter Indexes: grade_pkey
+  Tuples Inserted: 0
+  Conflicting Tuples: 1
+  Buffers: shared hit=12
+  ->  Index Only Scan using registered_in_pkey on registered_in  (cost=0.42..8.44 rows=1 width=56) (actual time=0.006..0.006 rows=1.00 loops=1)
+        Index Cond: ((student_idx = $2) AND (group_id = $3))
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=4
+Planning Time: 0.003 ms
+Trigger for constraint grade_student_idx_group_id_fkey: time=0.011 calls=1
+Execution Time: 0.043 ms
+
+--- plan ogólny (wymuszony)
+Insert on grade  (cost=0.42..8.44 rows=1 width=56) (actual time=0.023..0.024 rows=1.00 loops=1)
+  Conflict Resolution: UPDATE
+  Conflict Arbiter Indexes: grade_pkey
+  Tuples Inserted: 0
+  Conflicting Tuples: 1
+  Buffers: shared hit=12
+  ->  Index Only Scan using registered_in_pkey on registered_in  (cost=0.42..8.44 rows=1 width=56) (actual time=0.005..0.006 rows=1.00 loops=1)
+        Index Cond: ((student_idx = $2) AND (group_id = $3))
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=4
+Planning Time: 0.004 ms
+Trigger for constraint grade_student_idx_group_id_fkey: time=0.010 calls=1
+Execution Time: 0.042 ms

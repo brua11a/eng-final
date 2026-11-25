@@ -24,6 +24,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.font_manager  # noqa: E402
 import matplotlib.ticker  # noqa: E402
 
 RES = Path(__file__).resolve().parent / "results"
@@ -44,11 +45,26 @@ PARTS = [("engine", None, "wykonanie w silniku", "#1baf7a"),
 OVERHEAD_SKIP = {"POST /login", "GET /subjects"}
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
+# Czcionka szeryfowa jak w tekście pracy (pakiet tgtermes = TeX Gyre Termes). Pliki OTF są brane
+# z dystrybucji TeX-a; gdy ich brak, matplotlib użyje kolejnej czcionki z listy font.serif.
+for _style in ("regular", "bold", "italic", "bolditalic"):
+    for _dir in ("/usr/share/texmf-dist", "/usr/share/texlive/texmf-dist"):
+        _f = Path(_dir) / "fonts/opentype/public/tex-gyre" / f"texgyretermes-{_style}.otf"
+        if _f.exists():
+            matplotlib.font_manager.fontManager.addfont(str(_f))
+            break
+
+FS, FS_SMALL = 13, 11  # rozmiar podstawowy i etykiet pomocniczych [pt]
+
 plt.rcParams.update({
-    "font.size": 9, "axes.edgecolor": MUTED, "axes.labelcolor": INK, "xtick.color": MUTED, "ytick.color": MUTED,
+    "font.family": "serif",
+    "font.serif": ["TeX Gyre Termes", "Times New Roman", "Liberation Serif", "STIXGeneral", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
+    "font.size": FS, "legend.fontsize": FS_SMALL, "xtick.labelsize": FS_SMALL, "ytick.labelsize": FS_SMALL,
+    "figure.titlesize": FS + 1, "axes.edgecolor": MUTED, "axes.labelcolor": INK, "xtick.color": MUTED, "ytick.color": MUTED,
     "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "grid.color": GRID,
     "grid.linewidth": 0.6, "axes.axisbelow": True, "legend.frameon": False, "figure.dpi": 100,
-    "savefig.bbox": "tight", "axes.titlesize": 9, "axes.titleweight": "bold",
+    "savefig.bbox": "tight", "axes.titlesize": FS, "axes.titleweight": "bold",
 })
 
 
@@ -62,14 +78,17 @@ def log_axes(ax, xs) -> None:
     """Osie logarytmiczne z czytelnymi etykietami: na osi X dokładnie badane skale, na osi Y
     wartości 1-2-5 w zwykłym zapisie zamiast potęg dziesięciu."""
     ax.set_xscale("log")
-    ax.set_xticks(xs, [_num(x) for x in xs], rotation=45, ha="right", rotation_mode="anchor", fontsize=7)
+    ax.set_xticks(xs, [_num(x) for x in xs], rotation=45, ha="right", rotation_mode="anchor", fontsize=FS_SMALL)
     ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
     log_y(ax)
 
 
 def log_y(ax) -> None:
     ax.set_yscale("log")
-    ax.yaxis.set_major_locator(matplotlib.ticker.LogLocator(subs=(1, 2, 5)))
+    lo, hi = ax.get_ylim()
+    # przy szerokim zakresie (więcej niż 3 rzędy wielkości) podziałki 1-2-5 nachodzą na siebie
+    subs = (1, 2, 5) if hi / lo <= 1e3 else (1,)
+    ax.yaxis.set_major_locator(matplotlib.ticker.LogLocator(subs=subs))
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(_num))
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
 
@@ -135,7 +154,7 @@ def layers_figure(sc, n, endpoints, med):
             ax.bar([j + (i - 0.5) * 0.38 for j in x], vals, width=0.36, color=color, label=label,
                    edgecolor="white", linewidth=1)
         ax.set_title(ep, loc="left")
-        ax.set_xticks(list(x), [LAYER_LABELS[la] for la in LAYERS], fontsize=7)
+        ax.set_xticks(list(x), [LAYER_LABELS[la] for la in LAYERS], fontsize=FS_SMALL)
         ax.set_ylabel("mediana [ms]")
     for ax in list(axes.flat)[len(endpoints):]:
         ax.axis("off")
@@ -167,17 +186,17 @@ def overhead_figure(sc, n, endpoints, med):
                 ax.barh(y, share, left=left, color=color, edgecolor="white", linewidth=1, height=0.8,
                         label=plabel if not labels else None)
                 left += share
-            ax.text(101, y, f"{total:.1f} ms".replace(".", ","), va="center", fontsize=7, color=INK)
+            ax.text(101, y, f"{total:.1f} ms".replace(".", ","), va="center", fontsize=FS_SMALL, color=INK)
             labels.append(f"{ep} – {blabel}")
             ys.append(y)
             y += 1
         y += 0.5
-    ax.set_yticks(ys, labels, fontsize=7)
+    ax.set_yticks(ys, labels, fontsize=FS_SMALL)
     ax.invert_yaxis()
     ax.set_xlim(0, 100)
     ax.grid(axis="y", visible=False)
     ax.set_xlabel("udział w medianie czasu żądania przez nginx [%]")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=7)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=FS_SMALL)
     ax.set_title(f"Z czego składa się czas żądania – {_num(n)} studentów (na prawo: czas całkowity)", loc="left")
     save(fig, f"narzut_{sc}")
 
@@ -198,7 +217,7 @@ def boxplot_figure(sc, n, endpoints, samples):
     for patch, color in zip(bp["boxes"], colors):
         patch.set_facecolor(color)
         patch.set_edgecolor(color)
-    ax.set_xticks(ticks, [e.replace(" /", "\n/") for e in endpoints], fontsize=7)
+    ax.set_xticks(ticks, [e.replace(" /", "\n/") for e in endpoints], fontsize=FS_SMALL)
     log_y(ax)
     ax.set_ylabel("czas żądania HTTPS [ms], skala log.")
     for be, (label, color) in BACKENDS.items():
@@ -227,7 +246,7 @@ def scaling_figure(scales, students, endpoints, med):
     for ax in list(axes.flat)[len(endpoints):]:
         ax.axis("off")
     handles, labels = axes.flat[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower right", bbox_to_anchor=(0.98, 0.08), fontsize=8)
+    fig.legend(handles, labels, loc="lower right", bbox_to_anchor=(0.98, 0.08), fontsize=FS_SMALL)
     fig.suptitle("Czas w zależności od liczby studentów (obie osie logarytmiczne)", x=0.01, ha="left",
                  fontweight="bold")
     fig.tight_layout()
@@ -257,7 +276,7 @@ def work_figure(scales, students, endpoints):
     for ax in list(axes.flat)[len(endpoints):]:
         ax.axis("off")
     handles, labels = axes.flat[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower right", bbox_to_anchor=(0.98, 0.1), fontsize=8)
+    fig.legend(handles, labels, loc="lower right", bbox_to_anchor=(0.98, 0.1), fontsize=FS_SMALL)
     fig.suptitle("Wzrost pracy bazy: db hits (Neo4j) i odczytane bloki bufora (PostgreSQL), względem "
                  f"{_num(students[base])} studentów", x=0.01, ha="left", fontweight="bold")
     fig.tight_layout()
@@ -286,7 +305,7 @@ def storage_figure(scales, students):
                edgecolor="white", linewidth=1)
         for j, v in enumerate(vals):
             ax.text(j + (i - 0.5) * 0.38, v, (f"{v:.0f} s" if v >= 1 else f"{v:.1f} s").replace(".", ","), ha="center", va="bottom",
-                    fontsize=7, color=INK)
+                    fontsize=FS_SMALL, color=INK)
     ax.set_xticks(range(len(scales)), [_num(students[s]) for s in scales])
     log_y(ax)
     ax.set_xlabel("liczba studentów")
